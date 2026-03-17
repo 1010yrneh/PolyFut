@@ -1,0 +1,237 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>PolyFut v2.0 - Hybrid Valuation</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <img src="PolyFut Logo.png" alt="PolyFut Logo" style="position: absolute; top: 15px; right: 15px; width: 200px; height: auto; z-index: 100000; background-color: white; padding: 4px; box-shadow: 0 0 15px 8px white;">
+        <h1 class="brand-title">PolyFut<br><span>ANALYTICS ENGINE</span></h1>
+        
+        <div class="setup-group">
+            <label class="setup-label">0. Select Position</label>
+            <div class="position-selector-container">
+                <div class="pitch-map">
+                    <div class="pitch-zone zone-fw" onclick="selectPosition('FW')" id="zoneFW">FW</div>
+                    <div class="pitch-zone zone-mf" onclick="selectPosition('MF')" id="zoneMF">MF</div>
+                    <div class="pitch-zone zone-df" onclick="selectPosition('DF')" id="zoneDF">DF</div>
+                </div>
+                <div id="selected-pos-display" style="text-align: center; color: #f2c94c; font-weight: bold; margin-top: 5px;">NONE SELECTED</div>
+            </div>
+        </div>
+
+        <div class="setup-group">
+            <label class="setup-label">1. Match Video</label>
+            <input type="file" id="video-input" accept="video/*" class="setup-input">
+        </div>
+
+        <div class="setup-group">
+            <label class="setup-label">2. Opponent</label>
+            <input type="text" id="opponent-name" placeholder="e.g. Arsenal U18" class="setup-input">
+        </div>
+
+        <div class="setup-group">
+            <label class="setup-label">3. Date</label>
+            <input type="date" id="match-date" class="setup-input">
+        </div>
+
+        <div class="setup-group">
+            <label class="setup-label">4. Final Score</label>
+            <div class="score-row" style="display: flex; gap: 10px;">
+                <input type="number" id="score-us" placeholder="US" value="0" class="setup-input">
+                <input type="number" id="score-them" placeholder="THEM" value="0" class="setup-input">
+            </div>
+        </div>
+
+        <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">START ANALYSIS</button>
+    </div>
+
+    <div class="main-layout hidden" id="app-layout">
+        
+        <div class="video-section">
+            <div class="video-wrapper" id="video-wrapper">
+                <div class="video-overlay" id="vid-placeholder"><h2>No Video Loaded</h2></div>
+                <video id="main-player" playsinline></video>
+                <div class="visual-tools">
+                    <button class="tool-btn" onclick="resetZoom()" title="Reset Zoom">🔄 RESET ZOOM</button>
+                </div>
+            </div>
+
+            <div class="bench-ui-wrapper">
+                <div class="bench-header">
+                    <span class="bench-label">BENCH TIME (RED ZONES EXCLUDED)</span>
+                    <button class="add-bench-btn" onclick="addBenchBlock()">+ ADD BLOCK</button>
+                </div>
+                <div class="bench-track" id="bench-track"></div>
+            </div>
+
+            <div class="timeline-bar">
+                <button id="play-pause-btn" class="play-btn" onclick="togglePlay()">▶</button>
+                <input type="range" id="seek-slider" min="0" value="0" step="0.1">
+                <span id="time-display">00:00</span>
+            </div>
+            
+            <div class="speed-config-bar">
+                <span class="speed-tag">SPEED (PRESS 'S')</span>
+                <div class="speed-inputs">
+                    <label>SLOW <select id="slow-speed-set" onchange="updateSpeedConfig()"><option value="1">1x</option><option value="1.5">1.5x</option><option value="2" selected>2x</option></select></label>
+                    <label>FAST <select id="fast-speed-set" onchange="updateSpeedConfig()"><option value="4">4x</option><option value="6">6x</option><option value="8" selected>8x</option><option value="12">12x</option></select></label>
+                </div>
+                <div class="current-speed-display" id="current-speed-display">1x</div>
+            </div>
+        </div>
+
+        <div class="controls-container">
+            <div class="status-bar">
+                <div class="match-info"><span class="match-title" id="display-match-name">VS OPPONENT</span></div>
+                <div class="score" id="display-score">0 - 0</div>
+                <button class="end-btn" onclick="finishMatch()">FINISH</button>
+            </div>
+
+            <div id="menu-main" class="grid-view">
+                <button class="fidget-btn btn-shoot" onclick="openSubMenu('shoot')"><span>⚽ SHOOT</span></button>
+                <button class="fidget-btn btn-pass" onclick="openSubMenu('pass')"><span>👟 PASS</span></button>
+                <button class="fidget-btn btn-def" onclick="openSubMenu('def')"><span>🛡️ DEFEND</span></button>
+                <button class="fidget-btn btn-drib" onclick="openSubMenu('drib')"><span>⚡ SKILL</span></button>
+            </div>
+
+            <div id="menu-shoot" class="sub-menu hidden">
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-shoot);" onclick="logStat('Shot Taken'); goBack()">SHOT TAKEN</button>
+                <button class="fidget-btn btn-sub span-full" style="background: linear-gradient(135deg, #f2c94c 0%, #ff8f00 100%); color: #000; font-weight: 800;" onclick="logStat('Goal'); goBack()">GOAL ⚽</button>
+                <button class="fidget-btn btn-back span-full" onclick="goBack()">BACK</button>
+            </div>
+
+            <div id="menu-pass" class="sub-menu hidden">
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Key Pass'); goBack()">KEY PASS</button>
+                <button class="fidget-btn btn-sub span-full" style="background: linear-gradient(135deg, #f2c94c 0%, #ff8f00 100%); color: #000; font-weight: 800; text-shadow: none;" onclick="logStat('Assist'); goBack()">ASSIST 🎯</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Pass into Box'); goBack()">PASS INTO BOX</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Cross into Box'); goBack()">CROSS INTO BOX</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Progression (Pass)'); goBack()">PROGRESSION</button>
+                <button class="fidget-btn btn-back span-full" onclick="goBack()">BACK</button>
+            </div>
+
+            <div id="menu-def" class="sub-menu hidden">
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('High Press Win'); goBack()">HIGH PRESS</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Midfield Tackle'); goBack()">MID TACKLE</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Deep Tackle'); goBack()">DEEP TACKLE</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Interception'); goBack()">INTERCEPT</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Block'); goBack()">BLOCK</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Ball Recovery'); goBack()">RECOVERY</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Aerial Duel Won'); goBack()">AERIAL WIN</button>
+                
+                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Foul Committed'); goBack()">FOUL</button>
+                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Defensive Error'); goBack()">ERROR</button>
+                
+                <button class="fidget-btn btn-back span-full" onclick="goBack()">CANCEL</button>
+            </div>
+
+            <div id="menu-drib" class="sub-menu hidden">
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Dribble (Beat Man)'); goBack()">BEAT MAN</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Progression (Carry)'); goBack()">PROG CARRY</button>
+                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Carry into Box'); goBack()">CARRY INTO BOX</button>
+                
+                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Dispossessed'); goBack()">DISPOSSESSED</button>
+                
+                <button class="fidget-btn btn-back span-full" onclick="goBack()">CANCEL</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="results-screen" class="hidden" style="flex-direction: column; align-items: center; width: 100%; height: 100vh; overflow-y: auto; padding-bottom: 50px;">
+        <h1 class="brand-title" style="margin-top: 20px;">MATCH ANALYSIS</h1>
+        <h2 id="result-header" style="text-align:center; color:#888; margin-bottom: 20px;"></h2>
+        
+        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 800px; background:#161b22; padding:20px; border-radius:8px; border:1px solid #f2c94c; margin-bottom:20px; box-shadow: 0 4px 15px rgba(242, 201, 76, 0.15);">
+            <div style="text-align:center; flex: 1;">
+                <h3 style="color:#a0a0b0; font-size:14px; margin:0; text-transform:uppercase; letter-spacing: 1px;">Goals ⚽</h3>
+                <p id="res-goals" style="font-size:48px; font-weight:bold; color:#f2c94c; margin:5px 0;">0</p>
+            </div>
+            
+            <div style="width: 2px; height: 60px; background: #333;"></div> <div style="text-align:center; flex: 1;">
+                <h3 style="color:#a0a0b0; font-size:14px; margin:0; text-transform:uppercase; letter-spacing: 1px;">Assists 🎯</h3>
+                <p id="res-assists" style="font-size:48px; font-weight:bold; color:#f2c94c; margin:5px 0;">0</p>
+            </div>
+        </div>
+
+        <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 800px;">
+            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1;">
+                <h3 style="color:#888; font-size:12px; margin:0;">NET HYBRID</h3>
+                <p id="res-overall" style="font-size:28px; font-weight:bold; color:#fff; margin:5px 0;">0.0</p>
+            </div>
+
+            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1.5;">
+                <h3 style="color:#888; font-size:12px; margin:0 0 10px 0;">OFFENSE</h3>
+                <div style="display:flex; justify-content:space-around;">
+                    <div>
+                        <span style="font-size:10px; color:#aaa;">IMPACT (xG gained)</span><br>
+                        <span id="res-off-markov" style="font-size:18px; font-weight:bold; color:#4caf50;">0.0</span>
+                    </div>
+                    <div>
+                        <span style="font-size:10px; color:#aaa;">RISK (Possible xG Lost)</span><br>
+                        <span id="res-off-ridge" style="font-size:18px; font-weight:bold; color:#81c784;">0.0</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1.5;">
+                <h3 style="color:#888; font-size:12px; margin:0 0 10px 0;">DEFENSE</h3>
+                <div style="display:flex; justify-content:space-around;">
+                    <div>
+                        <span style="font-size:10px; color:#aaa;">IMPACT (xGA prevented)</span><br>
+                        <span id="res-def-markov" style="font-size:18px; font-weight:bold; color:#2196f3;">0.0</span>
+                    </div>
+                    <div>
+                        <span style="font-size:10px; color:#aaa;">RISK (Possible xGA increased)</span><br>
+                        <span id="res-def-ridge" style="font-size:18px; font-weight:bold; color:#64b5f6;">0.0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="ai-scout-panel" style="width: 90%; max-width: 800px; background: #161b22; border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+                <h3 style="color: #30ff8f; margin: 0; display: flex; align-items: center; gap: 8px;">🤖 AI SCOUT REPORT</h3>
+                
+                <div id="api-key-container" style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
+                    <div style="display: flex; gap: 5px;">
+                        <input type="password" id="api-key-input" placeholder="Paste Groq API Key" 
+                               style="background: #111; border: 1px solid #444; color: #fff; padding: 5px; border-radius: 4px; width: 150px;">
+                        <button onclick="saveApiKey()" id="save-key-btn" style="background: #333; color: #fff; border: 1px solid #444; cursor: pointer; padding: 5px 10px; border-radius: 4px;">SAVE</button>
+                    </div>
+                    <button onclick="openGroqHelp()" style="background: transparent; border: none; color: #f2c94c; font-size: 0.75rem; cursor: pointer; text-decoration: underline; font-family: 'Rajdhani', sans-serif; padding: 0; margin-right: 5px; transition: 0.2s;">How to connect Groq?</button>
+                </div>
+
+                <div id="api-key-saved" class="hidden" style="display: flex; align-items: center; gap: 10px;">
+                    <span style="color: #f2c94c; font-size: 0.8rem; font-weight: bold;">🔑 KEY SAVED</span>
+                    <button onclick="clearApiKey()" style="background: transparent; border: 1px solid #ff2e4d; color: #ff2e4d; cursor: pointer; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">RESET</button>
+                </div>
+            </div>
+
+            <button onclick="generateScoutReport()" id="gen-report-btn" class="fidget-btn" style="width: 100%; background: linear-gradient(135deg, #7000ff 0%, #3d0096 100%); min-height: 40px; margin-bottom: 10px; font-size:0.9rem;">GENERATE REPORT</button>
+            
+            <div id="ai-output" style="color: #ccc; font-family: monospace; font-size: 0.9rem; height: 350px; overflow-y: auto; white-space: pre-wrap; background: #0e0e12; padding: 15px; border-radius: 4px; border: 1px solid #333;">Waiting for stats...</div>
+            
+            <div id="followup-container" class="hidden" style="margin-top: 10px; display: flex; gap: 5px;">
+                <input type="text" id="followup-input" placeholder="Ask the Coach AI a follow-up question..." 
+                       style="flex-grow: 1; background: #111; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; font-family: 'Rajdhani', sans-serif;">
+                <button onclick="askFollowUp()" id="followup-btn" style="background: #f2c94c; color: #000; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 20px; border-radius: 4px; cursor: pointer; transition: 0.2s;">ASK</button>
+            </div>
+        </div>
+
+        <div class="chart-container-full" style="width:90%; max-width: 800px; height:300px; margin:0 auto; background:#222; padding:10px; border-radius:8px;">
+            <canvas id="wpaChart"></canvas>
+        </div>
+        
+        <button class="start-btn" onclick="location.reload()" style="background:#333; margin-top:30px; width:90%; max-width: 800px;">CLOSE ANALYSIS</button>
+    </div>
+
+    <script src="calculations.js"></script>
+    <script src="help.js?v=2"></script>
+    <script src="script.js"></script>
+</body>
+</html>
