@@ -1,6 +1,7 @@
 /* script.js - FIXED OVERLAY, INTERACTION & AI AGENT */
 
 // GLOBAL STATE
+const calcURL = "https://script.google.com/macros/s/AKfycbxHdt0ihLjbCLO1U7WVAXnNuDK07jIlNjo29yLDljPd8vaTn9vDsqxaak5wSREp5h7b-A/exec";
 let selectedPosition = null; 
 let matchStats = [];
 let currentScore = { us: 0, them: 0 };
@@ -409,6 +410,29 @@ function finishMatch() {
     
     const resScreen = document.getElementById('results-screen');
     resScreen.classList.remove('hidden');
+    // === SEND STATS TO GOOGLE CALCULATOR ===
+    // We are grabbing the stats your app just collected
+    const statsToSend = {
+        position: selectedPosition,
+        // If you are tracking specific stats in your matchStats array, 
+        // you would package them up here to send to Google!
+        stats: matchStats 
+    };
+
+    fetch(calcUrl, {
+        method: "POST",
+        // 'no-cors' mode is sometimes needed for Google Apps Script
+        mode: "no-cors", 
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(statsToSend)
+    })
+    .then(() => {
+        console.log("Stats secretly sent to Google!");
+    })
+    .catch(error => console.error("Error sending stats:", error));
+    // =======================================
     resScreen.style.display = 'flex';
 
     if (typeof calculatePerformance === "function") {
