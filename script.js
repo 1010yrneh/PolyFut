@@ -140,23 +140,10 @@ function logStat(actionName) {
     const s = Math.floor(currentTime % 60).toString().padStart(2, '0'); 
     matchStats.push({ action: actionName, timeStr: `${m}:${s}`, seconds: currentTime }); 
     
-    // (Note: Live Dashboard updating was removed because math is now safely hidden on Google's servers!)
-
     // 2. Automatically jump back to the Main Menu
     goBack();
     
     // 3. Visual green flash to confirm it worked
-    const app = document.getElementById('app-layout');
-    app.style.boxShadow = "inset 0 0 20px #30ff8f";
-    setTimeout(() => { app.style.boxShadow = "none"; }, 150);
-
-    if (navigator.vibrate) navigator.vibrate(50); 
-}
-
-    // 3. NEW: Automatically jump back to the Main Menu
-    goBack();
-    
-    // 4. Visual green flash to confirm it worked
     const app = document.getElementById('app-layout');
     app.style.boxShadow = "inset 0 0 20px #30ff8f";
     setTimeout(() => { app.style.boxShadow = "none"; }, 150);
@@ -223,7 +210,7 @@ function setupBlockListeners(blockObj, leftBtn, rightBtn) {
     leftBtn.addEventListener('mousedown', (e) => startEdgeDrag(e, true)); 
     rightBtn.addEventListener('mousedown', (e) => startEdgeDrag(e, false));
 
-    // 2. NEW: Logic for clicking and dragging the entire block
+    // 2. Logic for clicking and dragging the entire block
     const fillBtn = blockObj.element.querySelector('.bench-fill');
     
     fillBtn.addEventListener('mousedown', (e) => {
@@ -301,7 +288,6 @@ function setSpeed(rate) {
 }
 
 function handleKeyShortcuts(e) { 
-    // NEW: If the user is typing in an input field (like the chat bar), ignore shortcuts!
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
 
     const videoPlayer = document.getElementById('main-player'); 
@@ -378,7 +364,7 @@ function goBack() {
     mainMenu.style.display = 'grid'; 
 }
 
-// --- 10. FINISH MATCH (UPDATED FOR HYBRID DATA) ---
+// --- 10. FINISH MATCH (UPDATED FOR GOOGLE APPS SCRIPT) ---
 let currentHybridResults = null; // Store globally so the AI can access it
 
 function finishMatch() {
@@ -452,13 +438,15 @@ function renderWPAChart(data, maxDuration, excludedRanges) {
     const ctx = document.getElementById('wpaChart').getContext('2d');
     const annotations = {};
     
-    excludedRanges.forEach((range, index) => {
-        annotations['box' + index] = {
-            type: 'box', xMin: range.start, xMax: range.end,
-            backgroundColor: 'rgba(255, 23, 68, 0.2)', borderColor: 'transparent',
-            label: { display: true, content: 'BENCH', color: 'rgba(255,255,255,0.5)', font: { size: 10 } }
-        };
-    });
+    if (excludedRanges && excludedRanges.length > 0) {
+        excludedRanges.forEach((range, index) => {
+            annotations['box' + index] = {
+                type: 'box', xMin: range.start, xMax: range.end,
+                backgroundColor: 'rgba(255, 23, 68, 0.2)', borderColor: 'transparent',
+                label: { display: true, content: 'BENCH', color: 'rgba(255,255,255,0.5)', font: { size: 10 } }
+            };
+        });
+    }
 
     const formatTime = (seconds) => {
         const m = Math.floor(seconds / 60).toString().padStart(2, '0');
@@ -563,13 +551,16 @@ async function generateScoutReport() {
     const position = selectedPosition || "Player";
     
     // Sum up totals for the prompt
-    const totalMarkov = (parseFloat(currentHybridResults.offMarkov) + parseFloat(currentHybridResults.defMarkov)).toFixed(2);
-    const totalRidge = (parseFloat(currentHybridResults.offRidge) + parseFloat(currentHybridResults.defRidge)).toFixed(2);
-    const netScore = currentHybridResults.netScore;
+    let totalMarkov = "0"; let totalRidge = "0"; let netScore = "0";
+    let markovValuations = "{}"; let ridgeValuations = "{}";
 
-    // Get the base valuations used for this specific position
-    const markovValuations = JSON.stringify(currentHybridResults.coeffMarkov);
-    const ridgeValuations = JSON.stringify(currentHybridResults.coeffRidge);
+    if (currentHybridResults) {
+        totalMarkov = (parseFloat(currentHybridResults.offMarkov) + parseFloat(currentHybridResults.defMarkov)).toFixed(2);
+        totalRidge = (parseFloat(currentHybridResults.offRidge) + parseFloat(currentHybridResults.defRidge)).toFixed(2);
+        netScore = currentHybridResults.netScore;
+        markovValuations = JSON.stringify(currentHybridResults.coeffMarkov || {});
+        ridgeValuations = JSON.stringify(currentHybridResults.coeffRidge || {});
+    }
 
     // EXACT CUSTOM PROMPT
     const systemPrompt = `You are a professional Premier League scout.
@@ -621,7 +612,7 @@ async function generateScoutReport() {
             },
             body: JSON.stringify({
                 model: "llama-3.3-70b-versatile", 
-                messages: aiChatHistory, // <-- Uses the memory array
+                messages: aiChatHistory, 
                 temperature: 0.6
             })
         });
@@ -660,6 +651,7 @@ async function generateScoutReport() {
         }
     }
 }
+
 // --- HELP MODAL LOGIC ---
 function openHelp() {
     document.getElementById('help-modal').classList.remove('hidden');
@@ -725,7 +717,7 @@ async function askFollowUp() {
                 'Content-Type': 'application/json'
             },
             body: JSON.stringify({
-                model: "llama-3.3-70b-versatile", // Matches your main function
+                model: "llama-3.3-70b-versatile",
                 messages: aiChatHistory,
                 temperature: 0.6
             })
