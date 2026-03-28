@@ -1,0 +1,361 @@
+/* --- FIFA / FUT MOBILE THEME (Fixed Z-Index) --- */
+
+@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap');
+
+:root {
+    --bg-dark: #0e0e12;
+    --bg-panel: #161b22;
+    --text-primary: #ffffff;
+    --text-secondary: #a0a0b0;
+    --fifa-green: #30ff8f;
+    --fifa-purple: #7000ff;
+    --fifa-gold: #f2c94c;
+    --fifa-red: #ff2e4d;
+    --grad-shoot: linear-gradient(135deg, #ff2e4d 0%, #a8001d 100%);
+    --grad-pass: linear-gradient(135deg, #2979ff 0%, #0d47a1 100%);
+    --grad-def: linear-gradient(135deg, #00e676 0%, #006064 100%);
+    --grad-skill: linear-gradient(135deg, #ffd700 0%, #ff8f00 100%);
+}
+
+body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); font-family: 'Rajdhani', sans-serif; display: flex; flex-direction: column; align-items: center; overflow: hidden; height: 100vh; }
+.hidden { display: none !important; }
+
+/* SETUP SCREEN - DESKTOP REDESIGN */
+#setup-screen { 
+    width: 90%; 
+    max-width: 850px; /* Widened for laptop screens */
+    padding: 40px; 
+    display: grid; /* Changed from flex to grid for side-by-side layout */
+    grid-template-columns: 1fr 1fr; /* Splits the box into two equal halves */
+    gap: 20px 40px; /* 20px vertical gap, 40px horizontal gap */
+    align-items: center;
+    z-index: 1000; 
+    position: relative; 
+    background-color: var(--bg-panel); /* Lighter panel color to pop off the background */
+    border-radius: 12px; /* Smooth desktop-style corners */
+    box-shadow: 0 15px 40px rgba(0,0,0,0.8); /* Deep shadow for a floating window feel */
+    border: 1px solid #333;
+}
+
+.brand-title { 
+    grid-column: 1 / -1; /* Forces the title to stretch across both columns */
+    color: var(--fifa-gold); 
+    text-align: center; 
+    font-size: 2.5rem; 
+    margin-bottom: 10px; 
+    text-transform: uppercase; 
+    letter-spacing: 2px; 
+}
+
+.setup-group { 
+    display: flex; 
+    flex-direction: column; 
+    gap: 8px; 
+}
+
+.setup-label { 
+    font-weight: bold; color: var(--text-secondary); text-transform: uppercase; font-size: 0.9rem; 
+}
+
+.setup-input { 
+    background: #0e0e12; border: 1px solid #333; color: #fff; padding: 12px; border-radius: 4px; font-family: inherit; font-size: 1rem; transition: 0.2s;
+}
+
+.setup-input:focus {
+    border-color: var(--fifa-gold);
+    outline: none;
+}
+
+.position-selector-container { 
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #222;
+    height: 100%; /* Stretches to match the height of the inputs next to it */
+}
+
+.start-btn { 
+    grid-column: 1 / -1; /* Forces the button to stretch across the bottom */
+    background: var(--fifa-green); color: #000; border: none; padding: 15px; font-weight: 800; font-size: 1.2rem; cursor: pointer; border-radius: 6px; margin-top: 10px; text-transform: uppercase; transition: 0.2s;
+}
+
+.start-btn:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(48, 255, 143, 0.4);
+}
+
+.start-btn:disabled { 
+    opacity: 0.5; cursor: not-allowed; background: #333; color: #666; 
+}
+
+/* MAIN LAYOUT */
+.main-layout { display: flex; width: 100vw; height: 100vh; overflow: hidden; position: relative; }
+
+/* VIDEO SECTION (Lower Z-Index) */
+.video-section { 
+    flex: 2; 
+    display: flex; 
+    flex-direction: column; 
+    background: #000; 
+    position: relative; 
+    z-index: 1; /* Keep this low */
+}
+
+.video-wrapper { 
+    flex: 1; 
+    position: relative; 
+    overflow: hidden; 
+    display: flex; 
+    justify-content: center; 
+    align-items: center; 
+}
+#main-player { width: 100%; height: 100%; object-fit: contain; }
+
+/* OVERLAY (Fixed: Allows clicks through) */
+.video-overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85);
+    display: flex; justify-content: center; align-items: center;
+    z-index: 10;
+    pointer-events: none; /* CRITICAL FIX: Clicks pass through */
+}
+.video-overlay h2 { color: var(--fifa-green); font-size: 1.5rem; letter-spacing: 2px; }
+
+/* CONTROLS (Higher Z-Index) */
+.controls-container { 
+    flex: 1; 
+    background: var(--bg-panel); 
+    border-left: 1px solid #333; 
+    display: flex; 
+    flex-direction: column; 
+    padding: 15px; 
+    gap: 10px; 
+    max-width: 400px; 
+    min-width: 320px; 
+    position: relative;
+    z-index: 100; /* CRITICAL FIX: Higher than video */
+    box-shadow: -5px 0 20px rgba(0,0,0,0.5); 
+}
+
+/* Rest of Styles (Buttons, etc.) */
+.status-bar { display: flex; justify-content: space-between; align-items: center; background: #252a33; padding: 12px; border-radius: 8px; border: 1px solid #333; }
+.match-info { display: flex; flex-direction: column; }
+.match-title { font-size: 0.75rem; color: var(--text-secondary); font-weight: 700; }
+.score { font-size: 1.8rem; font-weight: 800; color: var(--fifa-gold); letter-spacing: 1px; }
+.end-btn { background: var(--fifa-red); color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer; font-weight: 700; }
+
+.grid-view { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; overflow-y: auto; }
+.sub-menu { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; flex: 1; overflow-y: auto; }
+.fidget-btn { border: none; border-radius: 8px; font-weight: 700; font-size: 1rem; cursor: pointer; color: #fff; display: flex; justify-content: center; align-items: center; min-height: 80px; text-transform: uppercase; letter-spacing: 0.5px; box-shadow: 0 4px 6px rgba(0,0,0,0.2); }
+.fidget-btn:active { transform: scale(0.96); }
+.span-full { grid-column: span 2; }
+.btn-back { background: #333; color: #ccc; border: 1px solid #444; }
+
+/* Colors */
+.btn-shoot { background: var(--grad-shoot); }
+.btn-pass { background: var(--grad-pass); }
+.btn-def { background: var(--grad-def); }
+.btn-drib { background: var(--grad-skill); color: #000; text-shadow: none; }
+.btn-sub { font-size: 0.9rem; min-height: 60px; background: #2a2a35; border: 1px solid #444; }
+.btn-sub:hover { background: #3a3a45; }
+
+/* Bench/Timeline UI */
+.bench-ui-wrapper { background: #1a1a1a; padding: 10px; border-top: 1px solid #333; }
+.bench-header { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.75rem; color: var(--text-secondary); }
+.add-bench-btn { background: #333; border: 1px solid #444; color: var(--fifa-gold); cursor: pointer; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-size: 0.7rem; }
+.bench-track { height: 24px; background: #000; position: relative; border-radius: 4px; overflow: hidden; border: 1px solid #333; }
+.bench-block-container { position: absolute; height: 100%; top: 0; width: 100%; pointer-events: none; }
+.bench-fill { position: absolute; height: 100%; background: rgba(255, 46, 77, 0.6); pointer-events: all; cursor: move; }
+.bench-handle { position: absolute; width: 8px; height: 100%; background: #ff2e4d; cursor: col-resize; pointer-events: all; z-index: 10; opacity: 0.8; }
+.bench-remove { position: absolute; top: -12px; color: #fff; background: #ff2e4d; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; display: flex; justify-content: center; align-items: center; cursor: pointer; pointer-events: all; z-index: 15; }
+
+.timeline-bar { display: flex; align-items: center; gap: 15px; padding: 10px 15px; background: #1a1a1a; border-top: 1px solid #333; }
+.play-btn { background: none; border: none; color: var(--fifa-green); font-size: 1.2rem; cursor: pointer; padding: 0; }
+#seek-slider { flex: 1; cursor: pointer; accent-color: var(--fifa-green); height: 4px; }
+#time-display { font-family: monospace; color: var(--text-secondary); font-size: 0.9rem; min-width: 45px; text-align: right; }
+
+.visual-tools { position: absolute; top: 15px; right: 15px; z-index: 10; }
+.tool-btn { background: rgba(0,0,0,0.7); border: 1px solid rgba(255,255,255,0.2); color: #fff; padding: 6px 12px; cursor: pointer; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+
+.speed-config-bar { display: flex; justify-content: space-between; align-items: center; background: #161b22; padding: 8px 15px; font-size: 0.75rem; color: var(--text-secondary); border-top: 1px solid #222; }
+.speed-inputs { display: flex; gap: 15px; }
+.speed-inputs label { display: flex; align-items: center; gap: 5px; font-weight: 600; }
+.speed-inputs select { background: #2a2a35; color: #fff; border: 1px solid #444; padding: 2px 5px; border-radius: 3px; font-family: inherit; font-size: 0.75rem; cursor: pointer; }
+.current-speed-display { font-weight: 800; color: var(--fifa-green); font-size: 0.9rem; }
+
+/* Position Selector */
+.position-selector-container { display: flex; flex-direction: column; align-items: center; margin-top: 10px; }
+.pitch-map { position: relative; width: 200px; height: 300px; background-color: #2e7d32; border: 3px solid white; margin-top: 10px; cursor: pointer; border-radius: 4px; overflow: hidden; }
+.pitch-zone { position: absolute; width: 100%; display: flex; justify-content: center; align-items: center; font-weight: 800; font-size: 1.2rem; color: rgba(255,255,255,0.5); z-index: 2; }
+.zone-fw { top: 0; height: 33%; border-bottom: 1px dashed rgba(255,255,255,0.3); }
+.zone-mf { top: 33%; height: 34%; border-bottom: 1px dashed rgba(255,255,255,0.3); }
+.zone-df { top: 67%; height: 33%; }
+.selected-zone { background-color: rgba(242, 201, 76, 0.5) !important; color: #fff !important; border: 2px solid #f2c94c; }
+#selected-pos-display { margin-top: 10px; font-family: 'Rajdhani', sans-serif; font-weight: bold; color: #f2c94c; letter-spacing: 1px; }
+
+/* Results */
+.stat-card { background: #1e1e1e; border: 1px solid #333; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
+.res-value { font-family: 'Rajdhani', sans-serif; }
+/* =========================================
+   NEW: HYBRID DASHBOARD & AI AGENT STYLES
+   ========================================= */
+
+/* AI Output Box Custom Scrollbar */
+#ai-output {
+    max-height: 300px;
+    overflow-y: auto;
+    border-top: 1px solid #222;
+}
+#ai-output::-webkit-scrollbar {
+    width: 6px;
+}
+#ai-output::-webkit-scrollbar-track {
+    background: #0e0e12;
+}
+#ai-output::-webkit-scrollbar-thumb {
+    background: #444;
+    border-radius: 4px;
+}
+#ai-output::-webkit-scrollbar-thumb:hover {
+    background: var(--fifa-green);
+}
+
+/* Mobile Responsiveness for the 5-Stat Dashboard */
+@media (max-width: 768px) {
+    #dashboard-layout {
+        flex-direction: column !important;
+        align-items: center;
+        gap: 10px !important;
+    }
+    
+    .stat-card {
+        width: 100%;
+        max-width: 400px;
+    }
+
+    #api-key-container {
+        flex-direction: column;
+        align-items: flex-end;
+    }
+}
+
+/* =========================================
+   HOW TO USE MODAL STYLES
+   ========================================= */
+#help-modal {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.85); 
+    z-index: 99999; /* BOOStED TO THE ABSOLUTE FRONT */
+    display: flex; justify-content: center; align-items: center;
+}
+#help-modal.hidden { display: none !important; }
+
+.help-content {
+    background: #161b22; width: 90%; max-width: 600px;
+    padding: 25px; border-radius: 8px; border: 1px solid #333;
+    max-height: 85vh; overflow-y: auto; position: relative;
+    color: #fff; font-family: 'Rajdhani', sans-serif;
+}
+.help-close {
+    position: absolute; top: 15px; right: 20px; font-size: 1.8rem;
+    cursor: pointer; color: #ff2e4d; font-weight: bold; line-height: 1;
+}
+.help-tabs {
+    display: flex; gap: 15px; margin-bottom: 20px;
+    border-bottom: 1px solid #333; padding-bottom: 10px; overflow-x: auto;
+}
+.tab-btn {
+    background: transparent; color: #a0a0b0; border: none;
+    font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; font-weight: bold; cursor: pointer;
+    padding: 0 5px 5px 5px; border-bottom: 2px solid transparent;
+}
+.tab-btn.active { color: #f2c94c; border-bottom: 2px solid #f2c94c; }
+
+.tab-content { display: none; font-size: 0.95rem; line-height: 1.5; color: #ddd; }
+.tab-content.active { display: block; }
+.tab-content h4 { color: #f2c94c; margin-top: 20px; margin-bottom: 5px; font-size: 1.1rem; text-transform: uppercase; }
+.tab-content ul { margin: 0; padding-left: 20px; }
+.tab-content li { margin-bottom: 8px; }
+.tab-content strong { color: #fff; }
+
+.help-btn-top {
+    position: absolute; 
+    top: 15px; 
+    left: 15px; /* CHANGED THIS FROM right TO left */
+    background: transparent; color: #a0a0b0; border: 2px solid #a0a0b0;
+    padding: 10px 20px; 
+    font-size: 1.2rem; 
+    border-radius: 6px; cursor: pointer;
+    font-family: 'Rajdhani', sans-serif; font-weight: bold; 
+    z-index: 99998; 
+    transition: 0.2s;
+}
+
+/* --- HOW TO USE BUTTON ANIMATION --- */
+@keyframes attention-pulse {
+    0% {
+        box-shadow: 0 0 0 0 rgba(242, 201, 76, 0.7);
+        transform: scale(1);
+        color: #a0a0b0;
+        border-color: #a0a0b0;
+    }
+    50% {
+        box-shadow: 0 0 15px 5px rgba(242, 201, 76, 0);
+        transform: scale(1.05);
+        color: #fff;
+        border-color: #f2c94c;
+    }
+    100% {
+        box-shadow: 0 0 0 0 rgba(242, 201, 76, 0);
+        transform: scale(1);
+        color: #a0a0b0;
+        border-color: #a0a0b0;
+    }
+}
+
+.help-btn-top {
+    position: absolute; 
+    top: 15px; 
+    left: 15px; 
+    background: transparent; color: #a0a0b0; border: 2px solid #a0a0b0;
+    padding: 10px 20px; 
+    font-size: 1.2rem; 
+    border-radius: 6px; cursor: pointer;
+    font-family: 'Rajdhani', sans-serif; font-weight: bold; 
+    z-index: 99998; 
+    transition: all 0.2s ease-in-out;
+    /* This runs the animation forever, taking 2.5 seconds per pulse */
+    animation: attention-pulse 2.5s infinite; 
+}
+
+.help-btn-top:hover { 
+    color: #fff; 
+    border-color: #f2c94c; 
+    background: rgba(242, 201, 76, 0.2); 
+    /* Kill the animation when they hover so it behaves normally */
+    animation: none; 
+    transform: scale(1.05); 
+}
+
+/* --- LAPTOP SCALING & SCROLLING FIX --- */
+html, body {
+    overflow-y: auto !important; /* Unlocks the page so you can scroll down */
+    overflow-x: hidden;
+    height: auto !important;
+    min-height: 100vh;
+}
+
+#app-layout {
+    width: 100%;
+    max-width: 900px !important; /* Stops the app from stretching too wide on a laptop */
+    margin: 20px auto !important; /* Centers the app on the screen */
+    height: auto !important; /* Allows the box to expand to fit all your buttons */
+    overflow-y: visible !important;
+    padding-bottom: 50px !important; /* Gives some breathing room at the bottom */
+}
+
+/* Make sure the video player doesn't get too massive on large screens */
+.video-container, #video-wrapper {
+    max-height: 60vh;
+    width: 100%;
+    margin: 0 auto;
+}
