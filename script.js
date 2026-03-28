@@ -140,35 +140,18 @@ function logStat(actionName) {
     const s = Math.floor(currentTime % 60).toString().padStart(2, '0'); 
     matchStats.push({ action: actionName, timeStr: `${m}:${s}`, seconds: currentTime }); 
     
-    // 2. NEW: Instantly calculate and update the Live Dashboard!
-    if (typeof calculatePerformance === "function") {
-        const liveResults = calculatePerformance(
-            matchStats, 
-            currentScore, 
-            videoPlayer.duration || 90, 
-            [], // Ignored for live dashboard
-            selectedPosition || 'FW'
-        );
-        
-        const elNet = document.getElementById('dash-net');
-        if (elNet) {
-            elNet.innerText = liveResults.netScore;
-            // Turn green if positive, red if negative
-            elNet.style.color = parseFloat(liveResults.netScore) >= 0 ? '#4caf50' : '#ff2e4d';
-        }
-        
-        const elOff = document.getElementById('dash-off-markov');
-        if (elOff) elOff.innerText = liveResults.offMarkov;
-        
-        const elDef = document.getElementById('dash-def-markov');
-        if (elDef) elDef.innerText = liveResults.defMarkov;
-        
-        const elRisk = document.getElementById('dash-risk');
-        if (elRisk) {
-            const totalRisk = (parseFloat(liveResults.offRidge) + parseFloat(liveResults.defRidge)).toFixed(3);
-            elRisk.innerText = totalRisk;
-        }
-    }
+    // (Note: Live Dashboard updating was removed because math is now safely hidden on Google's servers!)
+
+    // 2. Automatically jump back to the Main Menu
+    goBack();
+    
+    // 3. Visual green flash to confirm it worked
+    const app = document.getElementById('app-layout');
+    app.style.boxShadow = "inset 0 0 20px #30ff8f";
+    setTimeout(() => { app.style.boxShadow = "none"; }, 150);
+
+    if (navigator.vibrate) navigator.vibrate(50); 
+}
 
     // 3. NEW: Automatically jump back to the Main Menu
     goBack();
@@ -410,43 +393,42 @@ function finishMatch() {
     
     const resScreen = document.getElementById('results-screen');
     resScreen.classList.remove('hidden');
+
     // === SEND STATS TO GOOGLE CALCULATOR ===
-    // We are grabbing the stats your app just collected
     const statsToSend = {
         position: selectedPosition,
-        // If you are tracking specific stats in your matchStats array, 
-        // you would package them up here to send to Google!
-        stats: matchStats 
+        stats: matchStats,
+        scoreUs: currentScore.us,
+        scoreThem: currentScore.them,
+        duration: duration,
+        excludedRanges: excludedRanges
     };
 
-    fetch(calcUrl, {
+    // Show a loading message while Google does the secret math
+    document.getElementById('result-header').innerText = "CALCULATING SECRETS...";
+    resScreen.style.display = 'flex';
+
+    fetch(calcURL, {
         method: "POST",
-        // 'no-cors' mode is sometimes needed for Google Apps Script
-        mode: "no-cors", 
         headers: {
-            "Content-Type": "application/json"
+            "Content-Type": "text/plain" // text/plain prevents strict CORS errors with Google!
         },
         body: JSON.stringify(statsToSend)
     })
-    .then(() => {
-        console.log("Stats secretly sent to Google!");
-    })
-    .catch(error => console.error("Error sending stats:", error));
-    // =======================================
-    resScreen.style.display = 'flex';
-
-    if (typeof calculatePerformance === "function") {
-        currentHybridResults = calculatePerformance(matchStats, currentScore, duration, excludedRanges, selectedPosition);
+    .then(response => response.json())
+    .then(data => {
+        // We got the secret math back from Google!
+        currentHybridResults = data; 
 
         document.getElementById('result-header').innerText = `PERFORMANCE REPORT (${selectedPosition})`;
         
-        // --- NEW: Update Goals and Assists Count ---
+        // Update Goals and Assists Count
         const totalGoals = matchStats.filter(s => s.action === 'Goal').length;
         const totalAssists = matchStats.filter(s => s.action === 'Assist').length;
         document.getElementById('res-goals').innerText = totalGoals;
         document.getElementById('res-assists').innerText = totalAssists;
 
-        // Update all 5 Dashboard Numbers
+        // Update all 5 Dashboard Numbers from Google's data
         document.getElementById('res-overall').innerText = currentHybridResults.netScore;
         document.getElementById('res-off-markov').innerText = currentHybridResults.offMarkov;
         document.getElementById('res-off-ridge').innerText = currentHybridResults.offRidge;
@@ -457,9 +439,12 @@ function finishMatch() {
         document.getElementById('res-overall').style.color = oaVal >= 0 ? '#4caf50' : '#f44336';
 
         renderWPAChart(currentHybridResults.chartData, duration, excludedRanges);
-    } else {
-        alert("Error: calculations.js is not loaded correctly.");
-    }
+    })
+    .catch(error => {
+        console.error("Error sending stats:", error);
+        document.getElementById('result-header').innerText = "ERROR CALCULATING";
+    });
+    // =======================================
 }
 
 // --- 11. CHARTING ---
