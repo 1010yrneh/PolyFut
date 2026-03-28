@@ -140,9 +140,6 @@ function logStat(actionName) {
     const s = Math.floor(currentTime % 60).toString().padStart(2, '0'); 
     matchStats.push({ action: actionName, timeStr: `${m}:${s}`, seconds: currentTime }); 
     
-    // 2. Automatically jump back to the Main Menu
-    goBack();
-    
     // 3. Visual green flash to confirm it worked
     const app = document.getElementById('app-layout');
     app.style.boxShadow = "inset 0 0 20px #30ff8f";
