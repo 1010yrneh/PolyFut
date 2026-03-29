@@ -1,7 +1,7 @@
 /* script.js - FIXED OVERLAY, INTERACTION & AI AGENT */
 
 // GLOBAL STATE
-const calcURL = "https://script.google.com/macros/s/AKfycbxHdt0ihLjbCLO1U7WVAXnNuDK07jIlNjo29yLDljPd8vaTn9vDsqxaak5wSREp5h7b-A/exec";
+const calcURL = "https://script.google.com/macros/s/AKfycbwzE0pCcYxjNz6jkyMdWW-5nXXYsBUeEcYJhGhh9XwCkVo9HyiOuf9VH5RytYrNpyUQng/exec";
 let selectedPosition = null; 
 let matchStats = [];
 let currentScore = { us: 0, them: 0 };
