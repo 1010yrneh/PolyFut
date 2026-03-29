@@ -387,8 +387,8 @@ function finishMatch() {
         excludedRanges: excludedRanges
     };
 
-    // Show a loading message while Google does the secret math
-    document.getElementById('result-header').innerText = "CALCULATING SECRETS...";
+    // Show a loading from external calculator
+    document.getElementById('result-header').innerText = "CALCULATING VALUATION...";
     resScreen.style.display = 'flex';
 
     fetch(calcURL, {
@@ -400,7 +400,6 @@ function finishMatch() {
     })
     .then(response => response.json())
     .then(data => {
-        // We got the secret math back from Google!
         currentHybridResults = data; 
 
         document.getElementById('result-header').innerText = `PERFORMANCE REPORT (${selectedPosition})`;
