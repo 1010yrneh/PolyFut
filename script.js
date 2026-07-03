@@ -2372,7 +2372,7 @@ function renderWPAChart(data, maxDuration, excludedRanges) {
         data: {
             datasets: [{
                 label: 'Hybrid Value', data: data,
-                borderColor: '#f2c94c', backgroundColor: 'rgba(242, 201, 76, 0.1)',
+                borderColor: '#30ff8f', backgroundColor: 'rgba(48, 255, 143, 0.1)',
                 borderWidth: 2, fill: true, tension: 0.1, pointRadius: 0
             }]
         },

@@ -10,8 +10,10 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <img src="PolyFut Logo.png" alt="PolyFut Logo" style="position: absolute; top: 15px; right: 15px; width: 200px; height: auto; z-index: 100000; background-color: white; padding: 4px; box-shadow: 0 0 15px 8px white;">
-    <h1 class="brand-title">PolyFut<br><span>ANALYTICS ENGINE</span></h1>
+    <header class="app-header">
+        <img src="assets/logo.png" alt="PolyFut" class="app-header-logo">
+        <span class="app-header-badge">Analytics Engine</span>
+    </header>
 
     <!-- CV: click your jersey on the first frame -->
     <div id="cv-seed-screen" class="cv-overlay-screen hidden" aria-live="polite">
@@ -229,83 +231,83 @@
 
     <div id="results-screen" class="hidden" style="flex-direction: column; align-items: center; width: 100%; height: 100vh; overflow-y: auto; padding-bottom: 50px;">
         <h1 class="brand-title" style="margin-top: 20px;">MATCH ANALYSIS</h1>
-        <h2 id="result-header" style="text-align:center; color:#888; margin-bottom: 20px;"></h2>
+        <h2 id="result-header" style="text-align:center; color:#8fa093; margin-bottom: 20px; font-weight: 600;"></h2>
 
-        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 800px; background:#161b22; padding:20px; border-radius:8px; border:1px solid #f2c94c; margin-bottom:20px; box-shadow: 0 4px 15px rgba(242, 201, 76, 0.15);">
+        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 800px; background:#11150f; padding:26px; border-radius:0; border:1px solid rgba(48,255,143,0.3); margin-bottom:20px;">
             <div style="text-align:center; flex: 1;">
-                <h3 style="color:#a0a0b0; font-size:14px; margin:0; text-transform:uppercase; letter-spacing: 1px;">Goals ⚽</h3>
-                <p id="res-goals" style="font-size:48px; font-weight:bold; color:#f2c94c; margin:5px 0;">0</p>
+                <h3 style="color:#8fa093; font-size:12px; margin:0; text-transform:uppercase; letter-spacing: 0.16em; font-weight: 700;">Goals ⚽</h3>
+                <p id="res-goals" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:54px; color:#30ff8f; margin:5px 0;">0</p>
             </div>
-            <div style="width: 2px; height: 60px; background: #333;"></div>
+            <div style="width: 1px; height: 60px; background: rgba(255,255,255,0.1);"></div>
             <div style="text-align:center; flex: 1;">
-                <h3 style="color:#a0a0b0; font-size:14px; margin:0; text-transform:uppercase; letter-spacing: 1px;">Assists 🎯</h3>
-                <p id="res-assists" style="font-size:48px; font-weight:bold; color:#f2c94c; margin:5px 0;">0</p>
+                <h3 style="color:#8fa093; font-size:12px; margin:0; text-transform:uppercase; letter-spacing: 0.16em; font-weight: 700;">Assists 🎯</h3>
+                <p id="res-assists" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:54px; color:#30ff8f; margin:5px 0;">0</p>
             </div>
         </div>
 
         <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 800px;">
-            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1;">
-                <h3 style="color:#888; font-size:12px; margin:0;">NET HYBRID</h3>
-                <p id="res-overall" style="font-size:28px; font-weight:bold; color:#fff; margin:5px 0;">0.0</p>
+            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1;">
+                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET HYBRID</h3>
+                <p id="res-overall" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:30px; color:#f2f7f1; margin:8px 0 0;">0.0</p>
             </div>
-            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1.5;">
-                <h3 style="color:#888; font-size:12px; margin:0 0 10px 0;">OFFENSE</h3>
+            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
+                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">OFFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#aaa;">IMPACT (xG gained)</span><br>
-                        <span id="res-off-markov" style="font-size:18px; font-weight:bold; color:#4caf50;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (xG gained)</span><br>
+                        <span id="res-off-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#30ff8f;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#aaa;">RISK (Possible xG Lost)</span><br>
-                        <span id="res-off-ridge" style="font-size:18px; font-weight:bold; color:#81c784;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible xG Lost)</span><br>
+                        <span id="res-off-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#8fdcae;">0.0</span>
                     </div>
                 </div>
             </div>
-            <div class="stat-card" style="background:#222; padding:15px; border-radius:8px; text-align:center; flex: 1.5;">
-                <h3 style="color:#888; font-size:12px; margin:0 0 10px 0;">DEFENSE</h3>
+            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
+                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">DEFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#aaa;">IMPACT (xGA prevented)</span><br>
-                        <span id="res-def-markov" style="font-size:18px; font-weight:bold; color:#2196f3;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (xGA prevented)</span><br>
+                        <span id="res-def-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#4aa3ff;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#aaa;">RISK (Possible xGA increased)</span><br>
-                        <span id="res-def-ridge" style="font-size:18px; font-weight:bold; color:#64b5f6;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible xGA increased)</span><br>
+                        <span id="res-def-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#9ec9ff;">0.0</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="ai-scout-panel" style="width: 90%; max-width: 800px; background: #161b22; border: 1px solid #333; padding: 15px; border-radius: 8px; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
-                <h3 style="color: #30ff8f; margin: 0; display: flex; align-items: center; gap: 8px;">🤖 AI SCOUT REPORT</h3>
+        <div class="ai-scout-panel" style="width: 90%; max-width: 800px; background: #11150f; border: 1px solid rgba(255,255,255,0.08); padding: 22px; border-radius: 0; margin-bottom: 20px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
+                <h3 style="font-family: 'Anton', sans-serif; font-weight: 400; letter-spacing: 0.04em; color: #30ff8f; margin: 0; display: flex; align-items: center; gap: 8px;">🤖 AI SCOUT REPORT</h3>
                 <div id="api-key-container" style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
                     <div style="display: flex; gap: 5px;">
                         <input type="password" id="api-key-input" placeholder="Paste Groq API Key"
-                               style="background: #111; border: 1px solid #444; color: #fff; padding: 5px; border-radius: 4px; width: 150px;">
-                        <button onclick="saveApiKey()" id="save-key-btn" style="background: #333; color: #fff; border: 1px solid #444; cursor: pointer; padding: 5px 10px; border-radius: 4px;">SAVE</button>
+                               style="background: #0b0d0b; border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 8px 10px; border-radius: 0; width: 150px;">
+                        <button onclick="saveApiKey()" id="save-key-btn" style="background: #1c241c; color: #fff; border: 1px solid rgba(255,255,255,0.14); cursor: pointer; padding: 8px 14px; border-radius: 0; font-weight: 700; font-size: 12px;">SAVE</button>
                     </div>
-                    <button onclick="openGroqHelp()" style="background: transparent; border: none; color: #f2c94c; font-size: 0.75rem; cursor: pointer; text-decoration: underline; font-family: 'Rajdhani', sans-serif; padding: 0; margin-right: 5px; transition: 0.2s;">How to connect Groq?</button>
+                    <button onclick="openGroqHelp()" style="background: transparent; border: none; color: #30ff8f; font-size: 0.75rem; cursor: pointer; text-decoration: underline; font-family: 'Rajdhani', sans-serif; padding: 0; margin-right: 5px; transition: 0.2s;">How to connect Groq?</button>
                 </div>
                 <div id="api-key-saved" class="hidden" style="display: flex; align-items: center; gap: 10px;">
-                    <span style="color: #f2c94c; font-size: 0.8rem; font-weight: bold;">🔑 KEY SAVED</span>
-                    <button onclick="clearApiKey()" style="background: transparent; border: 1px solid #ff2e4d; color: #ff2e4d; cursor: pointer; font-size: 0.7rem; padding: 2px 6px; border-radius: 4px;">RESET</button>
+                    <span style="color: #30ff8f; font-size: 0.8rem; font-weight: bold;">🔑 KEY SAVED</span>
+                    <button onclick="clearApiKey()" style="background: transparent; border: 1px solid #ff2e4d; color: #ff2e4d; cursor: pointer; font-size: 0.7rem; padding: 4px 8px; border-radius: 0;">RESET</button>
                 </div>
             </div>
-            <button onclick="generateScoutReport()" id="gen-report-btn" class="fidget-btn" style="width: 100%; background: linear-gradient(135deg, #7000ff 0%, #3d0096 100%); min-height: 40px; margin-bottom: 10px; font-size:0.9rem;">GENERATE REPORT</button>
-            <div id="ai-output" style="color: #ccc; font-family: monospace; font-size: 0.9rem; height: 350px; overflow-y: auto; white-space: pre-wrap; background: #0e0e12; padding: 15px; border-radius: 4px; border: 1px solid #333;">Waiting for stats...</div>
-            <div id="followup-container" class="hidden" style="margin-top: 10px; display: flex; gap: 5px;">
+            <button onclick="generateScoutReport()" id="gen-report-btn" class="fidget-btn" style="width: 100%; background: linear-gradient(135deg, #30ff8f 0%, #1fae66 100%); color: #07160c; min-height: 44px; margin-bottom: 14px; font-size: 1rem;">GENERATE REPORT</button>
+            <div id="ai-output" style="color: #a8b4a9; font-family: 'Rajdhani', monospace; font-size: 0.95rem; height: 350px; overflow-y: auto; white-space: pre-wrap; background: #0b0d0b; padding: 16px; border-radius: 0; border: 1px solid rgba(255,255,255,0.08);">Waiting for stats...</div>
+            <div id="followup-container" class="hidden" style="margin-top: 14px; display: flex; gap: 8px;">
                 <input type="text" id="followup-input" placeholder="Ask the Coach AI a follow-up question..."
-                       style="flex-grow: 1; background: #111; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; font-family: 'Rajdhani', sans-serif;">
-                <button onclick="askFollowUp()" id="followup-btn" style="background: #f2c94c; color: #000; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 20px; border-radius: 4px; cursor: pointer; transition: 0.2s;">ASK</button>
+                       style="flex-grow: 1; background: #0b0d0b; border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 12px; border-radius: 0; font-family: 'Rajdhani', sans-serif;">
+                <button onclick="askFollowUp()" id="followup-btn" style="background: #30ff8f; color: #07160c; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 22px; border-radius: 0; cursor: pointer; transition: 0.2s;">ASK</button>
             </div>
         </div>
 
-        <div class="chart-container-full" style="width:90%; max-width: 800px; height:300px; margin:0 auto; background:#222; padding:10px; border-radius:8px;">
+        <div class="chart-container-full" style="width:90%; max-width: 800px; height:300px; margin:0 auto; background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:16px; border-radius:0;">
             <canvas id="wpaChart"></canvas>
         </div>
 
-        <button class="start-btn" onclick="location.reload()" style="background:#333; margin-top:30px; width:90%; max-width: 800px;">CLOSE ANALYSIS</button>
+        <button class="start-btn" onclick="location.reload()" style="background:#1c241c; border: 1px solid rgba(255,255,255,0.14); color: #f2f7f1; margin-top:30px; width:90%; max-width: 800px; clip-path: none;">CLOSE ANALYSIS</button>
     </div>
 
     <!-- Floating analysis progress (draggable, closable) -->
