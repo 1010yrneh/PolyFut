@@ -10,9 +10,58 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
+    <!-- ===== NEON NET BACKGROUND ===== -->
+    <svg class="pf-net-bg" viewBox="0 0 1400 1200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+        <g class="pf-net-a" stroke="#30ff8f" stroke-width="1" fill="none" opacity=".5">
+            <line x1="0" y1="120" x2="420" y2="340"></line>
+            <line x1="420" y1="340" x2="180" y2="620"></line>
+            <line x1="420" y1="340" x2="760" y2="260"></line>
+            <line x1="760" y1="260" x2="1080" y2="480"></line>
+            <line x1="1080" y1="480" x2="1400" y2="220"></line>
+            <line x1="180" y1="620" x2="480" y2="820"></line>
+            <line x1="480" y1="820" x2="820" y2="700"></line>
+            <line x1="820" y1="700" x2="1080" y2="480"></line>
+            <line x1="480" y1="820" x2="360" y2="1100"></line>
+            <line x1="820" y1="700" x2="1120" y2="980"></line>
+            <line x1="1120" y1="980" x2="1400" y2="820"></line>
+            <line x1="0" y1="120" x2="180" y2="620"></line>
+            <line x1="760" y1="260" x2="1400" y2="220"></line>
+        </g>
+        <g class="pf-net-b" stroke="#30ff8f" stroke-width="1" fill="none" opacity=".3">
+            <line x1="1400" y1="60" x2="1020" y2="300"></line>
+            <line x1="1020" y1="300" x2="1240" y2="560"></line>
+            <line x1="1020" y1="300" x2="660" y2="180"></line>
+            <line x1="660" y1="180" x2="300" y2="380"></line>
+            <line x1="300" y1="380" x2="0" y2="200"></line>
+            <line x1="1240" y1="560" x2="960" y2="760"></line>
+            <line x1="960" y1="760" x2="620" y2="640"></line>
+            <line x1="620" y1="640" x2="300" y2="380"></line>
+            <line x1="960" y1="760" x2="1100" y2="1040"></line>
+            <line x1="620" y1="640" x2="340" y2="900"></line>
+            <line x1="340" y1="900" x2="0" y2="740"></line>
+        </g>
+        <g class="pf-net-node" fill="#30ff8f">
+            <circle cx="420" cy="340" r="4"></circle>
+            <circle cx="1080" cy="480" r="3.5"></circle>
+            <circle cx="480" cy="820" r="4"></circle>
+            <circle cx="1020" cy="300" r="3.5"></circle>
+            <circle cx="620" cy="640" r="4"></circle>
+            <circle cx="180" cy="620" r="3"></circle>
+        </g>
+    </svg>
+
     <header class="app-header">
-        <img src="assets/logo.png" alt="PolyFut" class="app-header-logo">
-        <span class="app-header-badge">Analytics Engine</span>
+        <div class="app-header-inner">
+            <div class="app-header-brand">
+                <img src="assets/logo.png" alt="PolyFut" class="app-header-logo">
+                <span class="app-header-badge">Analytics Engine</span>
+            </div>
+            <nav class="app-tabs" aria-hidden="true">
+                <span class="app-tab app-tab-active">Setup</span>
+                <span class="app-tab">Workspace</span>
+                <span class="app-tab">Results</span>
+            </nav>
+        </div>
     </header>
 
     <!-- CV: click your jersey on the first frame -->
@@ -66,58 +115,74 @@
     </div>
 
     <div id="setup-screen">
-        <div class="setup-group">
-            <label class="setup-label">0. Select Position</label>
-            <div class="position-selector-container">
-                <div class="pitch-map">
-                    <div class="pitch-zone zone-fw" onclick="selectPosition('FW')" id="zoneFW">FW</div>
-                    <div class="pitch-zone zone-mf" onclick="selectPosition('MF')" id="zoneMF">MF</div>
-                    <div class="pitch-zone zone-df" onclick="selectPosition('DF')" id="zoneDF">DF</div>
+        <div class="setup-inner">
+            <div class="setup-eyebrow">
+                <span class="setup-eyebrow-line"></span>
+                <span class="setup-eyebrow-text">New analysis</span>
+            </div>
+            <h1 class="setup-h1">Set up the match</h1>
+
+            <div class="setup-card">
+                <div class="setup-group setup-group-full">
+                    <label class="setup-label">0 · Select position</label>
+                    <div class="position-selector-container">
+                        <div class="pos-boxes">
+                            <div class="pitch-zone" onclick="selectPosition('FW')" id="zoneFW">FW</div>
+                            <div class="pitch-zone" onclick="selectPosition('MF')" id="zoneMF">MF</div>
+                            <div class="pitch-zone" onclick="selectPosition('DF')" id="zoneDF">DF</div>
+                        </div>
+                        <div class="pos-divider"></div>
+                        <div class="pos-selected">
+                            <div class="pos-selected-label">Selected</div>
+                            <div id="selected-pos-display" class="pos-selected-val">—</div>
+                        </div>
+                        <div class="pos-divider"></div>
+                        <p class="pos-desc">Position sets the baseline expectation PolyFut compares your touches against — forwards are judged more on chance creation and finishing, midfielders on progression and press, defenders on recoveries and duels won.</p>
+                    </div>
                 </div>
-                <div id="selected-pos-display" style="text-align: center; color: #f2c94c; font-weight: bold; margin-top: 5px;">NONE SELECTED</div>
+
+                <div class="setup-group">
+                    <label class="setup-label">1 · Match video</label>
+                    <input type="file" id="video-input" accept="video/*" class="setup-input setup-file">
+                </div>
+
+                <div class="setup-group">
+                    <label class="setup-label">2 · Opponent</label>
+                    <input type="text" id="opponent-name" placeholder="e.g. Arsenal U18" class="setup-input">
+                </div>
+
+                <div class="setup-group">
+                    <label class="setup-label">3 · Date</label>
+                    <input type="date" id="match-date" class="setup-input">
+                </div>
+
+                <div class="setup-group">
+                    <label class="setup-label">4 · Final score</label>
+                    <div class="score-row" style="display: flex; gap: 12px;">
+                        <input type="number" id="score-us" placeholder="US" value="0" class="setup-input" style="text-align: center;">
+                        <input type="number" id="score-them" placeholder="THEM" value="0" class="setup-input" style="text-align: center;">
+                    </div>
+                </div>
+
+                <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">Find touch hotspots</button>
+                <p class="setup-analysis-hint">Full-match analysis runs on your CPU and may take several hours. You can close this tab and reopen PolyFut later — progress is kept until you cancel the run.</p>
             </div>
-        </div>
 
-        <div class="setup-group">
-            <label class="setup-label">1. Match Video</label>
-            <input type="file" id="video-input" accept="video/*" class="setup-input">
-        </div>
-
-        <div class="setup-group">
-            <label class="setup-label">2. Opponent</label>
-            <input type="text" id="opponent-name" placeholder="e.g. Arsenal U18" class="setup-input">
-        </div>
-
-        <div class="setup-group">
-            <label class="setup-label">3. Date</label>
-            <input type="date" id="match-date" class="setup-input">
-        </div>
-
-        <div class="setup-group">
-            <label class="setup-label">4. Final Score</label>
-            <div class="score-row" style="display: flex; gap: 10px;">
-                <input type="number" id="score-us" placeholder="US" value="0" class="setup-input">
-                <input type="number" id="score-them" placeholder="THEM" value="0" class="setup-input">
+            <div id="match-catalogue" class="match-catalogue">
+                <div class="match-catalogue-header">
+                    <label class="setup-label">Saved matches</label>
+                    <button type="button" id="catalogue-refresh-btn" class="catalogue-refresh-btn">Refresh</button>
+                </div>
+                <p id="match-catalogue-empty" class="match-catalogue-empty">No saved analyses yet — complete a run to add it here.</p>
+                <div id="match-catalogue-list" class="match-catalogue-list"></div>
             </div>
-        </div>
 
-        <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">FIND TOUCH HOTSPOTS</button>
-        <p class="setup-analysis-hint">Full-match analysis runs on your CPU and may take several hours. You can close this tab and reopen PolyFut later — progress is kept until you cancel the run.</p>
-
-        <div id="match-catalogue" class="match-catalogue">
-            <div class="match-catalogue-header">
-                <label class="setup-label">Saved matches</label>
-                <button type="button" id="catalogue-refresh-btn" class="catalogue-refresh-btn">Refresh</button>
-            </div>
-            <p id="match-catalogue-empty" class="match-catalogue-empty">No saved analyses yet — complete a run to add it here.</p>
-            <div id="match-catalogue-list" class="match-catalogue-list"></div>
-        </div>
-
-        <div id="cv-resume-banner" class="cv-resume-banner hidden">
-            <p id="cv-resume-banner-text" class="cv-resume-banner-text">Saved analysis found.</p>
-            <div class="cv-resume-banner-actions">
-                <button type="button" class="cv-btn-primary" id="cv-resume-btn">Open results</button>
-                <button type="button" class="cv-btn-secondary" id="cv-discard-btn">Discard run</button>
+            <div id="cv-resume-banner" class="cv-resume-banner hidden">
+                <p id="cv-resume-banner-text" class="cv-resume-banner-text">Saved analysis found.</p>
+                <div class="cv-resume-banner-actions">
+                    <button type="button" class="cv-btn-primary" id="cv-resume-btn">Open results</button>
+                    <button type="button" class="cv-btn-secondary" id="cv-discard-btn">Discard run</button>
+                </div>
             </div>
         </div>
     </div>
@@ -229,7 +294,7 @@
         </div>
     </div>
 
-    <div id="results-screen" class="hidden" style="flex-direction: column; align-items: center; width: 100%; height: 100vh; overflow-y: auto; padding-bottom: 50px;">
+    <div id="results-screen" class="hidden" style="flex-direction: column; align-items: center; width: 100%; height: 100vh; overflow-y: auto; padding-bottom: 50px; position: relative; z-index: 1;">
         <h1 class="brand-title" style="margin-top: 20px;">MATCH ANALYSIS</h1>
         <h2 id="result-header" style="text-align:center; color:#8fa093; margin-bottom: 20px; font-weight: 600;"></h2>
 

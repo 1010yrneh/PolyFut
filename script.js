@@ -375,7 +375,7 @@ function restoreMatchSession(data) {
         const z = document.getElementById('zone' + data.selectedPosition);
         if (z) z.classList.add('selected-zone');
         const disp = document.getElementById('selected-pos-display');
-        if (disp) disp.innerText = data.selectedPosition + ' SELECTED';
+        if (disp) disp.innerText = data.selectedPosition;
     }
     rebuildBenchBlocksFromSession(data.benchBlocks);
     currentHybridResults = data.hybridResults || null;
@@ -462,7 +462,7 @@ function restoreMatchMetadataFromSession(sess) {
         var z = document.getElementById('zone' + sess.position);
         if (z) z.classList.add('selected-zone');
         var disp = document.getElementById('selected-pos-display');
-        if (disp) disp.innerText = sess.position + ' SELECTED';
+        if (disp) disp.innerText = sess.position;
     }
     if (sess.opponent != null) {
         var opp = document.getElementById('opponent-name');
@@ -1269,7 +1269,7 @@ function selectPosition(pos) {
     selectedPosition = pos;
     document.querySelectorAll('.pitch-zone').forEach(el => el.classList.remove('selected-zone'));
     document.getElementById('zone' + pos).classList.add('selected-zone');
-    document.getElementById('selected-pos-display').innerText = pos + " SELECTED";
+    document.getElementById('selected-pos-display').innerText = pos;
     checkStartReady();
 }
 
