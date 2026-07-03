@@ -1,16 +1,17 @@
-/* --- FIFA / FUT MOBILE THEME (Fixed Z-Index) --- */
+/* --- POLYFUT THEME (dark / neon-green, matches polyfut.com) --- */
 
-@import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Anton&family=Rajdhani:wght@500;600;700&display=swap');
 
 :root {
-    --bg-dark: #0e0e12;
-    --bg-panel: #161b22;
-    --text-primary: #ffffff;
-    --text-secondary: #a0a0b0;
+    --bg-dark: #0b0d0b;
+    --bg-panel: #11150f;
+    --text-primary: #f2f7f1;
+    --text-secondary: #8fa093;
     --fifa-green: #30ff8f;
     --fifa-purple: #7000ff;
     --fifa-gold: #f2c94c;
     --fifa-red: #ff2e4d;
+    --font-display: 'Anton', sans-serif;
     --grad-shoot: linear-gradient(135deg, #ff2e4d 0%, #a8001d 100%);
     --grad-pass: linear-gradient(135deg, #2979ff 0%, #0d47a1 100%);
     --grad-def: linear-gradient(135deg, #00e676 0%, #006064 100%);
@@ -29,22 +30,24 @@ body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); 
     grid-template-columns: 1fr 1fr; /* Splits the box into two equal halves */
     gap: 20px 40px; /* 20px vertical gap, 40px horizontal gap */
     align-items: center;
-    z-index: 1000; 
-    position: relative; 
+    z-index: 1000;
+    position: relative;
     background-color: var(--bg-panel); /* Lighter panel color to pop off the background */
-    border-radius: 12px; /* Smooth desktop-style corners */
+    border-radius: 0; /* sharp corners, matches polyfut.com */
     box-shadow: 0 15px 40px rgba(0,0,0,0.8); /* Deep shadow for a floating window feel */
-    border: 1px solid #333;
+    border: 1px solid rgba(255,255,255,0.08);
 }
 
-.brand-title { 
+.brand-title {
     grid-column: 1 / -1; /* Forces the title to stretch across both columns */
-    color: var(--fifa-gold); 
-    text-align: center; 
-    font-size: 2.5rem; 
-    margin-bottom: 10px; 
-    text-transform: uppercase; 
-    letter-spacing: 2px; 
+    color: var(--fifa-green);
+    text-align: center;
+    font-family: var(--font-display);
+    font-weight: 400;
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
 }
 
 .setup-group { 
@@ -68,24 +71,25 @@ body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); 
 }
 
 
-.setup-input { 
-    background: #0e0e12; border: 1px solid #333; color: #fff; padding: 12px; border-radius: 4px; font-family: inherit; font-size: 1rem; transition: 0.2s;
+.setup-input {
+    background: #0b0d0b; border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 12px; border-radius: 0; font-family: inherit; font-size: 1rem; transition: 0.2s;
 }
 
 .setup-input:focus {
-    border-color: var(--fifa-gold);
+    border-color: var(--fifa-green);
     outline: none;
 }
 
-.position-selector-container { 
+.position-selector-container {
     display: flex; flex-direction: column; align-items: center; justify-content: center;
-    background: rgba(0,0,0,0.2); padding: 15px; border-radius: 8px; border: 1px solid #222;
+    background: rgba(0,0,0,0.2); padding: 15px; border-radius: 0; border: 1px solid rgba(255,255,255,0.1);
     height: 100%; /* Stretches to match the height of the inputs next to it */
 }
 
-.start-btn { 
+.start-btn {
     grid-column: 1 / -1; /* Forces the button to stretch across the bottom */
-    background: var(--fifa-green); color: #000; border: none; padding: 15px; font-weight: 800; font-size: 1.2rem; cursor: pointer; border-radius: 6px; margin-top: 10px; text-transform: uppercase; transition: 0.2s;
+    background: var(--fifa-green); color: #071612; border: none; padding: 18px; font-family: var(--font-display); font-weight: 400; font-size: 1.3rem; letter-spacing: 0.04em; cursor: pointer; border-radius: 0; margin-top: 10px; text-transform: uppercase; transition: 0.2s;
+    clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
 }
 
 .start-btn:hover:not(:disabled) {
@@ -435,7 +439,7 @@ html, body {
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 1px;
-    border-radius: 8px;
+    border-radius: 0;
     padding: 12px 26px;
     cursor: pointer;
     border: none;
@@ -444,17 +448,17 @@ html, body {
 }
 
 .cv-btn-primary {
-    background: linear-gradient(135deg, var(--fifa-green) 0%, #00b366 100%);
-    color: #06120b;
+    background: var(--fifa-green);
+    color: #071612;
 }
 .cv-btn-primary:hover { filter: brightness(1.08); }
 
 .cv-btn-secondary {
-    background: #222;
-    color: var(--text-secondary);
-    border: 1px solid #3a3a44;
+    background: transparent;
+    color: #c9d3ca;
+    border: 1px solid rgba(255, 255, 255, 0.14);
 }
-.cv-btn-secondary:hover { background: #2c2c34; }
+.cv-btn-secondary:hover { border-color: var(--fifa-green); color: var(--fifa-green); }
 
 /* Team colour picker */
 .cv-team-options {
@@ -594,8 +598,8 @@ html, body {
 .match-catalogue {
     margin-top: 1.75rem;
     padding: 1rem 1.1rem;
-    border-radius: 12px;
-    border: 1px solid rgba(242, 201, 76, 0.2);
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.08);
     background: rgba(0, 0, 0, 0.25);
     max-width: 520px;
 }
@@ -614,11 +618,14 @@ html, body {
 
 .catalogue-refresh-btn {
     padding: 0.35rem 0.75rem;
-    font-size: 0.8rem;
-    border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.15);
-    background: rgba(255, 255, 255, 0.06);
-    color: #ccc;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border-radius: 0;
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    background: transparent;
+    color: #c9d3ca;
     cursor: pointer;
 }
 .catalogue-refresh-btn:hover { color: #fff; background: rgba(255, 255, 255, 0.1); }
@@ -640,14 +647,16 @@ html, body {
 
 .match-catalogue-card {
     padding: 0.75rem 0.85rem;
-    border-radius: 10px;
+    border-radius: 0;
     border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    background: #11150f;
 }
 
 .match-catalogue-title {
-    font-weight: 700;
-    color: #f2c94c;
+    font-family: var(--font-display);
+    font-weight: 400;
+    letter-spacing: 0.02em;
+    color: var(--text-primary);
     font-size: 0.95rem;
     margin-bottom: 0.25rem;
 }

@@ -3,116 +3,363 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>PolyFut — Touch hotspot analysis for match film</title>
-    <meta name="description" content="Upload your match video. PolyFut finds where your team had the ball — locally on your PC. No cloud upload.">
+    <title>PolyFut — Analyse your performances now</title>
+    <meta name="description" content="Upload your match video. PolyFut finds where your team had the ball, locally on your PC. No cloud upload.">
     <link rel="icon" href="assets/polyfut-icon.png" type="image/png">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Anton&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <header class="site-header">
-        <div class="wrap header-inner">
-            <a class="brand" href="/">
-                <img src="assets/polyfut-icon.png" alt="" width="40" height="40">
-                <span>PolyFut</span>
-            </a>
-            <nav>
-                <a href="#features">Features</a>
-                <a href="#how">How it works</a>
-                <a href="#download" class="nav-cta">Download</a>
-            </nav>
+<div style="background: rgb(11, 13, 11); color: rgb(242, 247, 241); font-family: Rajdhani, system-ui, sans-serif; min-height: 100vh; overflow-x: hidden;">
+  <header style="position: sticky; top: 0px; z-index: 50; background: rgba(11, 13, 11, 0.82); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="max-width: 1280px; margin: 0px auto; padding: 0px 40px; height: 82px; display: flex; align-items: center; justify-content: space-between;">
+      <a href="#top" style="display: flex; align-items: center; text-decoration: none;">
+        <img src="assets/logo.png" alt="PolyFut" style="display: block; height: 44px; width: auto;">
+      </a>
+      <nav style="display: flex; align-items: center; gap: 36px;">
+        <a href="#features" class="pf-link" style="font-weight: 600; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;">Features</a>
+        <a href="#how" class="pf-link" style="font-weight: 600; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;">How it works</a>
+        <a href="#showcase" class="pf-link" style="font-weight: 600; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;">Workspace</a>
+        <a href="#compare" class="pf-link" style="font-weight: 600; font-size: 14px; letter-spacing: 0.14em; text-transform: uppercase;">Compare</a>
+        <a href="#download" class="pf-cta" style="display: inline-flex; align-items: center; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-weight: 700; font-size: 14px; letter-spacing: 0.1em; text-transform: uppercase; padding: 13px 22px; text-decoration: none; clip-path: polygon(10px 0px, 100% 0px, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0px 100%, 0px 10px);">Download</a>
+      </nav>
+    </div>
+  </header>
+  <div id="top"></div>
+  <section style="position: relative; overflow: hidden; border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="position: absolute; top: -120px; right: -80px; font-family: Anton, sans-serif; font-size: 340px; line-height: 1; color: rgba(48, 255, 143, 0.05); text-transform: uppercase; pointer-events: none; user-select: none;">FUT</div>
+    <div style="max-width: 1280px; margin: 0px auto; padding: 64px 40px 72px; display: grid; grid-template-columns: 1.05fr 0.95fr; gap: 48px; align-items: center;">
+      <div style="position: relative; z-index: 2;">
+        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 22px;">
+          <span style="width: 44px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+          <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">Local match analysis</span>
         </div>
-    </header>
-
-    <main>
-        <section class="hero">
-            <div class="wrap hero-grid">
-                <div class="hero-copy">
-                    <p class="eyebrow">Local match analysis</p>
-                    <h1>Find your team's touch hotspots — on your own computer</h1>
-                    <p class="lead">
-                        Upload a full-match recording. PolyFut runs computer vision locally to mark
-                        possession windows, then you review, score actions, and export insights.
-                        Your video never leaves your machine.
-                    </p>
-                    <div class="hero-actions">
-                        <a id="download-btn" class="btn btn-primary" href="downloads/PolyFut-Setup-1.0.0.exe">
-                            Download for Windows
-                        </a>
-                        <span class="btn-meta">Windows 10/11 · ~1 GB install · Free</span>
-                    </div>
-                </div>
-                <div class="hero-card">
-                    <ul class="hero-stats">
-                        <li><strong>100% local</strong> — no cloud video upload</li>
-                        <li><strong>Full match</strong> — 90+ minute broadcasts supported</li>
-                        <li><strong>Resume</strong> — close the app; progress is saved</li>
-                    </ul>
-                </div>
-            </div>
-        </section>
-
-        <section id="features" class="section">
-            <div class="wrap">
-                <h2>Built for coaches and players reviewing film</h2>
-                <div class="feature-grid">
-                    <article>
-                        <h3>Touch hotspots</h3>
-                        <p>Jump straight to stretches where your team had the ball — with a timeline of zones on the seek bar.</p>
-                    </article>
-                    <article>
-                        <h3>Action logging</h3>
-                        <p>Tag passes, shots, and defensive actions during each window. Live hybrid stats update as you review.</p>
-                    </article>
-                    <article>
-                        <h3>Scout report</h3>
-                        <p>Optional AI summary when you add your own Groq API key — still runs from your machine.</p>
-                    </article>
-                </div>
-            </div>
-        </section>
-
-        <section id="how" class="section section-alt">
-            <div class="wrap">
-                <h2>How it works</h2>
-                <ol class="steps">
-                    <li><strong>Install</strong> — download the Windows app and open PolyFut from the Start menu.</li>
-                    <li><strong>Upload</strong> — import your match MP4 (analysis runs on your CPU or GPU).</li>
-                    <li><strong>Pick your kit</strong> — choose which team colour you played for.</li>
-                    <li><strong>Review</strong> — click hotspots, log actions, finish with a WPA chart and report.</li>
-                </ol>
-                <p class="note">Full-match analysis can take several hours on CPU. You can close the window and resume later — the server keeps running in the background until you discard the run.</p>
-            </div>
-        </section>
-
-        <section id="download" class="section download-section">
-            <div class="wrap download-box">
-                <h2>Download PolyFut</h2>
-                <p>Version <span id="app-version">1.0.0</span> · Windows installer</p>
-                <a class="btn btn-primary btn-lg" href="downloads/PolyFut-Setup-1.0.0.exe">PolyFut-Setup-1.0.0.exe</a>
-                <p class="fine-print">
-                    Requires Windows 10 or later, 8 GB+ RAM recommended, and several GB free disk for match videos.
-                    First launch downloads the YOLO detector weights (~22 MB).
-                </p>
-            </div>
-        </section>
-    </main>
-
-    <footer class="site-footer">
-        <div class="wrap">
-            <p>© <span id="year"></span> PolyFut · Analysis runs locally on your device.</p>
+        <h1 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(48px, 6vw, 104px); line-height: 0.9; margin: 0px; max-width: 13ch;">
+          Analyse your <span style="color: rgb(48, 255, 143);">performances</span> now
+        </h1>
+        <p style="max-width: 48ch; margin: 26px 0px 0px; font-size: 19px; line-height: 1.55; color: rgb(184, 196, 186); font-weight: 500;">
+          Upload a full-match recording. PolyFut runs computer vision locally to mark possession windows — then you review, log actions, and export AI commentary. All processes done over night.
+        </p>
+        <div style="display: flex; align-items: center; gap: 20px; margin-top: 36px; flex-wrap: wrap;">
+          <a href="#download" class="pf-cta" style="display: inline-flex; align-items: center; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-family: Anton, sans-serif; font-size: 19px; letter-spacing: 0.04em; text-transform: uppercase; padding: 18px 32px; text-decoration: none; clip-path: polygon(14px 0px, 100% 0px, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0px 100%, 0px 14px);">Download for Windows</a>
+          <a href="#how" class="pf-ghost" style="display: inline-flex; align-items: center; border: 1.5px solid rgba(255, 255, 255, 0.22); color: rgb(242, 247, 241); font-weight: 700; font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; padding: 16px 28px; text-decoration: none;">See how it works</a>
         </div>
-    </footer>
-    <script>
-        document.getElementById('year').textContent = new Date().getFullYear();
-        fetch('version.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
-            if (!v || !v.version) return;
-            document.getElementById('app-version').textContent = v.version;
-            var name = 'PolyFut-Setup-' + v.version + '.exe';
-            document.querySelectorAll('a[href*="PolyFut-Setup"]').forEach(function (a) {
-                a.href = 'downloads/' + name;
-                if (a.classList.contains('btn-lg')) a.textContent = name;
-            });
-        }).catch(function () {});
-    </script>
+        <div style="display: flex; gap: 44px; margin-top: 46px;">
+          <div>
+            <div style="font-family: Anton, sans-serif; font-size: 44px; color: rgb(48, 255, 143); line-height: 1;">100%</div>
+            <div style="font-weight: 600; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: rgb(143, 160, 147); margin-top: 6px;">On-device</div>
+          </div>
+          <div style="width: 1px; background: rgba(255, 255, 255, 0.12);"></div>
+          <div>
+            <div style="font-family: Anton, sans-serif; font-size: 44px; color: rgb(242, 247, 241); line-height: 1;">90<span style="font-size: 24px; color: rgb(143, 160, 147);">min+</span></div>
+            <div style="font-weight: 600; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: rgb(143, 160, 147); margin-top: 6px;">Full broadcasts</div>
+          </div>
+          <div style="width: 1px; background: rgba(255, 255, 255, 0.12);"></div>
+          <div>
+            <div style="font-family: Anton, sans-serif; font-size: 44px; color: rgb(242, 247, 241); line-height: 1;">9</div>
+            <div style="font-weight: 600; font-size: 13px; letter-spacing: 0.16em; text-transform: uppercase; color: rgb(143, 160, 147); margin-top: 6px;">CV stages</div>
+          </div>
+        </div>
+      </div>
+      <div style="position: relative; z-index: 2;">
+        <div style="position: absolute; top: -14px; left: -14px; width: 56px; height: 56px; border-top: 3px solid rgb(48, 255, 143); border-left: 3px solid rgb(48, 255, 143); z-index: 3; pointer-events: none;"></div>
+        <div style="position: absolute; bottom: -14px; right: -14px; width: 56px; height: 56px; border-bottom: 3px solid rgb(48, 255, 143); border-right: 3px solid rgb(48, 255, 143); z-index: 3; pointer-events: none;"></div>
+        <div style="display: flex; flex-direction: column; gap: 14px;">
+          <div style="position: relative;">
+            <img id="pf-hero-b" src="assets/hero-1.jpg" alt="Drop a player / action photo" style="width: 100%; aspect-ratio: 16 / 11; object-fit: cover;" loading="lazy">
+            <div style="position: absolute; top: 14px; right: 14px; background: rgba(11, 13, 11, 0.92); border: 1px solid rgba(48, 255, 143, 0.5); padding: 10px 16px;">
+              <div style="font-weight: 600; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(143, 160, 147);">Contribution</div>
+              <div style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143); line-height: 1.1;">+0.203 xG</div>
+            </div>
+            <div style="position: absolute; left: 14px; bottom: 14px; background: rgba(11, 13, 11, 0.92); border: 1px solid rgba(48, 255, 143, 0.4); padding: 10px 16px;">
+              <div style="font-weight: 600; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(143, 160, 147);">Possession window</div>
+              <div style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143); line-height: 1.1;">14:22 → 14:48</div>
+            </div>
+          </div>
+          <div style="display: grid; grid-template-columns: 1.2fr 1fr; gap: 14px;">
+            <div style="position: relative;">
+              <img id="pf-hero-b2" src="assets/hero-2.jpg" alt="Drop a second action photo" style="width: 100%; aspect-ratio: 16 / 12; object-fit: cover;" loading="lazy">
+              <div style="position: absolute; left: 12px; bottom: 12px; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-weight: 700; font-size: 12px; letter-spacing: 0.04em; padding: 7px 12px;">0.061 xG / touch</div>
+            </div>
+            <div style="background: rgb(17, 21, 15); border: 1px solid rgba(255, 90, 90, 0.35); display: flex; flex-direction: column; justify-content: center; padding: 16px 18px;">
+              <div style="font-weight: 600; font-size: 10.5px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(143, 160, 147);">Risk conceded</div>
+              <div style="font-family: Anton, sans-serif; font-size: 26px; color: rgb(255, 106, 106); line-height: 1.1; margin-top: 4px;">−0.057 xG</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+  <section style="background: rgb(14, 18, 14); border-top: 1px solid rgba(48, 255, 143, 0.25); border-bottom: 1px solid rgba(48, 255, 143, 0.25); overflow: hidden; padding: 20px 0px;">
+    <div class="pf-marquee-track">
+      <span style="display: flex; align-items: center; flex: 0 0 auto;">
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+      </span>
+      <span aria-hidden="true" style="display: flex; align-items: center; flex: 0 0 auto;">
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+        <span style="font-family: Anton, sans-serif; font-size: clamp(26px, 3.4vw, 46px); text-transform: uppercase; letter-spacing: 0.02em; color: rgb(242, 247, 241); padding: 0px 28px; white-space: nowrap;">Made by players <span style="color: rgb(48, 255, 143);">for players</span></span>
+        <span style="width: 10px; height: 10px; background: rgb(48, 255, 143); transform: rotate(45deg); flex: 0 0 auto;"></span>
+      </span>
+    </div>
+  </section>
+  <section style="background: rgb(48, 255, 143); color: rgb(7, 22, 12);">
+    <div style="max-width: 1280px; margin: 0px auto; padding: 0px 40px; display: grid; grid-template-columns: repeat(4, 1fr);">
+      <div style="padding: 26px 24px; text-align: center; border-right: 1px solid rgba(7, 22, 12, 0.18);">
+        <div style="font-family: Anton, sans-serif; font-size: clamp(40px, 4.4vw, 66px); line-height: 1;">100%</div>
+        <div style="font-weight: 700; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Runs local</div>
+      </div>
+      <div style="padding: 26px 24px; text-align: center; border-right: 1px solid rgba(7, 22, 12, 0.18);">
+        <div style="font-family: Anton, sans-serif; font-size: clamp(40px, 4.4vw, 66px); line-height: 1;">90+</div>
+        <div style="font-weight: 700; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Minute matches</div>
+      </div>
+      <div style="padding: 26px 24px; text-align: center; border-right: 1px solid rgba(7, 22, 12, 0.18);">
+        <div style="font-family: Anton, sans-serif; font-size: clamp(40px, 4.4vw, 66px); line-height: 1;">9</div>
+        <div style="font-weight: 700; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Stage CV pipeline</div>
+      </div>
+      <div style="padding: 26px 24px; text-align: center;">
+        <div style="font-family: Anton, sans-serif; font-size: clamp(40px, 4.4vw, 66px); line-height: 1;">0</div>
+        <div style="font-weight: 700; font-size: 14px; letter-spacing: 0.18em; text-transform: uppercase; margin-top: 6px; opacity: 0.85;">Cloud uploads</div>
+      </div>
+    </div>
+  </section>
+  <section id="features" style="max-width: 1280px; margin: 0px auto; padding: 72px 40px;">
+    <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 40px; margin-bottom: 40px; flex-wrap: wrap;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 20px;">
+          <span style="width: 44px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+          <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">Built for film review</span>
+        </div>
+        <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(40px, 5vw, 80px); line-height: 0.92; margin: 0px; max-width: 16ch;">For coaches &amp; players who study the tape</h2>
+      </div>
+    </div>
+    <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 28px;">
+      <article class="pf-card" style="background: rgb(17, 21, 15); border: 1px solid rgba(255, 255, 255, 0.07); overflow: hidden;">
+        <div style="overflow: hidden;">
+          <img id="pf-feat-1" class="pf-cardimg" src="assets/feature-hotspots.jpg" alt="Drop: seek-bar / hotspots" style="width: 100%; aspect-ratio: 4 / 3; object-fit: cover;" loading="lazy">
+        </div>
+        <div style="padding: 22px 24px 26px;">
+          <span style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143);">01</span>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 28px; letter-spacing: 0.02em; margin: 8px 0px 10px;">Touch hotspots</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16.5px; line-height: 1.55; font-weight: 500;">Jump straight to stretches where your team had the ball — with a timeline of possession zones painted right on the seek bar.</p>
+        </div>
+      </article>
+      <article class="pf-card" style="background: rgb(17, 21, 15); border: 1px solid rgba(255, 255, 255, 0.07); overflow: hidden;">
+        <div style="overflow: hidden;">
+          <img id="pf-feat-2" class="pf-cardimg" src="assets/feature-logging.jpg" alt="Drop: action-logging UI" style="width: 100%; aspect-ratio: 4 / 3; object-fit: cover;" loading="lazy">
+        </div>
+        <div style="padding: 22px 24px 26px;">
+          <span style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143);">02</span>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 28px; letter-spacing: 0.02em; margin: 8px 0px 10px;">Action logging</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16.5px; line-height: 1.55; font-weight: 500;">Tag passes, shots, and defensive actions inside each window. Live hybrid stats — net, offense, defense, risk — update as you review.</p>
+        </div>
+      </article>
+      <article class="pf-card" style="background: rgb(17, 21, 15); border: 1px solid rgba(255, 255, 255, 0.07); overflow: hidden;">
+        <div style="overflow: hidden;">
+          <img id="pf-feat-3" class="pf-cardimg" src="assets/feature-scout.jpg" alt="Drop: scout report" style="width: 100%; aspect-ratio: 4 / 3; object-fit: cover;" loading="lazy">
+        </div>
+        <div style="padding: 22px 24px 26px;">
+          <span style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143);">03</span>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 28px; letter-spacing: 0.02em; margin: 8px 0px 10px;">Scout report</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16.5px; line-height: 1.55; font-weight: 500;">Generate an optional AI summary with your own Groq API key — the request is the only thing that leaves your machine, and only when you ask.</p>
+        </div>
+      </article>
+    </div>
+  </section>
+  <section id="how" style="background: rgb(14, 18, 14); border-top: 1px solid rgba(255, 255, 255, 0.07); border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="max-width: 1280px; margin: 0px auto; padding: 72px 40px;">
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <span style="width: 44px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+        <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">The workflow</span>
+      </div>
+      <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(40px, 5vw, 80px); line-height: 0.92; margin: 0px 0px 36px;">How it works</h2>
+      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px;">
+        <div style="padding: 8px 30px 8px 0px; border-right: 1px solid rgba(255, 255, 255, 0.09);">
+          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(48, 255, 143, 0.9); line-height: 1;">01</div>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Install</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16px; line-height: 1.55; font-weight: 500;">Download the Windows app and open PolyFut from the Start menu — no browser tab required.</p>
+        </div>
+        <div style="padding: 8px 30px; border-right: 1px solid rgba(255, 255, 255, 0.09);">
+          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(48, 255, 143, 0.9); line-height: 1;">02</div>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Upload</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16px; line-height: 1.55; font-weight: 500;">Import your match MP4. Analysis runs on your CPU or GPU, chunk by chunk — close the tab and resume anytime.</p>
+        </div>
+        <div style="padding: 8px 30px; border-right: 1px solid rgba(255, 255, 255, 0.09);">
+          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(48, 255, 143, 0.9); line-height: 1;">03</div>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Pick your kit</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16px; line-height: 1.55; font-weight: 500;">Tap a player wearing your colour on the first frame. The analyser learns your team from that single touch.</p>
+        </div>
+        <div style="padding: 8px 0px 8px 30px;">
+          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(48, 255, 143, 0.9); line-height: 1;">04</div>
+          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Review</h3>
+          <p style="margin: 0px; color: rgb(168, 180, 169); font-size: 16px; line-height: 1.55; font-weight: 500;">Click hotspots, log actions, and finish with a WPA chart, hybrid breakdown, and optional scout report.</p>
+        </div>
+      </div>
+      <p style="margin: 32px 0px 0px; color: rgb(111, 125, 114); font-size: 14.5px; max-width: 80ch; font-weight: 500;">Full-match analysis can take several hours on CPU. You can close the window and resume later — the server keeps running in the background until you discard the run.</p>
+    </div>
+  </section>
+  <section id="compare" style="background: rgb(14, 18, 14); border-top: 1px solid rgba(255, 255, 255, 0.07); border-bottom: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="max-width: 1280px; margin: 0px auto; padding: 72px 40px;">
+      <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+        <span style="width: 44px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+        <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">Vs the field</span>
+      </div>
+      <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(40px, 5vw, 80px); line-height: 0.92; margin: 0px 0px 16px; max-width: 20ch;">Built different from the field</h2>
+      <p style="margin: 0px 0px 28px; color: rgb(168, 180, 169); font-size: 17.5px; line-height: 1.6; font-weight: 500; max-width: 78ch;">Most match-analysis tools fall into two camps: team camera platforms built around a dedicated camera and a cloud subscription, and professional analyst/scouting platforms built for clubs with in-house filming crews. Both route your footage through an upload and a queue. PolyFut processes the video you already have, on the machine you already own.</p>
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; margin-bottom: 14px;">
+        <div style="background: rgba(48, 255, 143, 0.08); border: 1px solid rgba(48, 255, 143, 0.35); padding: 22px 20px;">
+          <div style="font-weight: 700; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(48, 255, 143); margin-bottom: 8px;">PolyFut</div>
+          <div style="font-family: Anton, sans-serif; font-size: 32px; color: rgb(242, 247, 241); line-height: 1.05;">2–6 hrs</div>
+          <div style="font-weight: 600; font-size: 13px; color: rgb(168, 180, 169); margin-top: 6px;">local compute, 0 min upload</div>
+        </div>
+        <div style="border: 1px solid rgba(255, 255, 255, 0.1); padding: 22px 20px;">
+          <div style="font-weight: 700; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 8px;">Team camera platforms</div>
+          <div style="font-family: Anton, sans-serif; font-size: 32px; color: rgb(201, 211, 202); line-height: 1.05;">24–48 hrs</div>
+          <div style="font-weight: 600; font-size: 13px; color: rgb(139, 152, 142); margin-top: 6px;">3–8 hr upload + 1–2 hr cloud processing</div>
+        </div>
+        <div style="border: 1px solid rgba(255, 255, 255, 0.1); padding: 22px 20px;">
+          <div style="font-weight: 700; font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 8px;">Analyst / scouting platforms</div>
+          <div style="font-family: Anton, sans-serif; font-size: 32px; color: rgb(201, 211, 202); line-height: 1.05;">2–24 hrs*</div>
+          <div style="font-weight: 600; font-size: 13px; color: rgb(139, 152, 142); margin-top: 6px;">*fast only inside a pre-filmed partner-league network</div>
+        </div>
+      </div>
+      <div style="display: grid; grid-template-columns: 1.15fr 1fr 1fr; gap: 0px; border: 1px solid rgba(255, 255, 255, 0.1);">
+        <div style="background: rgba(48, 255, 143, 0.08); border-bottom: 2px solid rgb(48, 255, 143); padding: 22px 20px;">
+          <div style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(48, 255, 143); text-transform: uppercase;">PolyFut</div>
+          <div style="font-weight: 600; font-size: 12.5px; color: rgb(143, 160, 147); margin-top: 4px;">Local desktop app</div>
+        </div>
+        <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); border-left: 1px solid rgba(255, 255, 255, 0.1); padding: 22px 20px;">
+          <div style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(230, 236, 231); text-transform: uppercase;">Team camera platforms</div>
+          <div style="font-weight: 600; font-size: 12.5px; color: rgb(111, 125, 114); margin-top: 4px;">Dedicated camera + cloud</div>
+        </div>
+        <div style="border-bottom: 1px solid rgba(255, 255, 255, 0.1); border-left: 1px solid rgba(255, 255, 255, 0.1); padding: 22px 20px;">
+          <div style="font-family: Anton, sans-serif; font-size: 22px; color: rgb(230, 236, 231); text-transform: uppercase;">Analyst / scouting platforms</div>
+          <div style="font-weight: 600; font-size: 12.5px; color: rgb(111, 125, 114); margin-top: 4px;">Cloud video + human tagging</div>
+        </div>
+        <div style="background: rgba(48, 255, 143, 0.04); padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(143, 160, 147); margin-bottom: 6px;">Time to process a match</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(242, 247, 241);">2–6 hrs (CPU), local</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Time to process a match</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">3–8 hr upload + 1–2 hr cloud</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Time to process a match</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">2–24 hrs, upload + queue dependent</div>
+        </div>
+        <div style="background: rgba(48, 255, 143, 0.04); padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(143, 160, 147); margin-bottom: 6px;">Hardware needed</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(242, 247, 241);">$0 — any Windows PC</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Hardware needed</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">Dedicated camera, ~$1,300+</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Hardware needed</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">Camera/operator or filming rig</div>
+        </div>
+        <div style="background: rgba(48, 255, 143, 0.04); padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(143, 160, 147); margin-bottom: 6px;">Annual cost</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(242, 247, 241);">Free</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Annual cost</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">~$800–1,300/yr subscription</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Annual cost</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">~$400–1,000+/yr per team</div>
+        </div>
+        <div style="background: rgba(48, 255, 143, 0.04); padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(143, 160, 147); margin-bottom: 6px;">Where footage goes</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(242, 247, 241);">Nowhere — stays on your PC</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Where footage goes</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">Vendor's cloud</div>
+        </div>
+        <div style="padding: 20px; border-top: 1px solid rgba(255, 255, 255, 0.08); border-bottom: 1px solid rgba(255, 255, 255, 0.08); border-left: 1px solid rgba(255, 255, 255, 0.1);">
+          <div style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.12em; text-transform: uppercase; color: rgb(111, 125, 114); margin-bottom: 6px;">Where footage goes</div>
+          <div style="font-family: Anton, sans-serif; font-size: 18px; color: rgb(201, 211, 202);">Vendor's cloud</div>
+        </div>
+      </div>
+      <p style="margin: 22px 0px 0px; color: rgb(95, 109, 114); font-size: 13px; font-weight: 500; max-width: 95ch;">Figures are indicative ranges drawn from publicly published pricing and processing-time documentation across camera-based and analyst-driven match-video platforms as of 2026; they vary by plan, connection speed, sport and region. PolyFut has no subscription or hardware requirement because analysis runs on hardware you already own.</p>
+    </div>
+  </section>
+  <section id="showcase" style="max-width: 1280px; margin: 0px auto; padding: 72px 40px;">
+    <div style="display: grid; grid-template-columns: 0.9fr 1.1fr; gap: 48px; align-items: center;">
+      <div>
+        <div style="display: flex; align-items: center; gap: 14px; margin-bottom: 16px;">
+          <span style="width: 44px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+          <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">The workspace</span>
+        </div>
+        <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(38px, 4.6vw, 72px); line-height: 0.92; margin: 0px 0px 16px;">Everything on one screen</h2>
+        <p style="margin: 0px 0px 20px; color: rgb(168, 180, 169); font-size: 17.5px; line-height: 1.6; font-weight: 500;">Video on the left, controls on the right. Scrub the possession-zoned seek bar, log actions with one tap, and watch net / offense / defense / risk move live — then hit Finish for the full report.</p>
+        <ul style="list-style: none; margin: 0px; padding: 0px; display: flex; flex-direction: column; gap: 14px;">
+          <li style="display: flex; align-items: center; gap: 14px; color: rgb(211, 221, 212); font-size: 16.5px; font-weight: 600;"><span style="width: 9px; height: 9px; background: rgb(48, 255, 143); display: block; transform: rotate(45deg); flex: 0 0 auto;"></span>Possession-zoned seek bar &amp; hotspot library</li>
+          <li style="display: flex; align-items: center; gap: 14px; color: rgb(211, 221, 212); font-size: 16.5px; font-weight: 600;"><span style="width: 9px; height: 9px; background: rgb(48, 255, 143); display: block; transform: rotate(45deg); flex: 0 0 auto;"></span>One-tap SHOOT / PASS / DEFEND / SKILL logging</li>
+          <li style="display: flex; align-items: center; gap: 14px; color: rgb(211, 221, 212); font-size: 16.5px; font-weight: 600;"><span style="width: 9px; height: 9px; background: rgb(48, 255, 143); display: block; transform: rotate(45deg); flex: 0 0 auto;"></span>Live hybrid valuation &amp; WPA chart on Finish</li>
+        </ul>
+      </div>
+      <div style="position: relative;">
+        <div style="position: absolute; inset: -16px -16px 16px 16px; border: 1px solid rgba(48, 255, 143, 0.25); pointer-events: none;"></div>
+        <img id="pf-showcase" src="assets/workspace.jpg" alt="Drop: analysis workspace screenshot" style="width: 100%; aspect-ratio: 16 / 10; position: relative; object-fit: cover;" loading="lazy">
+      </div>
+    </div>
+  </section>
+  <section id="download" style="position: relative; overflow: hidden; background: rgb(14, 18, 14); border-top: 1px solid rgba(255, 255, 255, 0.07);">
+    <div style="position: absolute; inset: 0px; background: radial-gradient(circle at 50% 120%, rgba(48, 255, 143, 0.16), transparent 60%); pointer-events: none;"></div>
+    <div style="position: relative; max-width: 1000px; margin: 0px auto; padding: 80px 40px; text-align: center;">
+      <div style="display: inline-flex; align-items: center; gap: 14px; margin-bottom: 18px;">
+        <span style="width: 32px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+        <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: rgb(48, 255, 143);">Free · Windows</span>
+        <span style="width: 32px; height: 2px; background: rgb(48, 255, 143); display: block;"></span>
+      </div>
+      <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(46px, 6.5vw, 104px); line-height: 0.9; margin: 0px;">Ready to break<br>down your game?</h2>
+      <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 32px;">
+        <a href="downloads/PolyFut-Setup-1.0.0.exe" class="pf-cta" style="display: inline-flex; align-items: center; gap: 12px; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-family: Anton, sans-serif; font-size: 24px; letter-spacing: 0.04em; text-transform: uppercase; padding: 22px 44px; text-decoration: none; clip-path: polygon(16px 0px, 100% 0px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0px 100%, 0px 16px);">Download PolyFut · v<span id="pf-version">1.0.0</span></a>
+        <p style="margin: 0px; color: rgb(111, 125, 114); font-size: 14.5px; font-weight: 500; max-width: 60ch;">Requires Windows 10 or later, 8&nbsp;GB+ RAM recommended, several GB free disk for match videos. First launch downloads the YOLO detector weights (~22&nbsp;MB).</p>
+      </div>
+    </div>
+  </section>
+  <footer style="border-top: 1px solid rgba(255, 255, 255, 0.07); background: rgb(11, 13, 11);">
+    <div style="max-width: 1280px; margin: 0px auto; padding: 32px 40px; display: flex; align-items: center; justify-content: space-between; gap: 24px; flex-wrap: wrap;">
+      <a href="#top" style="display: flex; align-items: center; text-decoration: none;">
+        <img src="assets/logo.png" alt="PolyFut" style="display: block; height: 34px; width: auto;">
+      </a>
+      <p style="margin: 0px; color: rgb(111, 125, 114); font-size: 14px; font-weight: 500;">© <span id="pf-year">2026</span> PolyFut · Analysis runs locally on your device.</p>
+      <nav style="display: flex; gap: 26px;">
+        <a href="#features" class="pf-link" style="font-weight: 600; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase;">Features</a>
+        <a href="#how" class="pf-link" style="font-weight: 600; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase;">How</a>
+        <a href="#download" class="pf-link" style="font-weight: 600; font-size: 13px; letter-spacing: 0.12em; text-transform: uppercase;">Download</a>
+      </nav>
+    </div>
+  </footer></div>
+<script>
+    document.getElementById('pf-year').textContent = new Date().getFullYear();
+    fetch('version.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
+        if (!v || !v.version) return;
+        document.getElementById('pf-version').textContent = v.version;
+        var name = 'PolyFut-Setup-' + v.version + '.exe';
+        document.querySelectorAll('a[href*="PolyFut-Setup"]').forEach(function (a) {
+            a.href = 'downloads/' + name;
+        });
+    }).catch(function () {});
+</script>
 </body>
 </html>
