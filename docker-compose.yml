@@ -1,0 +1,30 @@
+services:
+  polyfut:
+    build: .
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./sample_data:/app/sample_data:ro
+      - polyfut-data:/data
+    environment:
+      - OMP_NUM_THREADS=2
+      - MKL_NUM_THREADS=2
+    command: python server.py
+
+  eval:
+    build: .
+    profiles: ["ci"]
+    volumes:
+      - ./sample_data:/app/sample_data:ro
+      - ./exports:/app/exports
+    entrypoint: ["python", "cv/scripts/eval_segments.py"]
+    command:
+      - --segments
+      - exports/d3bb30bb3953/clip_segments.json
+      - --labels
+      - sample_data/labels.json
+      - --out
+      - exports/eval_report.json
+
+volumes:
+  polyfut-data:

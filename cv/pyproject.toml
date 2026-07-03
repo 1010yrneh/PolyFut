@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "polyfut-cv"
+version = "0.1.0"
+description = "PolyFut team-possession clip finder: jersey colour + ball proximity -> clip_segments.json"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "ultralytics>=8.3.0",
+    "opencv-python-headless>=4.9.0",
+    "numpy>=1.24.0",
+    "tqdm>=4.66.0",
+    "Pillow>=10.0.0",
+    "PyYAML>=6.0",
+]
+
+[project.optional-dependencies]
+gui = ["opencv-python>=4.9.0"]
+openvino = ["openvino>=2024.0.0"]
+
+[project.scripts]
+polyfut-cv = "polyfut_cv.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]

@@ -1,0 +1,2 @@
+# Place short (2–5 min) real match clips here for manual validation.
+# Synthetic clips are generated in pytest via tests/conftest.py.

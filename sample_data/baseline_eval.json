@@ -1,0 +1,22 @@
+{
+  "recorded_at": "2026-06-21",
+  "notes": "Baseline before/after optimisation gate. Replace sample_data/labels.json intervals with hand-labelled possession on YOUR clip before trusting recall numbers.",
+  "eval_command": "python cv/scripts/eval_segments.py --segments <path>/clip_segments.json --labels sample_data/labels.json --out <path>/eval_report.json",
+  "ball_spike_command": "python cv/scripts/ball_recall_spike.py --video sample_data/clip.mp4 --angles sample_data/angle_ranges.example.yaml --imgsz 1280",
+  "target_interval_recall": 0.75,
+  "reference_run": {
+    "export_id": "d3bb30bb3953",
+    "segments_path": "exports/d3bb30bb3953/clip_segments.json",
+    "n_segments": 54,
+    "n_raw_intervals": 166,
+    "used_proxy": true,
+    "imgsz_dense": 1280,
+    "two_pass": true,
+    "diag_path": "exports/d3bb30bb3953/diag.json"
+  },
+  "placeholder_labels_eval": {
+    "note": "labels.json uses example 2-min intervals; full-match export spans ~5300s — run eval after relabelling.",
+    "interval_recall": null,
+    "passes_75_recall": null
+  }
+}

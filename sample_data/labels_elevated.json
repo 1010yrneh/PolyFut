@@ -1,0 +1,10 @@
+{
+  "video": "elevated_clip.mp4",
+  "angle": "elevated",
+  "notes": "Hand-label possession intervals for elevated/wide-angle test clip (tiny ball stress test).",
+  "true_possession_intervals": [
+    [15.0, 28.0],
+    [61.0, 74.5],
+    [130.0, 149.0]
+  ]
+}

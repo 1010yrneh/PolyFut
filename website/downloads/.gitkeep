@@ -1,0 +1,2 @@
+# Place built installer here before deploying (not committed to git).
+# build_win.ps1 copies dist/PolyFut-Setup-*.exe here automatically when Inno Setup is installed.

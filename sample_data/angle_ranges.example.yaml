@@ -1,0 +1,7 @@
+# Optional: label which seconds belong to which camera angle, so the ball-recall
+# spike can report recall per angle. Ranges are [start_sec, end_sec].
+elevated:
+  - [0, 30]
+  - [75, 110]
+sideline:
+  - [30, 75]

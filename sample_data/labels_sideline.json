@@ -1,0 +1,10 @@
+{
+  "video": "sideline_clip.mp4",
+  "angle": "sideline",
+  "notes": "Hand-label possession intervals for sideline-angle test clip.",
+  "true_possession_intervals": [
+    [8.0, 22.0],
+    [55.5, 68.0],
+    [102.0, 118.5]
+  ]
+}

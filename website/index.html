@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PolyFut — Touch hotspot analysis for match film</title>
+    <meta name="description" content="Upload your match video. PolyFut finds where your team had the ball — locally on your PC. No cloud upload.">
+    <link rel="icon" href="assets/polyfut-icon.png" type="image/png">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <header class="site-header">
+        <div class="wrap header-inner">
+            <a class="brand" href="/">
+                <img src="assets/polyfut-icon.png" alt="" width="40" height="40">
+                <span>PolyFut</span>
+            </a>
+            <nav>
+                <a href="#features">Features</a>
+                <a href="#how">How it works</a>
+                <a href="#download" class="nav-cta">Download</a>
+            </nav>
+        </div>
+    </header>
+
+    <main>
+        <section class="hero">
+            <div class="wrap hero-grid">
+                <div class="hero-copy">
+                    <p class="eyebrow">Local match analysis</p>
+                    <h1>Find your team's touch hotspots — on your own computer</h1>
+                    <p class="lead">
+                        Upload a full-match recording. PolyFut runs computer vision locally to mark
+                        possession windows, then you review, score actions, and export insights.
+                        Your video never leaves your machine.
+                    </p>
+                    <div class="hero-actions">
+                        <a id="download-btn" class="btn btn-primary" href="downloads/PolyFut-Setup-1.0.0.exe">
+                            Download for Windows
+                        </a>
+                        <span class="btn-meta">Windows 10/11 · ~1 GB install · Free</span>
+                    </div>
+                </div>
+                <div class="hero-card">
+                    <ul class="hero-stats">
+                        <li><strong>100% local</strong> — no cloud video upload</li>
+                        <li><strong>Full match</strong> — 90+ minute broadcasts supported</li>
+                        <li><strong>Resume</strong> — close the app; progress is saved</li>
+                    </ul>
+                </div>
+            </div>
+        </section>
+
+        <section id="features" class="section">
+            <div class="wrap">
+                <h2>Built for coaches and players reviewing film</h2>
+                <div class="feature-grid">
+                    <article>
+                        <h3>Touch hotspots</h3>
+                        <p>Jump straight to stretches where your team had the ball — with a timeline of zones on the seek bar.</p>
+                    </article>
+                    <article>
+                        <h3>Action logging</h3>
+                        <p>Tag passes, shots, and defensive actions during each window. Live hybrid stats update as you review.</p>
+                    </article>
+                    <article>
+                        <h3>Scout report</h3>
+                        <p>Optional AI summary when you add your own Groq API key — still runs from your machine.</p>
+                    </article>
+                </div>
+            </div>
+        </section>
+
+        <section id="how" class="section section-alt">
+            <div class="wrap">
+                <h2>How it works</h2>
+                <ol class="steps">
+                    <li><strong>Install</strong> — download the Windows app and open PolyFut from the Start menu.</li>
+                    <li><strong>Upload</strong> — import your match MP4 (analysis runs on your CPU or GPU).</li>
+                    <li><strong>Pick your kit</strong> — choose which team colour you played for.</li>
+                    <li><strong>Review</strong> — click hotspots, log actions, finish with a WPA chart and report.</li>
+                </ol>
+                <p class="note">Full-match analysis can take several hours on CPU. You can close the window and resume later — the server keeps running in the background until you discard the run.</p>
+            </div>
+        </section>
+
+        <section id="download" class="section download-section">
+            <div class="wrap download-box">
+                <h2>Download PolyFut</h2>
+                <p>Version <span id="app-version">1.0.0</span> · Windows installer</p>
+                <a class="btn btn-primary btn-lg" href="downloads/PolyFut-Setup-1.0.0.exe">PolyFut-Setup-1.0.0.exe</a>
+                <p class="fine-print">
+                    Requires Windows 10 or later, 8 GB+ RAM recommended, and several GB free disk for match videos.
+                    First launch downloads the YOLO detector weights (~22 MB).
+                </p>
+            </div>
+        </section>
+    </main>
+
+    <footer class="site-footer">
+        <div class="wrap">
+            <p>© <span id="year"></span> PolyFut · Analysis runs locally on your device.</p>
+        </div>
+    </footer>
+    <script>
+        document.getElementById('year').textContent = new Date().getFullYear();
+        fetch('version.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
+            if (!v || !v.version) return;
+            document.getElementById('app-version').textContent = v.version;
+            var name = 'PolyFut-Setup-' + v.version + '.exe';
+            document.querySelectorAll('a[href*="PolyFut-Setup"]').forEach(function (a) {
+                a.href = 'downloads/' + name;
+                if (a.classList.contains('btn-lg')) a.textContent = name;
+            });
+        }).catch(function () {});
+    </script>
+</body>
+</html>

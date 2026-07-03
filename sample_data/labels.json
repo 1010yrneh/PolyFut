@@ -1,0 +1,11 @@
+{
+  "video": "clip.mp4",
+  "notes": "Example ground truth for eval_segments.py. Replace intervals after hand-labelling your clip.",
+  "my_team_color_hint": "your kit colour",
+  "true_possession_intervals": [
+    [12.0, 18.5],
+    [44.2, 51.0],
+    [78.0, 95.5],
+    [120.0, 142.0]
+  ]
+}

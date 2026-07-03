@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+build/
+dist/
+
+# Model weights (download on first run)
+*.pt
+*.onnx
+*_openvino_model/
+models/
+
+# Runtime data
+uploads/
+exports/
+server_exports/
+cv/server_exports/
+
+# Large sample media (keep labels, not videos)
+sample_data/*.mp4
+sample_data/*.mov
+sample_data/*.avi
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Release artifacts (host on polyfut.com, not in git)
+website/downloads/*.exe

@@ -1,0 +1,6 @@
+{
+  "notes": "Run baseline before optimisations: python cv/scripts/eval_segments.py --segments <path>/clip_segments.json --labels sample_data/labels.json",
+  "ball_spike": "python cv/scripts/ball_recall_spike.py --video sample_data/clip.mp4 --angles sample_data/angle_ranges.example.yaml --imgsz 1280",
+  "target_interval_recall": 0.75,
+  "example_report_fields": ["interval_recall", "interval_precision", "n_pred_segments", "passes_75_recall"]
+}

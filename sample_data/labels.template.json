@@ -1,0 +1,9 @@
+{
+  "video": "clip.mp4",
+  "notes": "Hand-labelled ground truth. Each interval = seconds where MY team truly had the ball. Used to score the pipeline (precision/recall).",
+  "my_team_color_hint": "e.g. red, white, dark-blue",
+  "true_possession_intervals": [
+    [12.0, 18.5],
+    [44.2, 51.0]
+  ]
+}

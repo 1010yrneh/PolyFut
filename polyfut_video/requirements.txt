@@ -1,0 +1,8 @@
+# Level 1 video pipeline (polyfut_video)
+opencv-python>=4.9
+ultralytics>=8.2
+scikit-learn>=1.4
+numpy>=1.26
+scipy>=1.12
+boxmot>=10.0
+tqdm>=4.66
