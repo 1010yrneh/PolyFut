@@ -28,5 +28,8 @@ sample_data/*.avi
 .DS_Store
 Thumbs.db
 
+# Editor / local debug
+.cursor/
+
 # Release artifacts (host on polyfut.com, not in git)
 website/downloads/*.exe
