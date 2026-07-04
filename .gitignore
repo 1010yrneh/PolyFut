@@ -18,6 +18,9 @@ uploads/
 exports/
 server_exports/
 cv/server_exports/
+output/
+output_v2/
+_v2debug*.mp4
 
 # Large sample media (keep labels, not videos)
 sample_data/*.mp4
