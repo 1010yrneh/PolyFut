@@ -55,6 +55,21 @@ class PipelineV2Config:
     ball_hold_frames: int = 10
     ball_max_jump_px: float = 500.0
 
+    # --- Stage 4: contact candidates (kinematics on the trajectory) ---
+    # Speeds are in px/s on the resized (target_width) frame; thresholds are
+    # deliberately generous (high recall) and will be tuned on real trajectories
+    # once a soccer ball model is plugged in.
+    contact_min_speed_px_s: float = 30.0   # noise floor — ignore near-stationary jitter
+    contact_dir_change_deg: float = 50.0   # heading swing that flags a deflection
+    contact_stop_ratio: float = 0.4        # speed_after/speed_before below this = a trap
+    contact_speed_spike_ratio: float = 2.0  # speed_after/speed_before above this = a kick
+    contact_merge_sec: float = 0.3         # collapse events within this window into one
+    contact_gap_sec: float = 0.5           # velocity interval longer than this = unreliable
+    # Centered position smoothing (samples). Real detector output jitters, and a
+    # synthetic sweep showed window=3 lifts noisy-trajectory recall ~0.56→0.74 at
+    # equal precision (5 over-smooths). Provisional — retune on real footage.
+    contact_smooth_window: int = 3
+
     # --- Reliability guardrail ---
     # A trajectory with almost no real detections means the ball model can't
     # see the ball (e.g. COCO yolov8 on a tiny/distant soccer ball). Per the
