@@ -44,6 +44,18 @@ except Exception as exc:
     run_pipeline = None  # type: ignore
     probe_video = None  # type: ignore
 
+# v2 (ball-anchored, single-player) pipeline — experimental, alongside v1.
+try:
+    from polyfut_v2.config import PipelineV2Config
+    from polyfut_v2.app_service import hotspots_from_decisions, run_to_montage
+    PIPELINE_V2_OK = True
+    PIPELINE_V2_ERR = ""
+except Exception as exc:  # pragma: no cover
+    PIPELINE_V2_OK = False
+    PIPELINE_V2_ERR = f"{type(exc).__name__}: {exc}"
+    run_to_montage = None  # type: ignore
+    hotspots_from_decisions = None  # type: ignore
+
 UPLOADS.mkdir(parents=True, exist_ok=True)
 EXPORTS.mkdir(parents=True, exist_ok=True)
 
@@ -761,6 +773,14 @@ def status(job_id: str):
         "timings": j.get("timings"),
         "error": j.get("error"),
         "note": j.get("note"),
+        # v2-only fields (None/absent for v1 jobs)
+        "pipeline_version": j.get("pipeline_version", "v1"),
+        "montage": j.get("montage"),
+        "hotspots": j.get("hotspots"),
+        "warnings": j.get("warnings"),
+        "n_review": j.get("n_review"),
+        "n_candidates": j.get("n_candidates"),
+        "detected_ratio": j.get("detected_ratio"),
     })
 
 
@@ -771,6 +791,119 @@ def cancel(job_id: str):
         return jsonify({"error": "unknown job"}), 404
     _set_job(job_id, cancel=True, state="cancelled", status="Cancelled", stage="cancelled")
     return jsonify({"ok": True, "discarded": True})
+
+
+# --------------------------------------------------------------------------- #
+# v2 pipeline (experimental, alongside v1)
+# --------------------------------------------------------------------------- #
+
+def _run_v2_job(job_id: str, video_path: Path, seed_taps: list, out_dir: Path) -> None:
+    def progress(frac: float, msg: str) -> None:
+        elapsed = time.time() - JOB_START.get(job_id, time.time())
+        cur, tot, unit = _parse_progress_counts(msg)
+        _set_job(
+            job_id, progress=frac, status=msg, stage=_parse_stage(msg),
+            stage_progress=frac, elapsed_sec=round(elapsed, 1),
+            progress_current=cur, progress_total=tot, progress_unit=unit,
+            status_updated_at=time.time(),
+        )
+
+    def should_cancel() -> bool:
+        j = _get_job(job_id)
+        return bool(j and j.get("cancel"))
+
+    with during_analysis():
+        try:
+            cfg = PipelineV2Config(ball_weights=WEIGHTS, player_weights=WEIGHTS, device=DEVICE)
+            progress(0.02, f"v2 pipeline: weights={WEIGHTS}, device={DEVICE}")
+            result = run_to_montage(
+                str(video_path), seed_taps=seed_taps, cfg=cfg,
+                progress=progress, should_cancel=should_cancel,
+            )
+            out_dir.mkdir(parents=True, exist_ok=True)
+            (out_dir / "montage.json").write_text(
+                json.dumps(result, indent=2), encoding="utf-8")
+            # "review" state: montage is ready, awaiting me/not-me decisions.
+            _set_job(
+                job_id, progress=1.0, status="Review your touches",
+                state="review", stage="review",
+                pipeline_version="v2",
+                montage=result["montage"],
+                hotspots=result["hotspots"],
+                warnings=result["warnings"],
+                n_review=result["n_review"],
+                n_candidates=result["n_candidates"],
+                detected_ratio=result["detected_ratio"],
+                duration_sec=result.get("duration_sec"),
+                finished_at=time.time(),
+            )
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            _set_job(job_id, state="error", status="Error", stage="error",
+                     error=f"{type(exc).__name__}: {exc}", finished_at=time.time())
+
+
+@app.route("/api/v2/process", methods=["POST"])
+def v2_process():
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    token = request.form.get("token")
+    if not token:
+        return jsonify({"error": "token required"}), 400
+    video_path = UPLOADS / f"{token}.mp4"
+    if not video_path.exists():
+        return jsonify({"error": "unknown or expired token"}), 400
+
+    seed_taps = []
+    raw = request.form.get("seed_taps")
+    if raw:
+        try:
+            seed_taps = json.loads(raw)
+        except (ValueError, TypeError):
+            return jsonify({"error": "seed_taps must be JSON"}), 400
+
+    existing = _find_running_job_for_token(token)
+    if existing:
+        return jsonify({"job_id": existing, "resumed": True, "token": token})
+
+    job_id = uuid.uuid4().hex[:12]
+    job_dir = EXPORTS / job_id
+    job_dir.mkdir(parents=True, exist_ok=True)
+    started = time.time()
+    JOB_START[job_id] = started
+    _set_job(
+        job_id, progress=0.0, status="Queued", state="running", stage="init",
+        cancel=False, error=None, token=token, pipeline_version="v2",
+        started_at=started, video_path=str(video_path),
+        **_match_metadata_from_form(),
+    )
+    threading.Thread(
+        target=_run_v2_job, args=(job_id, video_path, seed_taps, job_dir), daemon=False,
+    ).start()
+    return jsonify({"job_id": job_id, "token": token, "pipeline_version": "v2"})
+
+
+@app.route("/api/v2/decisions/<job_id>", methods=["POST"])
+def v2_decisions(job_id: str):
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    j = _get_job(job_id)
+    if not j or not j.get("montage"):
+        return jsonify({"error": "unknown job or no montage"}), 404
+    payload = request.get_json(silent=True) or {}
+    decisions = payload.get("decisions", {})
+    cfg = PipelineV2Config()
+    hotspots, items = hotspots_from_decisions(
+        j["montage"], decisions, cfg, duration_sec=j.get("duration_sec"),
+    )
+    state = "done" if payload.get("finalize") else "review"
+    _set_job(job_id, montage=items, hotspots=hotspots, state=state,
+             stage=state, status="Done" if state == "done" else "Review your touches")
+    out_dir = EXPORTS / job_id
+    if out_dir.exists():
+        (out_dir / "hotspots.json").write_text(
+            json.dumps({"hotspots": hotspots}, indent=2), encoding="utf-8")
+    return jsonify({"ok": True, "hotspots": hotspots, "n_hotspots": len(hotspots)})
 
 
 @app.route("/api/catalogue", methods=["GET"])
