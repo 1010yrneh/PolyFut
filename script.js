@@ -1921,17 +1921,183 @@ function startCvV2Analysis(taps) {
         .catch(function () { runBrowserDemo(); });
 }
 
-// Placeholder review handler — Phase 3 replaces this with the me/not-me montage.
 function enterV2Review(j) {
     hideProcessTracker();
     document.getElementById('cv-processing-screen').classList.add('hidden');
-    if (typeof showV2Montage === 'function') { showV2Montage(j); return; }
-    var n = (j && j.montage) ? j.montage.length : 0;
-    var review = (j && j.n_review != null) ? j.n_review : 0;
-    window.alert('v2 analysis complete.\n\n' + n + ' candidate touch(es), ' + review +
-        ' to review.\n(The me/not-me review screen arrives in the next step.)');
-    var setupScreen = document.getElementById('setup-screen');
-    if (setupScreen) setupScreen.classList.remove('hidden');
+    showV2Montage(j);
+}
+
+// --- 4d-v2. ME / NOT-ME MONTAGE REVIEW ---
+let __v2Montage = null;
+let __v2MontageTemplate = null;
+
+function __v2FmtTime(sec) {
+    sec = Math.max(0, Math.round(sec || 0));
+    var m = Math.floor(sec / 60), s = sec % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function showV2Montage(j) {
+    var items = (j && j.montage) ? j.montage.slice() : [];
+    var queue = items.filter(function (it) { return it.status === 'review'; });
+    __v2Montage = {
+        jobId: (j && j.job_id) || cvJobId, token: (j && j.token) || cvToken,
+        all: items, queue: queue, idx: 0, decisions: {},
+        duration: (j && j.duration_sec) || 0, playing: false,
+        autoAccept: items.filter(function (it) { return it.status === 'auto_accept'; }).length,
+        autoHide: items.filter(function (it) { return it.status === 'auto_hide'; }).length,
+        warnings: (j && j.warnings) || []
+    };
+
+    var screen = document.getElementById('cv-montage-screen');
+    var card = screen.querySelector('.cv-montage-card');
+    if (__v2MontageTemplate === null) __v2MontageTemplate = card.innerHTML;
+    else card.innerHTML = __v2MontageTemplate;   // restore original layout for repeat runs
+    screen.classList.remove('hidden');
+
+    // Wire controls (re-created on restore).
+    var meBtn = document.getElementById('cv-montage-me');
+    var notMeBtn = document.getElementById('cv-montage-notme');
+    var finishBtn = document.getElementById('cv-montage-finish');
+    if (meBtn) meBtn.onclick = function () { __v2MontageDecide('me'); };
+    if (notMeBtn) notMeBtn.onclick = function () { __v2MontageDecide('not_me'); };
+    if (finishBtn) finishBtn.onclick = function () { __v2MontageFinalize(); };
+
+    var vid = document.getElementById('cv-montage-video');
+    vid.src = cvApiUrl('/api/video/' + __v2Montage.token);
+    vid.load();
+
+    if (queue.length === 0) { __v2MontageFinalize(); return; }
+    __v2MontageShow();
+}
+
+function __v2MontageRenderProgress() {
+    var m = __v2Montage; if (!m) return;
+    var el = document.getElementById('cv-montage-progress');
+    if (!el) return;
+    el.innerHTML = '<div class="cv-montage-bar"><div class="cv-montage-bar-fill" style="width:' +
+        Math.round(100 * m.idx / Math.max(1, m.queue.length)) + '%"></div></div>' +
+        '<span class="cv-montage-count">Touch ' + (m.idx + 1) + ' of ' + m.queue.length + ' to review</span>';
+}
+
+function __v2MontageShow() {
+    var m = __v2Montage; if (!m) return;
+    var it = m.queue[m.idx];
+    __v2MontageRenderProgress();
+    var vid = document.getElementById('cv-montage-video');
+    var canvas = document.getElementById('cv-montage-canvas');
+    var ctx = canvas.getContext('2d');
+    var meta = document.getElementById('cv-montage-meta');
+    if (meta) {
+        meta.innerHTML =
+            '<span class="cv-montage-time">' + __v2FmtTime(it.t_sec) + '</span>' +
+            '<span class="cv-montage-kinds">' + (it.kinds || []).join(' · ') + '</span>' +
+            '<span class="cv-montage-conf">match ' + Math.round((it.confidence || 0) * 100) + '%</span>';
+    }
+    var start = it.clip_start_sec, end = it.clip_end_sec;
+    m.playing = true;
+    function seekStart() {
+        try { vid.currentTime = start; } catch (e) {}
+        var p = vid.play(); if (p && p.catch) p.catch(function () {});
+    }
+    if (vid.readyState >= 1) seekStart();
+    else vid.addEventListener('loadeddata', function ol() { vid.removeEventListener('loadeddata', ol); seekStart(); });
+    vid.ontimeupdate = function () {
+        if (vid.currentTime >= end || vid.currentTime < start - 0.2) {
+            try { vid.currentTime = start; } catch (e) {}
+        }
+    };
+
+    function draw() {
+        if (!m.playing || __v2Montage !== m) return;
+        var nW = vid.videoWidth, nH = vid.videoHeight;
+        if (nW && nH) {
+            // crop is in resized (target_width=640) space → scale to natural px
+            var resizedW = Math.min(nW, 640), sc = nW / resizedW;
+            var sx = it.crop[0] * sc, sy = it.crop[1] * sc;
+            var sw = (it.crop[2] - it.crop[0]) * sc, sh = (it.crop[3] - it.crop[1]) * sc;
+            sx = Math.max(0, Math.min(nW - 2, sx)); sy = Math.max(0, Math.min(nH - 2, sy));
+            sw = Math.max(2, Math.min(nW - sx, sw)); sh = Math.max(2, Math.min(nH - sy, sh));
+            ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            ctx.strokeStyle = 'rgba(48,255,143,0.95)';
+            ctx.lineWidth = 2.5;
+            ctx.beginPath();
+            ctx.arc(canvas.width / 2, canvas.height / 2, 30, 0, Math.PI * 2);
+            ctx.stroke();
+        }
+        requestAnimationFrame(draw);
+    }
+    requestAnimationFrame(draw);
+}
+
+function __v2MontageDecide(dec) {
+    var m = __v2Montage; if (!m) return;
+    var it = m.queue[m.idx];
+    m.decisions[it.rank] = dec;
+    m.idx += 1;
+    if (m.idx >= m.queue.length) { __v2MontageFinalize(); return; }
+    __v2MontageShow();
+}
+
+function __v2MontageStopVideo() {
+    if (__v2Montage) __v2Montage.playing = false;
+    var vid = document.getElementById('cv-montage-video');
+    if (vid) { try { vid.pause(); } catch (e) {} vid.ontimeupdate = null; }
+}
+
+function __v2MontageFinalize() {
+    var m = __v2Montage; if (!m) return;
+    __v2MontageStopVideo();
+    var meta = document.getElementById('cv-montage-meta');
+    if (meta) meta.innerHTML = '<span class="cv-montage-time">Saving your touches…</span>';
+    fetch(cvApiUrl('/api/v2/decisions/' + m.jobId), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ decisions: m.decisions, finalize: true })
+    })
+        .then(function (r) { return r.json(); })
+        .then(function (data) { __v2MontageComplete(data.hotspots || [], data.n_hotspots || 0); })
+        .catch(function () { __v2MontageComplete([], 0); });
+}
+
+function __v2MontageComplete(hotspots, n) {
+    saveCvSession({ job_id: __v2Montage ? __v2Montage.jobId : cvJobId, token: cvToken,
+                    my_team: cvMyTeamId, state: 'done', v2: true });
+    var card = document.querySelector('#cv-montage-screen .cv-montage-card');
+    if (!card) return;
+    var rows = hotspots.slice(0, 10).map(function (h) {
+        return '<div class="cv-montage-hs"><span>' + __v2FmtTime(h.start_sec) + ' – ' +
+            __v2FmtTime(h.end_sec) + '</span><span>' + (h.n_contacts || 1) + ' touch' +
+            ((h.n_contacts || 1) === 1 ? '' : 'es') + '</span></div>';
+    }).join('');
+    if (!rows) {
+        rows = '<p class="cv-montage-empty">No touches were confirmed as you. Mark more clips ' +
+            '“That\'s me”, or add a soccer-specific ball model for better recall.</p>';
+    }
+    card.innerHTML =
+        '<h2 class="cv-overlay-title">Your hotspots are ready</h2>' +
+        '<p class="cv-overlay-sub">' + n + ' hotspot' + (n === 1 ? '' : 's') +
+        ' built from your confirmed touches.</p>' +
+        '<div class="cv-montage-summary">' + rows + '</div>' +
+        '<div class="cv-overlay-actions">' +
+        '<button type="button" class="cv-btn-secondary" id="cv-montage-back">Back to setup</button>' +
+        '<button type="button" class="cv-btn-primary" id="cv-montage-open">Open in workspace</button>' +
+        '</div>';
+    var backBtn = document.getElementById('cv-montage-back');
+    var openBtn = document.getElementById('cv-montage-open');
+    if (backBtn) backBtn.onclick = function () {
+        document.getElementById('cv-montage-screen').classList.add('hidden');
+        var s = document.getElementById('setup-screen'); if (s) s.classList.remove('hidden');
+        refreshMatchCatalogue();
+    };
+    if (openBtn) openBtn.onclick = function () { __v2OpenInWorkspace(hotspots); };
+}
+
+function __v2OpenInWorkspace(hotspots) {
+    // Phase 4 will map v2 hotspots into the workspace timeline/clip library.
+    document.getElementById('cv-montage-screen').classList.add('hidden');
+    var s = document.getElementById('setup-screen'); if (s) s.classList.remove('hidden');
+    refreshMatchCatalogue();
 }
 
 // --- 4c. IN-BROWSER DEMO (no server required) ---

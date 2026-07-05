@@ -550,6 +550,26 @@ html, body {
 .cv-v2-toggle-text strong { color: #e8f5ec; font-size: 0.95rem; letter-spacing: 0.5px; }
 .cv-v2-toggle-sub { color: #93a397; font-size: 0.82rem; line-height: 1.35; }
 
+/* v2 me/not-me montage review */
+.cv-montage-card { max-width: 460px; }
+.cv-montage-progress { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 14px; }
+.cv-montage-bar { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
+.cv-montage-bar-fill { height: 100%; background: var(--fifa-green); transition: width 0.25s; }
+.cv-montage-count { color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
+.cv-montage-stage { display: flex; justify-content: center; align-items: center; background: #000; padding: 0; }
+#cv-montage-canvas { width: 320px; height: 320px; max-width: 100%; display: block; background: #050706; }
+.cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 12px 0 18px; font-family: 'Rajdhani', sans-serif; }
+.cv-montage-time { color: #e8f5ec; font-weight: 700; }
+.cv-montage-kinds { color: #93a397; text-transform: capitalize; }
+.cv-montage-conf { color: var(--fifa-green); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.85rem; align-self: center; }
+.cv-montage-footer { margin-top: 14px; text-align: center; }
+.cv-btn-link { background: none; border: none; color: #8fa39a; text-decoration: underline; cursor: pointer; font-size: 0.85rem; }
+.cv-btn-link:hover { color: var(--fifa-green); }
+.cv-montage-summary { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; max-height: 260px; overflow-y: auto; }
+.cv-montage-hs { display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(48, 255, 143, 0.06); border-left: 2px solid var(--fifa-green); font-family: 'Rajdhani', sans-serif; }
+.cv-montage-hs span:last-child { color: #93a397; }
+.cv-montage-empty { color: #93a397; font-size: 0.9rem; line-height: 1.4; }
+
 .cv-overlay-actions {
     display: flex;
     gap: 12px;

@@ -116,6 +116,27 @@
         </div>
     </div>
 
+    <!-- CV v2: me / not-me montage review -->
+    <div id="cv-montage-screen" class="cv-overlay-screen hidden" aria-live="polite">
+        <div class="cv-overlay-card cv-montage-card">
+            <h2 class="cv-overlay-title">Was this you?</h2>
+            <p class="cv-overlay-sub" id="cv-montage-sub">Watch the touch and tap <strong>That's me</strong> if the ringed player is you, or <strong>Not me</strong> if it's a teammate.</p>
+            <div id="cv-montage-progress" class="cv-montage-progress"></div>
+            <div class="cv-montage-stage" id="cv-montage-stage">
+                <video id="cv-montage-video" playsinline muted style="display:none"></video>
+                <canvas id="cv-montage-canvas" width="320" height="320"></canvas>
+            </div>
+            <div class="cv-montage-meta" id="cv-montage-meta"></div>
+            <div class="cv-overlay-actions">
+                <button type="button" class="cv-btn-secondary" id="cv-montage-notme">Not me</button>
+                <button type="button" class="cv-btn-primary" id="cv-montage-me">That's me</button>
+            </div>
+            <div class="cv-montage-footer">
+                <button type="button" class="cv-btn-link" id="cv-montage-finish">Skip the rest &amp; see hotspots</button>
+            </div>
+        </div>
+    </div>
+
     <div id="setup-screen">
         <div class="setup-inner">
             <div class="setup-eyebrow">
