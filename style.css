@@ -532,6 +532,24 @@ html, body {
     min-height: 1.2em;
 }
 
+/* v2 multi-frame seed progress */
+.cv-seed-progress { display: flex; align-items: center; justify-content: center; gap: 8px; margin-bottom: 12px; }
+.cv-seed-dot { width: 10px; height: 10px; border-radius: 50%; background: rgba(255, 255, 255, 0.18); transition: 0.2s; }
+.cv-seed-dot.done { background: var(--fifa-green); }
+.cv-seed-dot.skipped { background: rgba(255, 255, 255, 0.35); }
+.cv-seed-dot.active { box-shadow: 0 0 0 3px rgba(48, 255, 143, 0.35); transform: scale(1.25); }
+.cv-seed-count { margin-left: 10px; color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; opacity: 0.8; }
+.cv-btn-primary:disabled, .cv-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
+
+/* v2 mode toggle in setup */
+.cv-v2-toggle-row { margin-top: 6px; }
+.cv-v2-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px 14px; border: 1px solid rgba(48, 255, 143, 0.25); background: rgba(48, 255, 143, 0.05); }
+.cv-v2-toggle:hover { border-color: rgba(48, 255, 143, 0.5); }
+.cv-v2-toggle input { margin-top: 3px; accent-color: var(--fifa-green); width: 18px; height: 18px; flex: 0 0 auto; }
+.cv-v2-toggle-text { display: flex; flex-direction: column; gap: 3px; }
+.cv-v2-toggle-text strong { color: #e8f5ec; font-size: 0.95rem; letter-spacing: 0.5px; }
+.cv-v2-toggle-sub { color: #93a397; font-size: 0.82rem; line-height: 1.35; }
+
 .cv-overlay-actions {
     display: flex;
     gap: 12px;

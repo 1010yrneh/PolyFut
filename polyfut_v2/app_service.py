@@ -39,9 +39,10 @@ def build_seed_from_tap_specs(
 ) -> TargetSeed:
     """Build a TargetSeed from UI taps.
 
-    ``taps`` is a list of ``{"t_sec": float, "x": float, "y": float}`` where x/y
-    are in the resized (``target_width``) frame space. Returns an empty seed if
-    no usable taps are given.
+    ``taps`` is a list of ``{"t_sec": float, "nx": float, "ny": float}`` where
+    nx/ny are normalized coordinates in [0, 1] (fraction of frame width/height),
+    so the caller needn't know the backend's resize. Returns an empty seed if no
+    usable taps are given.
     """
     if not taps:
         return TargetSeed(kit_hsv=None, gallery=[], n_samples=0)
@@ -52,12 +53,16 @@ def build_seed_from_tap_specs(
         for tap in taps:
             try:
                 t = float(tap["t_sec"])
-                pt = (float(tap["x"]), float(tap["y"]))
+                nx = float(tap["nx"])
+                ny = float(tap["ny"])
             except (KeyError, TypeError, ValueError):
                 continue
             win = prov.window(int(round(t * fps)), 0, 1)
-            if win:
-                samples.append((win[0][1], pt))
+            if not win:
+                continue
+            frame = win[0][1]
+            h, w = frame.shape[:2]
+            samples.append((frame, (nx * w, ny * h)))
     if not samples:
         return TargetSeed(kit_hsv=None, gallery=[], n_samples=0)
     return build_seed_from_taps(

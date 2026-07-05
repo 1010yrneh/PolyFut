@@ -64,11 +64,12 @@
         </div>
     </header>
 
-    <!-- CV: click your jersey on the first frame -->
+    <!-- CV: multi-frame seed — tap yourself in several frames (v2) -->
     <div id="cv-seed-screen" class="cv-overlay-screen hidden" aria-live="polite">
         <div class="cv-overlay-card">
-            <h2 class="cv-overlay-title">Tap your team's shirt</h2>
-            <p class="cv-overlay-sub">Click once on a player wearing <strong>your</strong> kit. This teaches the analyser your team colour.</p>
+            <h2 class="cv-overlay-title" id="cv-seed-title">Tap yourself in this frame</h2>
+            <p class="cv-overlay-sub" id="cv-seed-sub">We show a few moments from your match. Tap <strong>you</strong> in each — skip any where you're not on screen. This teaches the analyser your appearance.</p>
+            <div id="cv-seed-progress" class="cv-seed-progress"></div>
             <div class="cv-seed-canvas-wrap">
                 <video id="cv-seed-video" playsinline muted></video>
                 <canvas id="cv-seed-canvas"></canvas>
@@ -76,7 +77,8 @@
             <p id="cv-seed-hint" class="cv-seed-hint">Tap the freeze-frame to place the marker.</p>
             <div class="cv-overlay-actions">
                 <button type="button" class="cv-btn-secondary" id="cv-seed-cancel">Back</button>
-                <button type="button" class="cv-btn-primary" id="cv-seed-confirm">Find my touches</button>
+                <button type="button" class="cv-btn-secondary" id="cv-seed-skip">Not visible — skip</button>
+                <button type="button" class="cv-btn-primary" id="cv-seed-next" disabled>Next</button>
             </div>
         </div>
     </div>
@@ -162,6 +164,16 @@
                         <input type="number" id="score-us" placeholder="US" value="0" class="setup-input" style="text-align: center;">
                         <input type="number" id="score-them" placeholder="THEM" value="0" class="setup-input" style="text-align: center;">
                     </div>
+                </div>
+
+                <div class="setup-group cv-v2-toggle-row">
+                    <label class="cv-v2-toggle">
+                        <input type="checkbox" id="cv-v2-mode">
+                        <span class="cv-v2-toggle-text">
+                            <strong>Single-player mode (experimental)</strong>
+                            <span class="cv-v2-toggle-sub">Ball-anchored v2 pipeline: find only <em>your</em> touches, then confirm them in a quick review. You'll tap yourself in a few frames next.</span>
+                        </span>
+                    </label>
                 </div>
 
                 <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">Find touch hotspots</button>
