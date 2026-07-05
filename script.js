@@ -234,7 +234,7 @@ function openCatalogueMatch(entry) {
                 refreshMatchCatalogue();
                 return;
             }
-            finishCvAnalysis(j.segments || [], j.note);
+            finishFromStatus(j);
         })
         .catch(function () {
             window.alert('Could not reach the server to open this match.');
@@ -640,8 +640,8 @@ function resumeCvFromBannerWithJob(jobId, token) {
                 my_team: j.my_team || cvMyTeamId,
                 state: j.state
             });
-            if (j.state === 'done') {
-                finishCvAnalysis(j.segments || [], j.note);
+            if (j.state === 'done' || j.state === 'review') {
+                finishFromStatus(j);
             } else if (j.state === 'running') {
                 resumeCvAnalysisUi(j);
                 pollCvStatus();
@@ -2093,11 +2093,23 @@ function __v2MontageComplete(hotspots, n) {
     if (openBtn) openBtn.onclick = function () { __v2OpenInWorkspace(hotspots); };
 }
 
+function v2HotspotsToSegments(hotspots) {
+    // Map v2 hotspots onto the workspace's segment shape (start/end + tick marks).
+    return (hotspots || []).map(function (h) {
+        return {
+            start: h.start_sec,
+            end: h.end_sec,
+            core_start: h.start_sec,
+            core_end: h.end_sec,
+            action_triggers: Array.isArray(h.contact_times) ? h.contact_times : []
+        };
+    });
+}
+
 function __v2OpenInWorkspace(hotspots) {
-    // Phase 4 will map v2 hotspots into the workspace timeline/clip library.
     document.getElementById('cv-montage-screen').classList.add('hidden');
-    var s = document.getElementById('setup-screen'); if (s) s.classList.remove('hidden');
-    refreshMatchCatalogue();
+    // Reuse the whole v1 workspace pipeline by handing it v2 hotspots as segments.
+    finishCvAnalysis(v2HotspotsToSegments(hotspots), 'v2');
 }
 
 // --- 4c. IN-BROWSER DEMO (no server required) ---
@@ -2251,6 +2263,17 @@ function cancelCvAnalysis() {
     clearCvSession();
     cvToken = null;
     returnToSetupScreen();
+}
+
+// Route a status/catalogue payload to the right view (v1 segments vs v2 review/hotspots).
+function finishFromStatus(j) {
+    if (j && j.pipeline_version === 'v2') {
+        cvV2Mode = true;
+        if (j.state === 'review') { enterV2Review(j); return; }
+        finishCvAnalysis(v2HotspotsToSegments(j.hotspots || []), 'v2');
+        return;
+    }
+    finishCvAnalysis((j && j.segments) || [], j && j.note);
 }
 
 function finishCvAnalysis(segments, note) {
