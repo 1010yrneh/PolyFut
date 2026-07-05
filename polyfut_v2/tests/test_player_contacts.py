@@ -116,6 +116,24 @@ def test_tiny_torso_crop_is_undecided_not_dropped():
     assert len(filter_my_team(contacts)) == 1  # kept
 
 
+def test_filter_disabled_keeps_everything():
+    cfg = PipelineV2Config()
+    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
+    assert opp[0].is_my_team is False
+    # Filter on → opponent dropped; filter off → kept (footage where colour fails).
+    assert filter_my_team(opp, enabled=True) == []
+    assert len(filter_my_team(opp, enabled=False)) == 1
+
+
+def test_disabled_filter_leaves_team_undecided_but_records_color():
+    # With the filter off, even an opponent-coloured contact is left undecided
+    # (so it can't be dropped or de-anchored), but color_dist is still measured.
+    cfg = PipelineV2Config(team_filter_enabled=False)
+    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
+    assert opp[0].is_my_team is None
+    assert opp[0].color_dist is not None
+
+
 def test_to_dict_shape():
     cfg = PipelineV2Config()
     c = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(), _seed(RED), cfg)[0]

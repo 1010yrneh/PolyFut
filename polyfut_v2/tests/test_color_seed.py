@@ -3,7 +3,8 @@
 import numpy as np
 
 from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_hsv
-from polyfut_v2.pipeline.seed import build_seed_from_torso_crops
+from polyfut_v2.pipeline.player_detector import PlayerDetection
+from polyfut_v2.pipeline.seed import build_seed_from_taps, build_seed_from_torso_crops
 
 RED = (0, 0, 200)    # BGR
 BLUE = (200, 0, 0)   # BGR
@@ -61,3 +62,39 @@ def test_build_seed_from_crops():
 def test_single_sample_seed_is_weak():
     seed = build_seed_from_torso_crops([_solid(RED)])
     assert seed.is_weak()
+
+
+class _FakeDetector:
+    """Returns one player at ``bbox`` regardless of frame/tap."""
+    def __init__(self, bbox, found=True):
+        self.bbox, self.found = bbox, found
+    def detect(self, frame, near=None):
+        return [PlayerDetection(bbox=list(self.bbox), conf=0.9)] if self.found else []
+
+
+def test_build_seed_from_taps_finds_player():
+    frames = [(_solid(RED, 100, 100), (50, 50)) for _ in range(3)]
+    seed = build_seed_from_taps(frames, _FakeDetector([10, 10, 90, 90]),
+                                max_tap_dist_px=80)
+    assert seed.n_samples == 3
+    assert seed.has_color() and len(seed.gallery) == 3
+    assert seed.kit_hsv[0] < 10 or seed.kit_hsv[0] > 170  # red
+
+
+def test_build_seed_from_taps_tap_misses_player():
+    # Player far from the tap → not selected; sample still counts.
+    frames = [(_solid(RED, 200, 200), (10, 10))]
+    seed = build_seed_from_taps(frames, _FakeDetector([150, 150, 190, 190]),
+                                max_tap_dist_px=40)
+    assert seed.n_samples == 1
+    assert not seed.has_color() and seed.gallery == []
+
+
+def test_build_seed_from_taps_min_torso_guard():
+    # Tiny player box → colour rejected by the guard, but gallery still kept.
+    frames = [(_solid(RED, 100, 100), (15, 18)) for _ in range(2)]
+    seed = build_seed_from_taps(frames, _FakeDetector([10, 10, 20, 25]),
+                                max_tap_dist_px=40, min_torso_px=50)
+    assert seed.n_samples == 2
+    assert not seed.has_color()      # torso too small → no reliable colour
+    assert len(seed.gallery) == 2    # crops still gathered for appearance

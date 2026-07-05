@@ -137,10 +137,13 @@ def score_contacts(
         # anchor, so a mid-tracklet contact must sit inside the orbital
         # (prior == 1.0) to (re)anchor. Bootstrapping a fresh tracklet (or the
         # very first anchor) is exempt — there is no chain to be consistent with.
+        # Block anchoring on a *confirmed* opponent, but allow colour-undecided
+        # contacts: on wide/grassy footage the colour filter is unreliable, and
+        # requiring a positive team match there would starve Stage 7 entirely.
         strong = (
             app is not None
             and app >= cfg.orbital_anchor_min
-            and c.is_my_team is True
+            and c.is_my_team is not False
         )
         motion_ok = anchor is None or new_tracklet or prior >= 1.0
         anchored = strong and motion_ok

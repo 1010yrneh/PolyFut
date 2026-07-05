@@ -54,12 +54,16 @@ def build_seed_from_taps(
     player_detector,
     *,
     max_tap_dist_px: float = 80.0,
+    min_torso_px: int = 0,
 ) -> TargetSeed:
     """Build a seed from (frame, tap_point) pairs.
 
     For each tap, the player detector finds candidate boxes and the one whose
     box the tap falls in (or nearest, within ``max_tap_dist_px``) is taken as
     the target; its torso crop feeds both the colour and the gallery.
+
+    ``min_torso_px`` mirrors the Stage 6 guard so the seed kit colour is built
+    with the same reliability floor as the contacts it is compared against.
     """
     from polyfut_v2.pipeline.player_contacts import nearest_player  # local import (avoid cycle)
 
@@ -73,7 +77,7 @@ def build_seed_from_taps(
         if pl is None:
             continue
         crop = torso_crop(frame, pl.bbox)
-        hsv = torso_hsv(frame, pl.bbox)
+        hsv = torso_hsv(frame, pl.bbox, min_area=min_torso_px)
         if crop is not None and crop.size > 0:
             gallery.append(crop)
         if hsv is not None:

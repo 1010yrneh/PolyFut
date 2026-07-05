@@ -93,6 +93,12 @@ class PipelineV2Config:
     # (kept) rather than mislabelled. Real-frame debug: 10-30px-tall players give
     # ~6x12px torsos, so ~50px is a sane floor. Retune per footage.
     color_min_torso_px: int = 50
+    # Master switch for the colour team-filter. On wide/distant footage torso
+    # colour is grass-contaminated and cannot separate teams (real-frame debug:
+    # even the target fails to match its own seed) — set False there so Stage 6
+    # keeps every contact and leans entirely on the human montage, rather than
+    # risk silently dropping real target touches.
+    team_filter_enabled: bool = True
 
     # --- Stage 7: target scoring (appearance x orbital, sequential) ---
     # Appearance

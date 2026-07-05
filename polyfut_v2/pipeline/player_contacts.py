@@ -133,8 +133,12 @@ def enrich_contact(
     jersey_hsv, n_samples = _sample_jersey(frames, ball_pt, detector, cfg)
     color_dist = hsv_distance(jersey_hsv, seed.kit_hsv)
     is_my_team: bool | None
-    if color_dist is None:
-        is_my_team = None  # couldn't measure colour — leave undecided (keep for recall)
+    if not cfg.team_filter_enabled or color_dist is None:
+        # Filter off (colour unreliable on this footage) or colour unmeasurable →
+        # leave undecided. color_dist is still recorded for diagnostics/ranking,
+        # but is never used to hard-label — so it can't drop or de-anchor a real
+        # touch on footage where colour doesn't separate teams.
+        is_my_team = None
     else:
         is_my_team = color_dist <= cfg.team_color_max_dist
 
@@ -161,10 +165,17 @@ def enrich_contacts(
 
 
 def filter_my_team(
-    contacts: list[PlayerContact], *, keep_undecided: bool = True
+    contacts: list[PlayerContact], *, keep_undecided: bool = True, enabled: bool = True
 ) -> list[PlayerContact]:
     """Keep your-team contacts; drop opponents. Colour-undecided contacts are
-    kept by default (recall over precision — the montage is the safety net)."""
+    kept by default (recall over precision — the montage is the safety net).
+
+    ``enabled=False`` disables the filter entirely (keep everything), for footage
+    where torso colour can't separate teams and dropping would risk a silent
+    false negative on the target itself.
+    """
+    if not enabled:
+        return list(contacts)
     out = []
     for c in contacts:
         if c.is_my_team is True:

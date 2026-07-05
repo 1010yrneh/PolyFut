@@ -88,6 +88,18 @@ def test_anchor_requires_my_team_and_strong_appearance():
     assert scored[1].anchored is True
 
 
+def test_anchor_allows_colour_undecided_but_not_confirmed_opponent():
+    seed = _seed()
+    # Undecided colour (e.g. filter disabled / grass footage) must still anchor
+    # on a strong appearance match; a confirmed opponent must not.
+    undecided = score_contacts([_contact(0.0, 100, 100, is_my_team=None)],
+                               [_crop()], seed, CFG)
+    assert undecided[0].anchored is True
+    opponent = score_contacts([_contact(0.0, 100, 100, is_my_team=False)],
+                              [_crop()], seed, CFG)
+    assert opponent[0].anchored is False
+
+
 def test_missing_crop_uses_neutral_appearance():
     seed = _seed()
     contacts = [_contact(0.0, 100, 100)]
