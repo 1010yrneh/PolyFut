@@ -148,6 +148,7 @@ def run_v2(
     candidates, kept, montage, hotspots = (
         res["candidates"], res["kept"], res["montage"], res["hotspots"],
     )
+    me_times = confirmed_me_times(montage)
 
     timings = dict(traj_res["timings"])
     timings["total"] = time.perf_counter() - t_total

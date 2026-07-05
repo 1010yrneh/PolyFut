@@ -20,7 +20,7 @@ server_exports/
 cv/server_exports/
 output/
 output_v2*/
-_v2debug*.mp4
+_v2*.mp4
 _v2*.json
 
 # Large sample media (keep labels, not videos)

@@ -89,6 +89,46 @@ def test_decisions_flow_through_to_hotspots():
     assert total == len(res2["montage"])  # every confirmed touch lands in a hotspot
 
 
+def _write_green_clip(path, secs=6, fps=12, w=320, h=240):
+    import cv2
+    vw = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+    for i in range(secs * fps):
+        f = np.full((h, w, 3), (35, 140, 35), dtype=np.uint8)  # green pitch
+        cv2.rectangle(f, (50 + i, 100), (70 + i, 150), (0, 0, 200), -1)  # moving player
+        vw.write(f)
+    vw.release()
+
+
+class _MovingBall:
+    def __init__(self):
+        self.i = 0
+
+    def detect(self, frame, last_center=None):
+        import math
+        from polyfut_v2.pipeline.ball_detector import BallDetection
+        x = 100 + 40 * math.sin(self.i / 4.0)
+        y = 120 + 30 * math.cos(self.i / 3.0)
+        self.i += 1
+        return BallDetection(bbox=[x - 4, y - 4, x + 4, y + 4], conf=0.9)
+
+
+def test_run_v2_writes_all_outputs(tmp_path):
+    """Full run_v2 on a tiny real clip — guards the orchestrator's file-writing
+    path (which unit tests of assemble_touches don't touch)."""
+    from polyfut_v2.orchestrator import run_v2
+    clip = tmp_path / "clip.mp4"
+    _write_green_clip(clip)
+    out = tmp_path / "out"
+    meta = run_v2(str(clip), str(out),
+                  cfg=PipelineV2Config(team_filter_enabled=False),
+                  seed=_seed(), ball_detector=_MovingBall(),
+                  player_detector=FakePlayerDetector())
+    for name in ("montage.json", "hotspots.json", "contacts.json"):
+        assert (out / name).exists(), f"{name} not written"
+    for k in ("n_candidates", "n_your_team", "n_review", "n_hotspots", "detected_ratio"):
+        assert k in meta
+
+
 def test_empty_trajectory_yields_empty_outputs():
     cfg = PipelineV2Config()
     res = assemble_touches(BallTrajectory(), 60.0, cfg, _seed(),

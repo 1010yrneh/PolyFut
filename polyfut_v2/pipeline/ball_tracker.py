@@ -93,7 +93,12 @@ def track_ball(
             smoother.reset()
             last_center = None
 
-        processed_sec = processed_base + max(0.0, t_sec - (shot_first_t or t_sec))
+        # shot_first_t is guaranteed set above (the boundary block runs on the
+        # first live frame). Do NOT use `shot_first_t or t_sec`: a first shot
+        # starting at t=0 makes shot_first_t == 0.0, which is falsy, collapsing
+        # every processed_sec to 0 and breaking Stage 4 merge / Stage 7 orbital.
+        assert shot_first_t is not None
+        processed_sec = processed_base + max(0.0, t_sec - shot_first_t)
 
         det = detector.detect(frame, last_center)
         raw_bbox = det.bbox if det is not None else None

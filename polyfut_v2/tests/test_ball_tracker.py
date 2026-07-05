@@ -89,6 +89,12 @@ def test_processed_sec_collapses_gap_and_is_monotonic():
     ps = [s.processed_sec for s in pts]
 
     assert ps == sorted(ps)  # monotonic non-decreasing
+    # processed_sec must ADVANCE within the first shot even though it starts at
+    # t=0 (regression: a `shot_first_t or t_sec` falsy-zero bug collapsed every
+    # processed_sec to 0, which still passed a monotonicity-only check).
+    assert pts[0].processed_sec == pytest.approx(0.0)
+    assert pts[1].processed_sec == pytest.approx(0.5)
+    assert pts[2].processed_sec == pytest.approx(1.0)
     # First shot spans 1.0s of play; shot-2 first frame continues from there,
     # collapsing the 1.0s removed gap.
     assert pts[3].frame_index == 3
