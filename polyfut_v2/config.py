@@ -94,6 +94,22 @@ class PipelineV2Config:
     # ~6x12px torsos, so ~50px is a sane floor. Retune per footage.
     color_min_torso_px: int = 50
 
+    # --- Stage 7: target scoring (appearance x orbital, sequential) ---
+    # Appearance
+    appearance_default: float = 0.5    # neutral score when appearance is unmeasurable
+    orbital_anchor_min: float = 0.6    # appearance sim needed to (re)anchor the orbital
+    # Orbital motion prior (pixel space; camera-comp/homography plug in via transform)
+    orbital_base_px: float = 80.0      # radius at zero time gap
+    orbital_growth_px_s: float = 60.0  # radius growth per second of gap
+    orbital_max_gap_sec: float = 8.0   # beyond this the orbital covers the pitch → neutral
+    orbital_floor: float = 0.5         # min prior — boost/tie-break only, never reject
+    orbital_falloff: float = 0.5       # penalty slope outside the orbital
+    # Tracklets
+    tracklet_max_gap_sec: float = 3.0  # contacts within this window can share a tracklet
+    # Auto accept/hide thresholds (consumed by the Step 5 montage)
+    autoaccept_conf: float = 0.85
+    autohide_conf: float = 0.15
+
     # --- Reliability guardrail ---
     # A trajectory with almost no real detections means the ball model can't
     # see the ball (e.g. COCO yolov8 on a tiny/distant soccer ball). Per the
