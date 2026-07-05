@@ -24,6 +24,7 @@ class VideoFrameProvider:
         self.video_path = str(video_path)
         self.target_width = target_width
         self._cap: cv2.VideoCapture | None = None
+        self._pos = 0  # index of the next frame the capture will read
 
     def _capture(self) -> cv2.VideoCapture:
         if self._cap is None:
@@ -31,6 +32,7 @@ class VideoFrameProvider:
             if not cap.isOpened():
                 raise RuntimeError(f"Cannot open video: {self.video_path}")
             self._cap = cap
+            self._pos = 0
         return self._cap
 
     def window(
@@ -39,15 +41,37 @@ class VideoFrameProvider:
         cap = self._capture()
         step = max(1, step)
         n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        wanted = [i for i in range(center_index - radius, center_index + radius + 1, step)
+                  if i >= 0 and (not n_total or i < n_total)]
+        if not wanted:
+            return []
+
+        # Forward cursor: advance by grab() (cheap, no full decode) and only pay a
+        # real seek when a request goes BACKWARD. Phone/broadcast video has sparse
+        # keyframes, so a cap.set() per frame re-decodes a whole GOP (~2s each);
+        # the sparse stages request windows in roughly time order, so grabbing
+        # forward keeps the common case fast.
+        first, last = wanted[0], wanted[-1]
+        if first < self._pos:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, first)  # backward jump — rare
+            self._pos = first
+        while self._pos < first:
+            if not cap.grab():
+                return []
+            self._pos += 1
+
+        want = set(wanted)
         out: list[tuple[int, np.ndarray]] = []
-        for idx in range(center_index - radius, center_index + radius + 1, step):
-            if idx < 0 or (n_total and idx >= n_total):
-                continue
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ok, frame = cap.read()
-            if not ok or frame is None:
-                continue
-            out.append((idx, _resize_frame(frame, self.target_width)))
+        while self._pos <= last:
+            if self._pos in want:
+                ok, frame = cap.read()
+                if not ok:
+                    break
+                if frame is not None:
+                    out.append((self._pos, _resize_frame(frame, self.target_width)))
+            elif not cap.grab():
+                break
+            self._pos += 1
         return out
 
     def close(self) -> None:

@@ -11,6 +11,8 @@ detectors — there is no separate ball model to copy; it is the identical file.
 
 from __future__ import annotations
 
+import math
+import os
 from pathlib import Path
 from typing import Callable
 
@@ -29,6 +31,39 @@ ProgressCb = Callable[[float, str], None]
 
 def _noop(frac: float, msg: str) -> None:
     pass
+
+
+class _SyntheticBall:
+    """Deterministic stand-in ball (patrols with periodic sharp turns → contacts).
+
+    Env-gated demo aid: the default COCO detector can't see a small soccer ball,
+    so with POLYFUT_V2_SYNTH_BALL set the pipeline uses this instead — letting the
+    full review UI be exercised on real frames before a soccer ball model exists.
+    """
+
+    def __init__(self) -> None:
+        self.i = 0
+        self.x, self.y, self.heading = 320.0, 180.0, 0.3
+
+    def detect(self, frame, last_center=None):
+        from polyfut_v2.pipeline.ball_detector import BallDetection
+        if self.i % 7 == 0 and self.i > 0:
+            self.heading += 1.9
+        sp = 30.0
+        self.x += sp * math.cos(self.heading)
+        self.y += sp * math.sin(self.heading)
+        if not (30 < self.x < 610):
+            self.heading = math.pi - self.heading
+            self.x = min(610.0, max(30.0, self.x))
+        if not (30 < self.y < 330):
+            self.heading = -self.heading
+            self.y = min(330.0, max(30.0, self.y))
+        self.i += 1
+        return BallDetection(bbox=[self.x - 4, self.y - 4, self.x + 4, self.y + 4], conf=0.9)
+
+
+def _synthetic_ball_enabled() -> bool:
+    return os.environ.get("POLYFUT_V2_SYNTH_BALL", "") not in ("", "0", "false", "False")
 
 
 def build_seed_from_tap_specs(
@@ -89,6 +124,9 @@ def run_to_montage(
     cfg = cfg or PipelineV2Config()
     progress = progress or _noop
     player_detector = YoloPlayerDetector(cfg)
+
+    if ball_detector is None and _synthetic_ball_enabled():
+        ball_detector = _SyntheticBall()
 
     res = compute_trajectory(
         Path(video_path), cfg, detector=ball_detector,
