@@ -70,6 +70,30 @@ class PipelineV2Config:
     # equal precision (5 over-smooths). Provisional — retune on real footage.
     contact_smooth_window: int = 3
 
+    # --- Stage 0: multi-sample seed ---
+    seed_sample_count: int = 4   # UI target (up to 4, min 2; 1 warns → weak gallery)
+    seed_min_samples: int = 2
+
+    # --- Stage 5: sparse player detection (pluggable; default COCO person) ---
+    player_weights: str = "yolov8s.pt"
+    player_class_id: int = 0     # COCO "person"
+    player_conf_min: float = 0.25
+    player_imgsz: int = 640
+    # ROI around the ball for the sparse player pass (0 → full frame).
+    player_roi_half_px: float = 160.0
+    # Max ball-to-player distance (px) to count a player as the one in contact.
+    contact_max_player_dist_px: float = 80.0
+
+    # --- Stage 6: per-contact team colour filter ---
+    contact_color_window: int = 2   # frames each side of the contact to sample jersey
+    contact_color_step: int = 1     # window step, in analysed-frame units
+    team_color_max_dist: float = 60.0  # hue-weighted HSV distance ≤ this ⇒ your team
+    # Min torso crop area (px) to trust a jersey colour. On wide footage tiny
+    # crops are grass-contaminated; below this the contact is left undecided
+    # (kept) rather than mislabelled. Real-frame debug: 10-30px-tall players give
+    # ~6x12px torsos, so ~50px is a sane floor. Retune per footage.
+    color_min_torso_px: int = 50
+
     # --- Reliability guardrail ---
     # A trajectory with almost no real detections means the ball model can't
     # see the ball (e.g. COCO yolov8 on a tiny/distant soccer ball). Per the
