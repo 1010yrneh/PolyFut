@@ -58,29 +58,23 @@ def trajectory_warnings(traj: BallTrajectory, cfg: PipelineV2Config) -> list[str
     return warnings
 
 
-def run_ball_trajectory(
-    video_path: str | Path,
-    out_dir: str | Path | None = None,
+def compute_trajectory(
+    video_path: Path,
+    cfg: PipelineV2Config,
     *,
-    cfg: PipelineV2Config | None = None,
     detector=None,
     progress: ProgressCb | None = None,
     should_cancel: Callable[[], bool] | None = None,
 ) -> dict:
-    """Run Stages 1-3 and write ``ball_trajectory.json``.
+    """Stages 1-3: decode → shot filter → deadtime → continuous ball trajectory.
 
-    ``detector`` may be injected (e.g. a soccer-specific model or a test double);
-    it defaults to :class:`YoloBallDetector` on ``cfg.ball_weights``.
+    Shared by the Step-1 CLI and the full orchestrator. Returns a dict with
+    ``info``, ``live_shots``, ``removed``, ``trajectory`` and ``timings``.
+    ``detector`` defaults to :class:`YoloBallDetector` on ``cfg.ball_weights``.
     """
-    cfg = cfg or PipelineV2Config()
-    video_path = Path(video_path)
-    out_dir = Path(out_dir or cfg.output_dir)
-    out_dir.mkdir(parents=True, exist_ok=True)
     progress = progress or _noop_progress
     cancel = should_cancel or (lambda: False)
-
     timings: dict[str, float] = {}
-    t_total = time.perf_counter()
 
     info = probe_video(str(video_path))
     v1cfg = cfg.v1_config()
@@ -140,6 +134,44 @@ def run_ball_trajectory(
         total_live_sec=total_live,
     )
     timings["ball_tracking"] = time.perf_counter() - t0
+    return {
+        "info": info,
+        "live_shots": live_shots,
+        "removed": removed,
+        "trajectory": traj,
+        "timings": timings,
+    }
+
+
+def run_ball_trajectory(
+    video_path: str | Path,
+    out_dir: str | Path | None = None,
+    *,
+    cfg: PipelineV2Config | None = None,
+    detector=None,
+    progress: ProgressCb | None = None,
+    should_cancel: Callable[[], bool] | None = None,
+) -> dict:
+    """Run Stages 1-3 and write ``ball_trajectory.json``.
+
+    ``detector`` may be injected (e.g. a soccer-specific model or a test double);
+    it defaults to :class:`YoloBallDetector` on ``cfg.ball_weights``.
+    """
+    cfg = cfg or PipelineV2Config()
+    video_path = Path(video_path)
+    out_dir = Path(out_dir or cfg.output_dir)
+    out_dir.mkdir(parents=True, exist_ok=True)
+    progress = progress or _noop_progress
+
+    t_total = time.perf_counter()
+    result = compute_trajectory(
+        video_path, cfg, detector=detector, progress=progress, should_cancel=should_cancel,
+    )
+    info = result["info"]
+    live_shots = result["live_shots"]
+    removed = result["removed"]
+    traj = result["trajectory"]
+    timings = result["timings"]
     timings["total"] = time.perf_counter() - t_total
 
     warnings = trajectory_warnings(traj, cfg)

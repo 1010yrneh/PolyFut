@@ -19,7 +19,7 @@ exports/
 server_exports/
 cv/server_exports/
 output/
-output_v2/
+output_v2*/
 _v2debug*.mp4
 _v2*.json
 

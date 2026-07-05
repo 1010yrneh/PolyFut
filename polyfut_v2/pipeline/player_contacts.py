@@ -22,7 +22,7 @@ from typing import Iterable, Protocol
 import numpy as np
 
 from polyfut_v2.config import PipelineV2Config
-from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_hsv
+from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_crop, torso_hsv
 from polyfut_v2.pipeline.contacts import ContactCandidate
 from polyfut_v2.pipeline.player_detector import PlayerDetection
 from polyfut_v2.pipeline.seed import TargetSeed
@@ -191,3 +191,18 @@ def _center_frame(
     if not frames:
         return None
     return min(frames, key=lambda fr: abs(fr[0] - target_index))[1]
+
+
+def contact_torso_crops(
+    contacts: list[PlayerContact], provider: FrameProvider
+) -> list[np.ndarray | None]:
+    """Torso crop of each contact's player at its contact frame (for Stage 7
+    appearance scoring). None where no player was found."""
+    crops: list[np.ndarray | None] = []
+    for c in contacts:
+        if c.player_bbox is None:
+            crops.append(None)
+            continue
+        win = provider.window(c.candidate.frame_index, 0, 1)
+        crops.append(torso_crop(win[0][1], c.player_bbox) if win else None)
+    return crops

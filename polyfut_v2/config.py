@@ -116,6 +116,16 @@ class PipelineV2Config:
     autoaccept_conf: float = 0.85
     autohide_conf: float = 0.15
 
+    # --- Stage 8: review montage ---
+    montage_clip_pad_sec: float = 1.0    # ±1s around the contact → ~2s review clips
+    montage_crop_half_px: float = 120.0  # zoom half-size (resized px) around the contact
+
+    # --- Stage 9: hotspot assembly (v1 semantics; pad widened to ±2s per doc) ---
+    hotspot_pad_before_sec: float = 2.0
+    hotspot_pad_after_sec: float = 2.0
+    hotspot_gap_merge_sec: float = 5.0
+    hotspot_min_zone_sec: float = 3.0
+
     # --- Reliability guardrail ---
     # A trajectory with almost no real detections means the ball model can't
     # see the ball (e.g. COCO yolov8 on a tiny/distant soccer ball). Per the

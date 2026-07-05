@@ -9,9 +9,9 @@ Build progress:
   Step 2 [done]  Stage 4     — kinematic contact candidates
   Step 3 [done]  Stages 0,5,6 — seed + sparse player detect + color filter
   Step 4 [done]  Stages 0,7  — appearance gallery + orbital scoring
-  Step 5 [todo]  Stages 8,9  — review montage + hotspot assembly
+  Step 5 [done]  Stages 8,9  — review montage + hotspot assembly + orchestrator
 """
 
 __all__ = ["__version__"]
 
-__version__ = "2.0.0-step4"
+__version__ = "2.0.0-step5"
