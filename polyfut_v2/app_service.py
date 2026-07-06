@@ -68,6 +68,23 @@ def _synthetic_ball_enabled() -> bool:
     return os.environ.get("POLYFUT_V2_SYNTH_BALL", "") not in ("", "0", "false", "False")
 
 
+def _apply_soccer_model(cfg: PipelineV2Config) -> str | None:
+    """Point the config at the soccer-specific ball+player model (downloading it
+    on first use). Returns a warning string if it falls back to COCO."""
+    from polyfut_v2 import ball_model as bm
+
+    model = bm.ensure_soccer_model()
+    if model is not None:
+        cfg.ball_weights = str(model)
+        cfg.ball_class_id = bm.SOCCER_BALL_CLASS
+        cfg.player_weights = str(model)
+        cfg.player_class_id = bm.SOCCER_PLAYER_CLASS
+        cfg.ball_full_imgsz = 1280  # small ball → needs resolution on re-acquire
+        return None
+    return ("soccer ball model unavailable (offline?) — using the general COCO "
+            "model, which barely detects a soccer ball. Real touches will be sparse.")
+
+
 def build_seed_from_tap_specs(
     video_path: str,
     taps: list[dict] | None,
@@ -125,6 +142,11 @@ def run_to_montage(
     """
     cfg = cfg or PipelineV2Config()
     progress = progress or _noop
+
+    # Upgrade ball + player detection to the soccer-specific model (COCO can't
+    # see the ball). Downloads on first use; falls back to COCO if offline.
+    progress(0.01, "Loading soccer detection model…")
+    model_warning = _apply_soccer_model(cfg)
     player_detector = YoloPlayerDetector(cfg)
 
     if ball_detector is None and _synthetic_ball_enabled():
@@ -137,6 +159,8 @@ def run_to_montage(
     traj = res["trajectory"]
     duration = res["info"].get("duration_sec")
     warnings = trajectory_warnings(traj, cfg)
+    if model_warning:
+        warnings.insert(0, model_warning)
 
     seed = build_seed_from_tap_specs(video_path, seed_taps, cfg, player_detector)
     if seed.n_samples == 0:
