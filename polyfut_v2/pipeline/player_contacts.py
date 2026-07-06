@@ -89,25 +89,6 @@ class PlayerContact:
         }
 
 
-def _sample_jersey(
-    frames: list[tuple[int, np.ndarray]],
-    ball_pt: tuple[float, float],
-    detector,
-    cfg: PipelineV2Config,
-) -> tuple[np.ndarray | None, int]:
-    """Median torso HSV of the ball-nearest player across the window frames."""
-    feats: list[np.ndarray] = []
-    for _idx, frame in frames:
-        players = detector.detect(frame, ball_pt)
-        pl, _d = nearest_player(players, ball_pt, cfg.contact_max_player_dist_px)
-        if pl is None:
-            continue
-        hsv = torso_hsv(frame, pl.bbox, min_area=cfg.color_min_torso_px)
-        if hsv is not None:
-            feats.append(hsv)
-    return median_hsv(feats), len(feats)
-
-
 def enrich_contact(
     cand: ContactCandidate,
     provider: FrameProvider,
@@ -120,17 +101,29 @@ def enrich_contact(
     radius = cfg.contact_color_window * step
     frames = provider.window(cand.frame_index, radius, step)
 
-    # Contacting player from the frame nearest the contact.
-    center_frame = _center_frame(frames, cand.frame_index)
+    # ONE player-detection pass over the window, reused for BOTH the contacting
+    # player (frame nearest the contact) and the jersey colour (median over
+    # frames). Previously the centre frame was detected twice (once for the
+    # player, again inside jersey sampling) — the dominant Stage 5-6 cost when
+    # there are thousands of candidates.
     player_bbox: list[float] | None = None
     player_dist: float | None = None
-    if center_frame is not None:
-        players = detector.detect(center_frame, ball_pt)
+    best_gap: int | None = None
+    feats: list[np.ndarray] = []
+    for idx, frame in frames:
+        players = detector.detect(frame, ball_pt)
         pl, d = nearest_player(players, ball_pt, cfg.contact_max_player_dist_px)
-        if pl is not None:
-            player_bbox, player_dist = pl.bbox, d
+        if pl is None:
+            continue
+        hsv = torso_hsv(frame, pl.bbox, min_area=cfg.color_min_torso_px)
+        if hsv is not None:
+            feats.append(hsv)
+        gap = abs(idx - cand.frame_index)
+        if best_gap is None or gap < best_gap:
+            best_gap, player_bbox, player_dist = gap, pl.bbox, d
 
-    jersey_hsv, n_samples = _sample_jersey(frames, ball_pt, detector, cfg)
+    jersey_hsv = median_hsv(feats)
+    n_samples = len(feats)
     color_dist = hsv_distance(jersey_hsv, seed.kit_hsv)
     is_my_team: bool | None
     if not cfg.team_filter_enabled or color_dist is None:
@@ -183,14 +176,6 @@ def filter_my_team(
         elif c.is_my_team is None and keep_undecided:
             out.append(c)
     return out
-
-
-def _center_frame(
-    frames: list[tuple[int, np.ndarray]], target_index: int
-) -> np.ndarray | None:
-    if not frames:
-        return None
-    return min(frames, key=lambda fr: abs(fr[0] - target_index))[1]
 
 
 def contact_torso_crops(

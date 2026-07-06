@@ -65,6 +65,11 @@ class PipelineV2Config:
     contact_speed_spike_ratio: float = 2.0  # speed_after/speed_before above this = a kick
     contact_merge_sec: float = 0.3         # collapse events within this window into one
     contact_gap_sec: float = 0.5           # velocity interval longer than this = unreliable
+    # Compute budget: a single player touches the ball ~30-80x/match, over-
+    # generated to a few hundred. If Stage 4 yields more (noisy trajectory / demo
+    # ball), keep only the strongest and skip the rest — each survivor costs a
+    # sparse player-detection pass, and no human reviews thousands of clips.
+    max_candidates: int = 1200
     # Centered position smoothing (samples). Real detector output jitters, and a
     # synthetic sweep showed window=3 lifts noisy-trajectory recall ~0.56→0.74 at
     # equal precision (5 over-smooths). Provisional — retune on real footage.
@@ -85,7 +90,10 @@ class PipelineV2Config:
     contact_max_player_dist_px: float = 80.0
 
     # --- Stage 6: per-contact team colour filter ---
-    contact_color_window: int = 2   # frames each side of the contact to sample jersey
+    # 1 → 3 frames per contact (centre ±1). Each frame is a player-detection call,
+    # so this directly scales Stage 5-6 cost; the jersey median over 3 frames is
+    # robust enough.
+    contact_color_window: int = 1   # frames each side of the contact to sample jersey
     contact_color_step: int = 1     # window step, in analysed-frame units
     team_color_max_dist: float = 60.0  # hue-weighted HSV distance ≤ this ⇒ your team
     # Min torso crop area (px) to trust a jersey colour. On wide footage tiny

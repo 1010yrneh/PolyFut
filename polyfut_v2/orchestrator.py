@@ -65,6 +65,11 @@ def assemble_touches(
 
     progress(0.84, "Stage 4: contact candidates…")
     candidates = detect_contacts(traj, cfg)
+    n_candidates_raw = len(candidates)
+    if cfg.max_candidates and n_candidates_raw > cfg.max_candidates:
+        # Keep the strongest kinematic signals; each survivor costs a player pass.
+        candidates = sorted(candidates, key=lambda c: c.strength, reverse=True)[:cfg.max_candidates]
+        candidates.sort(key=lambda c: c.processed_sec)  # restore time order
 
     progress(0.88, f"Stages 5-6: player + colour over {len(candidates)} candidate(s)…")
     enriched = enrich_contacts(candidates, provider, player_detector, seed, cfg)
@@ -84,6 +89,7 @@ def assemble_touches(
 
     return {
         "candidates": candidates,
+        "n_candidates_raw": n_candidates_raw,
         "kept": kept,
         "scored": scored,
         "montage": montage,

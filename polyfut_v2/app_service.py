@@ -47,7 +47,9 @@ class _SyntheticBall:
 
     def detect(self, frame, last_center=None):
         from polyfut_v2.pipeline.ball_detector import BallDetection
-        if self.i % 7 == 0 and self.i > 0:
+        # Turn ~every 18 analysed frames so a full match doesn't fabricate
+        # thousands of contacts (demo aid, not a realistic ball).
+        if self.i % 18 == 0 and self.i > 0:
             self.heading += 1.9
         sp = 30.0
         self.x += sp * math.cos(self.heading)
@@ -145,6 +147,14 @@ def run_to_montage(
     with VideoFrameProvider(video_path, target_width=cfg.target_width) as provider:
         out = assemble_touches(
             traj, duration, cfg, seed, player_detector, provider, progress=progress,
+        )
+
+    n_raw = out.get("n_candidates_raw", len(out["candidates"]))
+    if n_raw > len(out["candidates"]):
+        warnings.append(
+            f"Stage 4 produced {n_raw} contact candidates; kept the "
+            f"{len(out['candidates'])} strongest to bound processing time. A "
+            f"soccer-specific ball model yields far fewer, cleaner candidates."
         )
 
     items = [it.to_dict() for it in out["montage"]]

@@ -129,6 +129,17 @@ def test_run_v2_writes_all_outputs(tmp_path):
         assert k in meta
 
 
+def test_candidate_cap_keeps_strongest_and_time_order():
+    cfg = PipelineV2Config(max_candidates=3)
+    res = assemble_touches(_traj(n_turns=8), 60.0, cfg, _seed(),
+                           FakePlayerDetector(), FakeProvider())
+    assert res["n_candidates_raw"] > 3          # Stage 4 produced more
+    assert len(res["candidates"]) == 3          # capped
+    cts = [c.processed_sec for c in res["candidates"]]
+    assert cts == sorted(cts)                   # survivors restored to time order
+    assert len(res["montage"]) == len(res["kept"]) == 3
+
+
 def test_empty_trajectory_yields_empty_outputs():
     cfg = PipelineV2Config()
     res = assemble_touches(BallTrajectory(), 60.0, cfg, _seed(),

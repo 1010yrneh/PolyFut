@@ -103,6 +103,26 @@ def test_filter_keeps_only_my_team():
     assert kept[0].is_my_team is True
 
 
+class CountingDetector:
+    """Counts detect() calls to prove Stage 5-6 doesn't double-detect frames."""
+    def __init__(self, bbox=BOX):
+        self.calls = 0
+        self.bbox = bbox
+    def detect(self, frame, near=None):
+        self.calls += 1
+        return [PlayerDetection(bbox=list(self.bbox), conf=0.9)]
+
+
+def test_enrich_detects_each_window_frame_once():
+    cfg = PipelineV2Config()
+    det = CountingDetector()
+    contacts = enrich_contacts([_cand()], FakeProvider(RED, n=3), det, _seed(RED), cfg)
+    # 3 window frames → 3 detections, not 3 + a redundant centre detection.
+    assert det.calls == 3
+    assert contacts[0].n_color_samples == 3
+    assert contacts[0].player_bbox == BOX
+
+
 def test_tiny_torso_crop_is_undecided_not_dropped():
     # A tiny player box (wide-footage grass contamination) → colour unmeasurable,
     # so the contact stays undecided and is kept, never confidently dropped.
