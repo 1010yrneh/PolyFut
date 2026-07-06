@@ -28,6 +28,17 @@ def test_forward_and_backward_windows_return_requested_indices(tmp_path):
         assert p.window(40, 0, 1)[0][1].shape == (48, 64, 3)
 
 
+def test_large_forward_jump_seeks_and_stays_correct(tmp_path):
+    # A jump far beyond the grab threshold (spread seed taps) must seek, not
+    # grab through thousands of frames, and still return the right indices.
+    clip = tmp_path / "c.mp4"
+    _clip(clip, n=340)
+    with VideoFrameProvider(str(clip), target_width=64) as p:
+        assert _idx(p.window(10, 0, 1)) == [10]
+        assert _idx(p.window(300, 0, 1)) == [300]   # gap 289 > 250 → seek path
+        assert _idx(p.window(50, 0, 1)) == [50]      # backward → seek
+
+
 def test_window_clamps_to_bounds(tmp_path):
     clip = tmp_path / "c.mp4"
     _clip(clip, n=20)

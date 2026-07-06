@@ -11,6 +11,9 @@ import numpy as np
 
 from polyfut_video.pipeline.decode import _resize_frame
 
+# Forward gap beyond which a seek beats grabbing frame-by-frame (~one GOP).
+_SEEK_AHEAD_FRAMES = 250
+
 
 class VideoFrameProvider:
     """Seek-based frame window over a video file.
@@ -46,14 +49,16 @@ class VideoFrameProvider:
         if not wanted:
             return []
 
-        # Forward cursor: advance by grab() (cheap, no full decode) and only pay a
-        # real seek when a request goes BACKWARD. Phone/broadcast video has sparse
-        # keyframes, so a cap.set() per frame re-decodes a whole GOP (~2s each);
-        # the sparse stages request windows in roughly time order, so grabbing
-        # forward keeps the common case fast.
+        # Adaptive cursor: grab() forward (cheap, no full decode) for small gaps,
+        # but SEEK for a backward jump or a large forward jump. Phone/broadcast
+        # video has sparse keyframes, so a seek re-decodes a whole GOP (~one
+        # GOP's worth of frames); grabbing is cheaper only up to about that many
+        # frames. The sparse contact stage steps forward in small hops (grab
+        # wins); the seed's few taps are spread across the whole match (seek
+        # wins) — this keeps both fast.
         first, last = wanted[0], wanted[-1]
-        if first < self._pos:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, first)  # backward jump — rare
+        if first < self._pos or first - self._pos > _SEEK_AHEAD_FRAMES:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, first)
             self._pos = first
         while self._pos < first:
             if not cap.grab():
