@@ -66,10 +66,11 @@ class PipelineV2Config:
     contact_merge_sec: float = 0.3         # collapse events within this window into one
     contact_gap_sec: float = 0.5           # velocity interval longer than this = unreliable
     # Compute budget: a single player touches the ball ~30-80x/match, over-
-    # generated to a few hundred. If Stage 4 yields more (noisy trajectory / demo
-    # ball), keep only the strongest and skip the rest — each survivor costs a
-    # sparse player-detection pass, and no human reviews thousands of clips.
-    max_candidates: int = 1200
+    # generated to a few hundred, so 600 is already generous. If Stage 4 yields
+    # more (noisy trajectory / demo ball), keep only the strongest — each
+    # survivor costs a sparse player-detection pass (the dominant runtime term),
+    # and no human reviews hundreds of clips anyway.
+    max_candidates: int = 600
     # Centered position smoothing (samples). Real detector output jitters, and a
     # synthetic sweep showed window=3 lifts noisy-trajectory recall ~0.56→0.74 at
     # equal precision (5 over-smooths). Provisional — retune on real footage.
