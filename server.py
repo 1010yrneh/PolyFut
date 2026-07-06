@@ -413,7 +413,7 @@ def _detect_team_kits_isolated(video_path: str) -> tuple[list[dict] | None, str 
             [sys.executable, "-c", script, video_path, str(WEIGHTS), str(DEVICE)],
             capture_output=True,
             text=True,
-            timeout=900,
+            timeout=300,
             cwd=str(ROOT),
         )
         if proc.returncode != 0:

@@ -10,7 +10,7 @@ from pathlib import Path
 import cv2
 import numpy as np
 
-from polyfut_video.pipeline.decode import probe_video
+from polyfut_video.pipeline.decode import iter_frames, probe_video
 from polyfut_video.pipeline.detection import DetectConfig, Detector
 from polyfut_video.pipeline.team_classify import _hsv_feature, _torso_crop
 
@@ -98,13 +98,20 @@ def detect_team_kits(
     *,
     weights: str = "yolov8n.pt",
     device: str = "cpu",
-    n_samples: int = 24,
+    n_samples: int = 20,
     target_width: int = 960,
-    max_analyze_minutes: float = 75.0,
+    imgsz: int = 960,
+    sample_window_minutes: float = 8.0,
+    sample_every_seconds: float = 3.0,
 ) -> list[dict] | None:
     """
     Sample frames, detect players, k-means torso colours → two kit swatches.
     Returns [{"id","label","hex"}, ...] or None if detection fails.
+
+    Frames are sampled *sequentially* (grab/retrieve — no per-frame seeks) from a
+    bounded early window. A cap.set() per frame re-decodes a whole GOP each on
+    sparse-keyframe phone/broadcast video, which can stall for minutes; kit
+    colours are constant, so an early window is sufficient and far faster.
     """
     info = probe_video(video_path)
     n_frames = int(info.get("frame_count") or 0)
@@ -113,49 +120,45 @@ def detect_team_kits(
         _dbg_log("H6", "team_preview", "no frames", {"video": video_path})
         return None
 
-    max_frame = min(n_frames - 1, int(max_analyze_minutes * 60 * fps))
-    idxs = [min(max_frame, int(max_frame * (i + 0.5) / n_samples)) for i in range(n_samples)]
-
-    cap = cv2.VideoCapture(str(video_path))
-    if not cap.isOpened():
-        _dbg_log("H6", "team_preview", "cannot open video", {"video": video_path})
-        return None
+    stride = max(1, int(round(fps * sample_every_seconds)))
+    max_frame = min(n_frames - 1, int(sample_window_minutes * 60 * fps))
 
     det = Detector(DetectConfig(
         weights=weights,
         device=device,
         conf_threshold=0.20,
-        imgsz=1280,
+        imgsz=imgsz,
     ))
 
     crops: list[np.ndarray] = []
     players_per_frame: list[int] = []
-    try:
-        for idx in idxs:
-            cap.set(cv2.CAP_PROP_POS_FRAMES, idx)
-            ok, frame = cap.read()
-            if not ok or frame is None:
+    sampled = 0
+    for fidx, _t, frame in iter_frames(
+        video_path, target_width=target_width, sample_every_n=stride,
+    ):
+        if fidx > max_frame or sampled >= n_samples:
+            break
+        dets = det.detect_frame(frame)
+        n_players = 0
+        for d in dets:
+            if d.get("class") != "player":
                 continue
-            frame = _resize_frame(frame, target_width)
-            dets = det.detect_frame(frame)
-            n_players = 0
-            for d in dets:
-                if d.get("class") != "player":
-                    continue
-                crop = _torso_crop(frame, d["bbox"])
-                if crop is None or _is_referee_crop(crop) or _is_neutral_crop(crop):
-                    continue
-                crops.append(crop)
-                n_players += 1
-            players_per_frame.append(n_players)
-    finally:
-        cap.release()
+            crop = _torso_crop(frame, d["bbox"])
+            if crop is None or _is_referee_crop(crop) or _is_neutral_crop(crop):
+                continue
+            crops.append(crop)
+            n_players += 1
+        players_per_frame.append(n_players)
+        sampled += 1
+        # Enough signal already — stop early (kit colours don't change).
+        if sampled >= 6 and len(crops) >= 40:
+            break
 
     _dbg_log("H6", "team_preview", "crops collected", {
         "n_crops": len(crops),
-        "n_samples": len(idxs),
+        "n_samples": sampled,
         "players_per_frame": players_per_frame,
-        "imgsz": 1280,
+        "imgsz": imgsz,
         "conf": 0.20,
     })
 
