@@ -17,6 +17,10 @@ RED = (0, 0, 200)
 BLUE = (200, 0, 0)
 BOX = [10, 10, 90, 90]
 
+# The colour filter is OFF by default (amateur footage); tests of the colour
+# decision opt in explicitly.
+FILTER_ON = PipelineV2Config(team_filter_enabled=True)
+
 
 def _frame(color):
     return np.full((100, 100, 3), color, dtype=np.uint8)
@@ -28,11 +32,13 @@ def _cand(x=50, y=80):
 
 
 class FakeProvider:
-    def __init__(self, color, n=3):
+    """Respects radius/step like the real VideoFrameProvider."""
+    def __init__(self, color):
         self.color = color
-        self.n = n
     def window(self, center_index, radius, step):
-        return [(center_index + i, _frame(self.color)) for i in range(self.n)]
+        step = max(1, step)
+        return [(i, _frame(self.color))
+                for i in range(center_index - radius, center_index + radius + 1, step)]
 
 
 class FakePlayerDetector:
@@ -62,49 +68,44 @@ def test_nearest_player_respects_max_dist():
 
 
 def test_same_kit_contact_is_my_team():
-    cfg = PipelineV2Config()
     contacts = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(),
-                               _seed(RED), cfg)
+                               _seed(RED), FILTER_ON)
     c = contacts[0]
     assert c.is_my_team is True
     assert c.player_bbox == BOX
     assert c.n_color_samples == 3
-    assert c.color_dist is not None and c.color_dist <= cfg.team_color_max_dist
+    assert c.color_dist is not None and c.color_dist <= FILTER_ON.team_color_max_dist
+    assert c.torso_crop is not None
 
 
 def test_opponent_kit_contact_dropped():
-    cfg = PipelineV2Config()
     contacts = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(),
-                               _seed(RED), cfg)
+                               _seed(RED), FILTER_ON)
     assert contacts[0].is_my_team is False
-    kept = filter_my_team(contacts)
-    assert kept == []
+    assert filter_my_team(contacts) == []
 
 
 def test_no_player_is_undecided_and_kept():
-    cfg = PipelineV2Config()
     contacts = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(empty=True),
-                               _seed(RED), cfg)
+                               _seed(RED), FILTER_ON)
     c = contacts[0]
     assert c.is_my_team is None       # no colour measured → undecided
     assert c.player_bbox is None
     assert c.n_color_samples == 0
-    # Undecided kept by default (recall), droppable when strict.
     assert len(filter_my_team(contacts, keep_undecided=True)) == 1
     assert len(filter_my_team(contacts, keep_undecided=False)) == 0
 
 
 def test_filter_keeps_only_my_team():
-    cfg = PipelineV2Config()
-    mine = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(), _seed(RED), cfg)
-    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
+    mine = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(), _seed(RED), FILTER_ON)
+    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), FILTER_ON)
     kept = filter_my_team(mine + opp)
     assert len(kept) == 1
     assert kept[0].is_my_team is True
 
 
 class CountingDetector:
-    """Counts detect() calls to prove Stage 5-6 doesn't double-detect frames."""
+    """Counts detect() calls to measure Stage 5-6 per-candidate cost."""
     def __init__(self, bbox=BOX):
         self.calls = 0
         self.bbox = bbox
@@ -113,22 +114,27 @@ class CountingDetector:
         return [PlayerDetection(bbox=list(self.bbox), conf=0.9)]
 
 
-def test_enrich_detects_each_window_frame_once():
-    cfg = PipelineV2Config()
+def test_filter_on_detects_each_window_frame_once():
     det = CountingDetector()
-    contacts = enrich_contacts([_cand()], FakeProvider(RED, n=3), det, _seed(RED), cfg)
-    # 3 window frames → 3 detections, not 3 + a redundant centre detection.
-    assert det.calls == 3
+    contacts = enrich_contacts([_cand()], FakeProvider(RED), det, _seed(RED), FILTER_ON)
+    assert det.calls == 3            # window frames, each once (no redundant centre detect)
     assert contacts[0].n_color_samples == 3
-    assert contacts[0].player_bbox == BOX
+
+
+def test_filter_off_detects_only_contact_frame_and_captures_crop():
+    cfg = PipelineV2Config()          # default: filter OFF
+    det = CountingDetector()
+    contacts = enrich_contacts([_cand()], FakeProvider(RED), det, _seed(RED), cfg)
+    assert det.calls == 1             # only the contact frame — 3x cheaper
+    assert contacts[0].torso_crop is not None   # crop captured for Stage 7 (no 2nd pass)
+    assert contacts[0].is_my_team is None       # undecided (filter off)
 
 
 def test_tiny_torso_crop_is_undecided_not_dropped():
     # A tiny player box (wide-footage grass contamination) → colour unmeasurable,
     # so the contact stays undecided and is kept, never confidently dropped.
-    cfg = PipelineV2Config()
     tiny = FakePlayerDetector(bbox=[10, 10, 20, 25])  # torso ~6x6 = 36px < 50
-    contacts = enrich_contacts([_cand(x=15, y=20)], FakeProvider(BLUE), tiny, _seed(RED), cfg)
+    contacts = enrich_contacts([_cand(x=15, y=20)], FakeProvider(BLUE), tiny, _seed(RED), FILTER_ON)
     c = contacts[0]
     assert c.player_bbox == [10, 10, 20, 25]  # player still detected (Stage 5)
     assert c.jersey_hsv is None               # colour rejected as too small (Stage 6)
@@ -137,17 +143,14 @@ def test_tiny_torso_crop_is_undecided_not_dropped():
 
 
 def test_filter_disabled_keeps_everything():
-    cfg = PipelineV2Config()
-    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
+    opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), FILTER_ON)
     assert opp[0].is_my_team is False
-    # Filter on → opponent dropped; filter off → kept (footage where colour fails).
-    assert filter_my_team(opp, enabled=True) == []
-    assert len(filter_my_team(opp, enabled=False)) == 1
+    assert filter_my_team(opp, enabled=True) == []           # on → opponent dropped
+    assert len(filter_my_team(opp, enabled=False)) == 1      # off → kept
 
 
 def test_disabled_filter_leaves_team_undecided_but_records_color():
-    # With the filter off, even an opponent-coloured contact is left undecided
-    # (so it can't be dropped or de-anchored), but color_dist is still measured.
+    # Filter off → is_my_team undecided (can't drop/de-anchor), colour still measured.
     cfg = PipelineV2Config(team_filter_enabled=False)
     opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
     assert opp[0].is_my_team is None
@@ -155,9 +158,8 @@ def test_disabled_filter_leaves_team_undecided_but_records_color():
 
 
 def test_to_dict_shape():
-    cfg = PipelineV2Config()
-    c = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(), _seed(RED), cfg)[0]
+    c = enrich_contacts([_cand()], FakeProvider(RED), FakePlayerDetector(), _seed(RED), FILTER_ON)[0]
     d = c.to_dict()
-    # Carries both the candidate fields and the enrichment.
     assert d["kinds"] == ["kick"] and d["is_my_team"] is True
     assert "player_bbox" in d and "color_dist" in d
+    assert "torso_crop" not in d   # crop is not serialized

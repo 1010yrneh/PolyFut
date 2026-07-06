@@ -32,7 +32,7 @@ from polyfut_v2.pipeline.montage import (
     review_queue,
 )
 from polyfut_v2.pipeline.player_contacts import (
-    contact_torso_crops,
+    contact_crops,
     enrich_contacts,
     filter_my_team,
 )
@@ -76,7 +76,7 @@ def assemble_touches(
     kept = filter_my_team(enriched, enabled=cfg.team_filter_enabled)
 
     progress(0.93, "Stage 7: appearance × orbital scoring…")
-    crops = contact_torso_crops(kept, provider)
+    crops = contact_crops(kept)  # captured during enrichment — no extra decode pass
     scored = score_contacts(kept, crops, seed, cfg)
 
     progress(0.97, "Stage 8: building review montage…")

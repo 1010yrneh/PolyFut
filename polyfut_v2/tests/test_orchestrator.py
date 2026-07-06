@@ -65,9 +65,10 @@ def test_pipeline_produces_candidates_and_montage():
     res = assemble_touches(_traj(), 60.0, cfg, _seed(),
                            FakePlayerDetector(), FakeProvider())
     assert len(res["candidates"]) > 0
-    # Red player matches the red seed → all kept as your-team.
+    # Colour filter off by default → every contact kept, undecided.
     assert len(res["kept"]) == len(res["candidates"])
-    assert all(k.is_my_team is True for k in res["kept"])
+    assert all(k.is_my_team is None for k in res["kept"])
+    assert all(k.torso_crop is not None for k in res["kept"])  # crops captured in enrich
     # Montage is 1:1 with kept and ranked by descending confidence.
     m = res["montage"]
     assert len(m) == len(res["kept"])

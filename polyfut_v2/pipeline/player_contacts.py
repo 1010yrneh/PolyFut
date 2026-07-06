@@ -73,6 +73,10 @@ class PlayerContact:
     color_dist: float | None
     is_my_team: bool | None      # True / False / None (undecided — no colour)
     n_color_samples: int
+    # The contacting player's torso crop at the contact frame, captured during
+    # enrichment for Stage 7 appearance scoring (avoids a second decode pass).
+    # Not serialized.
+    torso_crop: object = None
 
     def to_dict(self) -> dict:
         return {
@@ -98,17 +102,17 @@ def enrich_contact(
 ) -> PlayerContact:
     ball_pt = (cand.x, cand.y)
     step = max(1, cfg.ball_sample_every_n * cfg.contact_color_step)
-    radius = cfg.contact_color_window * step
+    # When the colour filter is off we only need the contacting player on the
+    # frame nearest the contact — 1 detection instead of (2*window+1). Jersey
+    # colour is sampled across the window only when the filter will actually use
+    # it. This is the dominant Stage 5-6 cost.
+    radius = cfg.contact_color_window * step if cfg.team_filter_enabled else 0
     frames = provider.window(cand.frame_index, radius, step)
 
-    # ONE player-detection pass over the window, reused for BOTH the contacting
-    # player (frame nearest the contact) and the jersey colour (median over
-    # frames). Previously the centre frame was detected twice (once for the
-    # player, again inside jersey sampling) — the dominant Stage 5-6 cost when
-    # there are thousands of candidates.
     player_bbox: list[float] | None = None
     player_dist: float | None = None
     best_gap: int | None = None
+    torso: np.ndarray | None = None
     feats: list[np.ndarray] = []
     for idx, frame in frames:
         players = detector.detect(frame, ball_pt)
@@ -121,6 +125,9 @@ def enrich_contact(
         gap = abs(idx - cand.frame_index)
         if best_gap is None or gap < best_gap:
             best_gap, player_bbox, player_dist = gap, pl.bbox, d
+            # Capture the crop now (frame already decoded) for Stage 7 — no
+            # separate torso-crop pass over the video.
+            torso = torso_crop(frame, pl.bbox)
 
     jersey_hsv = median_hsv(feats)
     n_samples = len(feats)
@@ -143,6 +150,7 @@ def enrich_contact(
         color_dist=color_dist,
         is_my_team=is_my_team,
         n_color_samples=n_samples,
+        torso_crop=torso,
     )
 
 
@@ -178,16 +186,6 @@ def filter_my_team(
     return out
 
 
-def contact_torso_crops(
-    contacts: list[PlayerContact], provider: FrameProvider
-) -> list[np.ndarray | None]:
-    """Torso crop of each contact's player at its contact frame (for Stage 7
-    appearance scoring). None where no player was found."""
-    crops: list[np.ndarray | None] = []
-    for c in contacts:
-        if c.player_bbox is None:
-            crops.append(None)
-            continue
-        win = provider.window(c.candidate.frame_index, 0, 1)
-        crops.append(torso_crop(win[0][1], c.player_bbox) if win else None)
-    return crops
+def contact_crops(contacts: list[PlayerContact]) -> list[np.ndarray | None]:
+    """Torso crops captured during enrichment, for Stage 7 appearance scoring."""
+    return [c.torso_crop for c in contacts]
