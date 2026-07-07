@@ -42,6 +42,36 @@ def client():
     return server, server.app.test_client()
 
 
+def test_validate_video_rejects_empty_accepts_real(client, tmp_path):
+    server, _c = client
+    empty = tmp_path / "empty.mp4"
+    empty.write_bytes(b"")
+    assert server._validate_video(empty)                 # 0 bytes → error string
+    truncated = tmp_path / "part.mp4"
+    truncated.write_bytes(b"x" * 500)
+    assert server._validate_video(truncated)             # too small → error
+    # A real, readable clip validates clean (noise so it exceeds the size floor).
+    import cv2
+    import numpy as np
+    ok = tmp_path / "ok.mp4"
+    vw = cv2.VideoWriter(str(ok), cv2.VideoWriter_fourcc(*"mp4v"), 12, (160, 120))
+    rng = np.random.default_rng(0)
+    for _ in range(40):
+        vw.write(rng.integers(0, 255, (120, 160, 3), dtype=np.uint8))
+    vw.release()
+    assert ok.stat().st_size > 10_000
+    assert server._validate_video(ok) is None
+
+
+def test_teams_rejects_empty_upload(client):
+    server, c = client
+    import io
+    r = c.post("/api/teams", data={"video": (io.BytesIO(b""), "x.mp4")},
+               content_type="multipart/form-data")
+    assert r.status_code == 400
+    assert r.get_json().get("invalid_video") is True
+
+
 def test_v2_process_requires_token(client):
     server, c = client
     if not server.PIPELINE_V2_OK:

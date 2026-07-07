@@ -559,6 +559,39 @@ def _run_job(job_id: str, video_path: Path, my_team: str, out_dir: Path) -> None
                 _set_job(job_id, state="error", status="Error", stage="error", error=str(exc))
 
 
+def _validate_video(video_path: Path) -> str | None:
+    """Return a user-facing error if the video is empty/unreadable, else None.
+
+    Catches failed downloads/uploads (0-byte or truncated files) up front so the
+    app shows a clear message instead of silently falling back to default kit
+    colours and running a doomed analysis.
+    """
+    try:
+        size = video_path.stat().st_size
+    except OSError:
+        return "The uploaded file is missing. Please try uploading again."
+    if size < 10_000:
+        return (
+            f"This video file is empty or incomplete ({size} bytes). The download "
+            f"or upload didn't finish — please re-download the clip and try again."
+        )
+    if probe_video is None:
+        return None  # no decoder available to validate; let it proceed
+    try:
+        info = probe_video(str(video_path))
+    except Exception:
+        return (
+            "This file couldn't be opened as a video — it may be corrupt or an "
+            "unsupported format. Please re-export or re-download it and try again."
+        )
+    if int(info.get("frame_count") or 0) < 1 or float(info.get("duration_sec") or 0) <= 0:
+        return (
+            "This video has no readable frames — it may be corrupt. Please "
+            "re-export or re-download it and try again."
+        )
+    return None
+
+
 @app.route("/api/teams", methods=["POST"])
 def teams():
     """Upload video and return token + Team A/B slots for user selection."""
@@ -602,6 +635,14 @@ def teams():
     }, run_id="memory-fix-v1")
     # endregion
     TOKEN_META[token] = {"video": str(video_path)}
+
+    verr = _validate_video(video_path)
+    if verr:
+        _dbg_log("H1", "server.py:teams:invalid_video", "video validation failed", {
+            "token": token, "size": video_path.stat().st_size if video_path.exists() else 0,
+            "error": verr,
+        })
+        return jsonify({"error": verr, "invalid_video": True}), 400
 
     # region agent log
     _dbg_log("H1", "server.py:teams:entry", "teams upload", {
@@ -687,6 +728,10 @@ def process():
         TOKEN_META[token] = {"video": str(video_path)}
     else:
         return jsonify({"error": "No video or token in request."}), 400
+
+    verr = _validate_video(video_path)
+    if verr:
+        return jsonify({"error": verr, "invalid_video": True}), 400
 
     my_team = request.form.get("my_team", "team_a")
     if my_team not in ("team_a", "team_b"):
@@ -853,6 +898,10 @@ def v2_process():
     video_path = UPLOADS / f"{token}.mp4"
     if not video_path.exists():
         return jsonify({"error": "unknown or expired token"}), 400
+
+    verr = _validate_video(video_path)
+    if verr:
+        return jsonify({"error": verr, "invalid_video": True}), 400
 
     seed_taps = []
     raw = request.form.get("seed_taps")

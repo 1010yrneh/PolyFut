@@ -1208,7 +1208,11 @@ function uploadVideoForTeams(file, onUploadProgress) {
             try {
                 var data = JSON.parse(xhr.responseText);
                 if (xhr.status >= 200 && xhr.status < 300 && !data.error) resolve(data);
-                else reject(new Error(data.error || ('HTTP ' + xhr.status)));
+                else {
+                    var e = new Error(data.error || ('HTTP ' + xhr.status));
+                    e.invalidVideo = !!data.invalid_video;
+                    reject(e);
+                }
             } catch (e) {
                 reject(e);
             }
@@ -1592,9 +1596,20 @@ function startTeamDetection() {
         __dbgJs('H2', 'script.js:teams', 'teams fetch failed', {
             err: String(err && err.message ? err.message : err),
             protocol: location.protocol,
-            base: cvServerBase
+            base: cvServerBase,
+            invalidVideo: !!(err && err.invalidVideo)
         });
         // endregion
+        if (err && err.invalidVideo) {
+            // Empty/corrupt upload — go back to setup, don't run with defaults.
+            hideProcessTracker();
+            var teamScreen = document.getElementById('cv-team-screen');
+            if (teamScreen) teamScreen.classList.add('hidden');
+            var setup = document.getElementById('setup-screen');
+            if (setup) setup.classList.remove('hidden');
+            window.alert(err.message || 'This video could not be read. Please choose a valid video file and try again.');
+            return;
+        }
         cvToken = null;
         cvTeams = [
             { id: 'team_a', label: 'Team A', hex: '#e23b3b' },
