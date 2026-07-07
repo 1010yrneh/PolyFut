@@ -50,6 +50,10 @@ class PipelineV2Config:
     # resolution on a tiny object and is far cheaper than full-frame every step.
     roi_enabled: bool = True
     roi_half_px: float = 120.0  # half-width of the square ROI, in resized px
+    # On an ROI miss, re-scan the full frame this same step (vs coasting on the
+    # stale position). Essential for fast-ball / small-pitch / zoom-changing
+    # footage; near-free when the ROI usually hits (slow-ball wide shots).
+    roi_fallback_full: bool = True
 
     # --- Stage 3c: temporal hold / interpolation across YOLO misses ---
     # Reuses polyfut_video.pipeline.ball_smooth (BallSmoother).

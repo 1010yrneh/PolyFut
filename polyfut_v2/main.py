@@ -50,10 +50,9 @@ def trajectory_warnings(traj: BallTrajectory, cfg: PipelineV2Config) -> list[str
     if dr < cfg.min_detected_ratio_warn:
         warnings.append(
             f"low ball-detection recall: detected_ratio={dr:.3f} "
-            f"(< {cfg.min_detected_ratio_warn}). The default COCO ball model has "
-            f"near-zero recall on small/distant balls; plug in a soccer-specific "
-            f"ball model via cfg.ball_weights + cfg.ball_class_id. Every "
-            f"downstream v2 stage is starved until this is fixed."
+            f"(< {cfg.min_detected_ratio_warn}). The ball is missed on most frames "
+            f"— usually low-resolution footage, or a small/fast ball. Fewer touches "
+            f"will be found; higher-resolution video helps most."
         )
     return warnings
 

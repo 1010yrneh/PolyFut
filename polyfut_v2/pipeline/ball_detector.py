@@ -170,9 +170,12 @@ class YoloBallDetector:
                         bbox=map_bbox_to_full(det.bbox, offset),
                         conf=det.conf,
                     )
-            # ROI miss → let the caller's smoother hold; a full re-acquire will
-            # happen once the hold expires and last_center resets to None.
-            return None
+            # ROI miss → re-scan the whole frame this same step. On a small pitch
+            # or a camera zoom/angle change the ball can leave the ROI between
+            # samples; without this the tracker would coast on a stale position
+            # for several frames and recall collapses (fast-ball footage).
+            if not self.cfg.roi_fallback_full:
+                return None
 
-        # Cold path: full-frame re-acquire.
+        # Cold path (or ROI-miss fallback): full-frame re-acquire.
         return self._infer(frame, self.cfg.ball_full_imgsz)
