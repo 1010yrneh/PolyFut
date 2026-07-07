@@ -130,6 +130,12 @@ class PipelineV2Config:
     # Auto accept/hide thresholds (consumed by the Step 5 montage)
     autoaccept_conf: float = 0.85
     autohide_conf: float = 0.15
+    # Hard cap on the review queue: only the top-N highest-confidence "review"
+    # clips are shown; the rest are auto-hidden. Bounds the human review burden
+    # even when appearance can't discriminate (low-res footage → most touches
+    # land in the ambiguous middle). The montage is confidence-ranked, so these
+    # are the most-likely-you clips.
+    max_review: int = 80
 
     # --- Stage 8: review montage ---
     montage_clip_pad_sec: float = 1.0    # ±1s around the contact → ~2s review clips

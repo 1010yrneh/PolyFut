@@ -68,6 +68,31 @@ def _synthetic_ball_enabled() -> bool:
     return os.environ.get("POLYFUT_V2_SYNTH_BALL", "") not in ("", "0", "false", "False")
 
 
+def _footage_warnings(info: dict, cfg: PipelineV2Config) -> list[str]:
+    """Warn about footage that will give poor results, with concrete numbers."""
+    w = int(info.get("width") or 0)
+    h = int(info.get("height") or 0)
+    dur = float(info.get("duration_sec") or 0.0)
+    out: list[str] = []
+    if h and h < 540:
+        out.append(
+            f"Low-resolution footage ({w}x{h}). At this size a soccer ball is only "
+            f"a few pixels and each player ~15px, so ball-detection recall is low "
+            f"(typically 15-50%) and the appearance filter usually can't tell you "
+            f"apart from teammates, so most touches end up in review. 720p "
+            f"(1280x720) or higher gives dramatically better results.")
+    if dur >= 30 * 60:
+        mins = dur / 60.0
+        touches = int(mins * 18)  # ball is touched ~18x/min across all 22 players
+        out.append(
+            f"Long footage (~{mins:.0f} min). The ball is touched ~{touches} times "
+            f"across all players here; v2 analyses the whole thing but keeps only "
+            f"the {cfg.max_candidates} strongest candidates and shows at most "
+            f"{cfg.max_review} clips for review. Processing time scales with "
+            f"length (roughly {mins * 1.7 / 60:.1f}h for this clip on a CPU).")
+    return out
+
+
 def _apply_soccer_model(cfg: PipelineV2Config) -> str | None:
     """Point the config at the soccer-specific ball+player model, preferring the
     OpenVINO export (≈6x faster on Intel CPUs). Downloads/exports on first use.
@@ -166,7 +191,8 @@ def run_to_montage(
     )
     traj = res["trajectory"]
     duration = res["info"].get("duration_sec")
-    warnings = trajectory_warnings(traj, cfg)
+    warnings = _footage_warnings(res["info"], cfg)
+    warnings.extend(trajectory_warnings(traj, cfg))
     if model_warning:
         warnings.insert(0, model_warning)
 

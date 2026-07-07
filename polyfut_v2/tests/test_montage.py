@@ -65,6 +65,18 @@ def test_apply_decisions_and_confirmed_times():
     assert confirmed_me_times(m) == [5.0, 9.0]
 
 
+def test_review_cap_limits_review_queue():
+    cfg = PipelineV2Config(max_review=2)
+    # 5 mid-confidence contacts → all would be "review" without the cap.
+    scored = [_scored(t=i, conf=0.5 - i * 0.02) for i in range(5)]
+    m = build_montage(scored, cfg)
+    reviews = [it for it in m if it.status == "review"]
+    hidden = [it for it in m if it.status == "auto_hide"]
+    assert len(reviews) == 2                       # capped to top-2 by confidence
+    assert len(hidden) == 3                         # the rest demoted to auto-hide
+    assert min(it.confidence for it in reviews) > max(it.confidence for it in hidden)
+
+
 def test_apply_decisions_rejects_bad_value():
     m = build_montage([_scored(1, 0.5)], CFG)
     with pytest.raises(ValueError):

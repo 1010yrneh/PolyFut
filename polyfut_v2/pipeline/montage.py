@@ -93,6 +93,19 @@ def build_montage(
             crop=crop, confidence=s.confidence,
             status=status, decision=_default_decision(status),
         ))
+
+    # Cap the review queue to the top-N by confidence (items are already
+    # confidence-descending). Excess review items are auto-hidden so the human
+    # never faces hundreds of clips when appearance can't discriminate.
+    if cfg.max_review and cfg.max_review > 0:
+        reviewed = 0
+        for it in items:
+            if it.status != REVIEW:
+                continue
+            reviewed += 1
+            if reviewed > cfg.max_review:
+                it.status = AUTO_HIDE
+                it.decision = NOT_ME
     return items
 
 
