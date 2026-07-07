@@ -69,18 +69,26 @@ def _synthetic_ball_enabled() -> bool:
 
 
 def _apply_soccer_model(cfg: PipelineV2Config) -> str | None:
-    """Point the config at the soccer-specific ball+player model (downloading it
-    on first use). Returns a warning string if it falls back to COCO."""
+    """Point the config at the soccer-specific ball+player model, preferring the
+    OpenVINO export (≈6x faster on Intel CPUs). Downloads/exports on first use.
+    Returns a warning string if it degrades to PyTorch or COCO."""
     from polyfut_v2 import ball_model as bm
 
-    model = bm.ensure_soccer_model()
+    ov = bm.ensure_soccer_model_openvino()
+    model, warning = (ov, None) if ov is not None else (
+        bm.ensure_soccer_model(),
+        "soccer model running on PyTorch (OpenVINO unavailable) — several times "
+        "slower on this CPU.",
+    )
     if model is not None:
         cfg.ball_weights = str(model)
         cfg.ball_class_id = bm.SOCCER_BALL_CLASS
         cfg.player_weights = str(model)
         cfg.player_class_id = bm.SOCCER_PLAYER_CLASS
-        cfg.ball_full_imgsz = 1280  # small ball → needs resolution on re-acquire
-        return None
+        # OpenVINO export is fixed at this size; keep all passes consistent.
+        cfg.ball_imgsz = cfg.ball_full_imgsz = bm.SOCCER_MODEL_IMGSZ
+        cfg.player_imgsz = bm.SOCCER_MODEL_IMGSZ
+        return warning
     return ("soccer ball model unavailable (offline?) — using the general COCO "
             "model, which barely detects a soccer ball. Real touches will be sparse.")
 

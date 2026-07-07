@@ -15,10 +15,11 @@ from pathlib import Path
 class PipelineV2Config:
     # --- Stage 1: decode ---
     target_width: int = 640
-    # Ball is analysed on every sampled frame (Stage 3, the continuous cost).
-    # 3 → ~10 analysed fps at 30 fps source: enough temporal resolution for the
-    # Stage 4 kinematics without paying full frame rate.
-    ball_sample_every_n: int = 3
+    # Ball is analysed on every sampled frame (Stage 3, the continuous cost — the
+    # single biggest runtime term). 4 → ~7.5 analysed fps at 30 fps source: still
+    # fine for Stage 4 kinematics, and keeps a full 94-min match to ~2.7h with the
+    # OpenVINO soccer model on a CPU (vs ~18h at every_n=3 on PyTorch).
+    ball_sample_every_n: int = 4
     # Coarse stride for the cheap shot-filter pass.
     shot_filter_sample_every_n: int = 10
 

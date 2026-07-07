@@ -22,6 +22,8 @@ SOCCER_MODEL_URL = (
     "resolve/main/best.pt"
 )
 SOCCER_MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "soccer_uisikdag.pt"
+SOCCER_MODEL_OV_DIR = SOCCER_MODEL_PATH.parent / "soccer_uisikdag_openvino_model"
+SOCCER_MODEL_IMGSZ = 640  # OpenVINO export is a fixed input size
 
 # Class ids within the soccer model.
 SOCCER_BALL_CLASS = 0
@@ -49,5 +51,29 @@ def ensure_soccer_model(download: bool = True) -> Path | None:
         urllib.request.urlretrieve(SOCCER_MODEL_URL, tmp)
         tmp.replace(SOCCER_MODEL_PATH)
         return SOCCER_MODEL_PATH
+    except Exception:
+        return None
+
+
+def _ov_ready() -> bool:
+    return SOCCER_MODEL_OV_DIR.is_dir() and any(SOCCER_MODEL_OV_DIR.glob("*.xml"))
+
+
+def ensure_soccer_model_openvino(download: bool = True) -> Path | None:
+    """Return the OpenVINO export of the soccer model (exporting from the .pt on
+    first use). OpenVINO is ~6x faster than PyTorch for YOLO on Intel CPUs — the
+    difference between an all-day run and a couple of hours. Returns None if it
+    can't be produced (offline / openvino not installed); callers fall back to
+    the .pt (or COCO).
+    """
+    if _ov_ready():
+        return SOCCER_MODEL_OV_DIR
+    pt = ensure_soccer_model(download=download)
+    if pt is None:
+        return None
+    try:
+        from ultralytics import YOLO
+        YOLO(str(pt)).export(format="openvino", imgsz=SOCCER_MODEL_IMGSZ, half=False)
+        return SOCCER_MODEL_OV_DIR if _ov_ready() else None
     except Exception:
         return None
