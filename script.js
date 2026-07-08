@@ -1571,6 +1571,14 @@ function startTeamDetection() {
                 cvTeams = data.teams || [];
                 cvSegmentsAreDemo = !!data.demo;
                 saveCvSession({ token: cvToken, teams: cvTeams });
+                // v2: start compiling the soccer model now so the first seed clip
+                // is fast by the time the user finishes picking their team.
+                if (cvV2Mode && cvToken) {
+                    fetch(cvApiUrl('/api/v2/warm'), {
+                        method: 'POST', headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ token: cvToken }),
+                    }).catch(function () {});
+                }
                 // region agent log
                 __dbgJs('H1', 'script.js:teams', 'teams response', {
                     demo: !!data.demo,
@@ -1690,121 +1698,234 @@ function pickTeam(i) {
     startCvAnalysis();
 }
 
-// --- 4a. v2 SEED SCREEN: tap yourself in several frames ---
-// Produces seed taps [{t_sec, nx, ny}] (nx/ny normalized 0..1) for /api/v2/process.
+// --- 4a. v2 SEED SCREEN: tap yourself on a tracked node in a 3s enhanced clip ---
+// Each detected player gets a marker that follows them; tapping one turns that
+// player's whole-clip track into seed taps [{t_sec, nx, ny}] for /api/v2/process.
 let cvV2Mode = false;
 let __v2Seed = null;
+let __v2SeedRAF = null;
 
 function showV2SeedScreen(url, duration) {
-    const dur = (isFinite(duration) && duration > 0) ? duration : 0;
-    const fracs = [0.10, 0.35, 0.60, 0.85];
-    const times = fracs.map(function (f) {
-        return dur > 0 ? Math.max(0.1, Math.min(dur - 0.1, dur * f)) : f * 60;
-    });
-    __v2Seed = { url: url, times: times, idx: 0, taps: [],
-                 status: times.map(function () { return 'pending'; }), tap: null };
-    document.getElementById('cv-seed-screen').classList.remove('hidden');
-    const vid = document.getElementById('cv-seed-video');
-    vid.src = url;
-    __v2SeedShowFrame();
-}
-
-function __v2SeedRenderProgress() {
-    const el = document.getElementById('cv-seed-progress');
-    if (!el || !__v2Seed) return;
-    let html = '';
-    for (let i = 0; i < __v2Seed.times.length; i++) {
-        let cls = 'cv-seed-dot';
-        if (__v2Seed.status[i] === 'done') cls += ' done';
-        else if (__v2Seed.status[i] === 'skipped') cls += ' skipped';
-        if (i === __v2Seed.idx) cls += ' active';
-        html += '<span class="' + cls + '"></span>';
-    }
-    el.innerHTML = html + '<span class="cv-seed-count">Frame ' +
-        (__v2Seed.idx + 1) + ' of ' + __v2Seed.times.length + '</span>';
-}
-
-function __v2SeedShowFrame() {
-    const s = __v2Seed;
-    if (!s) return;
-    const vid = document.getElementById('cv-seed-video');
-    const canvas = document.getElementById('cv-seed-canvas');
-    const nextBtn = document.getElementById('cv-seed-next');
-    const hint = document.getElementById('cv-seed-hint');
-    s.tap = null;
-    if (nextBtn) {
-        nextBtn.disabled = true;
-        nextBtn.innerText = (s.idx >= s.times.length - 1) ? 'Find my touches' : 'Next';
-    }
-    if (hint) hint.innerText = 'Tap yourself to place the marker — or skip if you\'re not on screen.';
-    __v2SeedRenderProgress();
-
-    const t = s.times[s.idx];
-    function onSeeked() {
-        vid.removeEventListener('seeked', onSeeked);
-        const nW = vid.videoWidth || 1;
-        const nH = vid.videoHeight || 1;
-        const wrapW = canvas.parentElement.clientWidth || nW;
-        const scale = wrapW / nW;
-        canvas.width = nW * scale;
-        canvas.height = nH * scale;
-        canvas.getContext('2d').drawImage(vid, 0, 0, canvas.width, canvas.height);
-    }
-    function seek() { try { vid.currentTime = t; } catch (e) {} }
-    vid.addEventListener('seeked', onSeeked);
-    if (vid.readyState >= 1) seek();
-    else vid.addEventListener('loadeddata', function ol() {
-        vid.removeEventListener('loadeddata', ol); seek();
-    });
-
-    canvas.onclick = function (e) {
-        const rect = canvas.getBoundingClientRect();
-        const cx = e.clientX - rect.left;
-        const cy = e.clientY - rect.top;
-        s.tap = { t_sec: t, nx: cx / canvas.width, ny: cy / canvas.height };
-        const ctx = canvas.getContext('2d');
-        ctx.drawImage(vid, 0, 0, canvas.width, canvas.height);
-        ctx.strokeStyle = '#30ff8f';
-        ctx.lineWidth = 3;
-        ctx.beginPath();
-        ctx.arc(cx, cy, 14, 0, Math.PI * 2);
-        ctx.stroke();
-        if (nextBtn) nextBtn.disabled = false;
-        if (hint) hint.innerText = 'Got it. Tap again to move the marker, or continue.';
+    __v2Seed = {
+        reroll: 0, index: 0, moments: [], nMoments: 4,
+        clip: null, cache: {},           // cache key `${reroll}_${index}` -> clip
+        selectedTrackId: null, selectedTaps: null, selectedFromKey: null,
     };
+    document.getElementById('cv-seed-screen').classList.remove('hidden');
+    __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
 }
 
-function __v2SeedAdvance(recordTap) {
+function __v2SeedApi(path) { return cvApiUrl(path); }
+
+function __v2SeedLoadIndex(then) {
+    const s = __v2Seed;
+    if (!s || !cvToken) { if (then) then(); return; }
+    fetch(__v2SeedApi('/api/v2/seed_clips_index'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cvToken, reroll: s.reroll }),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data && data.moments) { s.moments = data.moments; s.nMoments = data.moments.length; }
+        if (then) then();
+    }).catch(function () { if (then) then(); });
+}
+
+function __v2SeedRenderClipNav() {
+    const el = document.getElementById('cv-seed-clipnav');
+    const s = __v2Seed;
+    if (!el || !s) return;
+    el.innerHTML = '';
+    for (let i = 0; i < s.nMoments; i++) {
+        const dot = document.createElement('button');
+        dot.type = 'button';
+        dot.className = 'cv-seed-clip-dot' + (i === s.index ? ' active' : '') +
+            (s.cache[s.reroll + '_' + i] && s.cache[s.reroll + '_' + i].__picked ? ' picked' : '');
+        dot.title = 'Clip ' + (i + 1);
+        dot.onclick = (function (idx) { return function () { __v2SeedLoadClip(idx); }; })(i);
+        el.appendChild(dot);
+    }
+}
+
+function __v2SeedSetLoading(on, msg) {
+    const el = document.getElementById('cv-seed-loading');
+    if (!el) return;
+    el.textContent = msg || 'Enhancing clip…';
+    el.classList.toggle('hidden', !on);
+}
+
+function __v2SeedLoadClip(index) {
     const s = __v2Seed;
     if (!s) return;
-    if (recordTap && s.tap) {
-        s.taps.push({ t_sec: s.tap.t_sec, nx: s.tap.nx, ny: s.tap.ny });
-        s.status[s.idx] = 'done';
-    } else {
-        s.status[s.idx] = 'skipped';
+    s.index = index;
+    s.selectedTrackId = null;
+    s.selectedTaps = null;
+    const nextBtn = document.getElementById('cv-seed-next');
+    if (nextBtn) nextBtn.disabled = true;
+    __v2SeedRenderClipNav();
+    __v2SeedStopAnim();
+    document.getElementById('cv-seed-nodes').innerHTML = '';
+
+    const key = s.reroll + '_' + index;
+    const hint = document.getElementById('cv-seed-hint');
+    const cached = s.cache[key];
+    if (cached) { __v2SeedShowClip(cached, key); __v2SeedPrefetchNext(); return; }
+
+    __v2SeedSetLoading(true, 'Enhancing clip ' + (index + 1) + '…');
+    if (hint) hint.innerText = 'Preparing an enhanced clip and tracking the players…';
+    fetch(__v2SeedApi('/api/v2/seed_clip'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cvToken, index: index, reroll: s.reroll }),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+        if (!data || data.error || !data.clip_url) {
+            throw new Error((data && data.error) || 'clip failed');
+        }
+        s.cache[key] = data;
+        // Only render if the user hasn't navigated away while we loaded.
+        if (s.reroll + '_' + s.index === key) { __v2SeedShowClip(data, key); }
+        __v2SeedPrefetchNext();
+    }).catch(function () {
+        __v2SeedSetLoading(false);
+        if (hint) hint.innerText = 'Could not build this clip. Try another, or shuffle.';
+    });
+}
+
+function __v2SeedPrefetchNext() {
+    const s = __v2Seed;
+    if (!s) return;
+    const nxt = s.index + 1;
+    if (nxt >= s.nMoments) return;
+    const key = s.reroll + '_' + nxt;
+    if (s.cache[key]) return;
+    fetch(__v2SeedApi('/api/v2/seed_clip'), {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ token: cvToken, index: nxt, reroll: s.reroll }),
+    }).then(function (r) { return r.json(); }).then(function (data) {
+        if (data && data.clip_url) s.cache[s.reroll + '_' + nxt] = data;
+    }).catch(function () {});
+}
+
+function __v2SeedShowClip(clip, key) {
+    const s = __v2Seed;
+    s.clip = clip;
+    const vid = document.getElementById('cv-seed-video');
+    const hint = document.getElementById('cv-seed-hint');
+    __v2SeedSetLoading(false);
+    __v2SeedRenderClipNav();
+    const n = (clip.tracklets || []).length;
+    if (hint) {
+        hint.innerText = n
+            ? 'Tap the marker on you. It follows you as the clip plays.'
+            : 'No players tracked in this clip — try another or shuffle.';
     }
-    s.idx += 1;
-    if (s.idx >= s.times.length) { __v2SeedFinish(); return; }
-    __v2SeedShowFrame();
+    // Build a node element per tracklet.
+    const nodes = document.getElementById('cv-seed-nodes');
+    nodes.innerHTML = '';
+    (clip.tracklets || []).forEach(function (tr) {
+        const node = document.createElement('div');
+        node.className = 'cv-seed-node';
+        node.dataset.trackId = String(tr.id);
+        node.style.display = 'none';
+        node.onclick = function () { __v2SeedPickNode(tr, key); };
+        nodes.appendChild(node);
+    });
+    vid.src = cvApiUrl(clip.clip_url);
+    vid.currentTime = 0;
+    const p = vid.play();
+    if (p && p.catch) p.catch(function () {});
+    __v2SeedStartAnim();
+}
+
+// Interpolate a tracklet's normalized position at clip-local time t.
+function __v2SeedPosAt(points, t) {
+    if (!points || !points.length) return null;
+    if (t <= points[0].t) return points[0].t - t < 0.4 ? points[0] : null;
+    const last = points[points.length - 1];
+    if (t >= last.t) return t - last.t < 0.4 ? last : null;
+    for (let i = 0; i < points.length - 1; i++) {
+        const a = points[i], b = points[i + 1];
+        if (t >= a.t && t <= b.t) {
+            const f = (b.t - a.t) > 1e-6 ? (t - a.t) / (b.t - a.t) : 0;
+            return { nx: a.nx + (b.nx - a.nx) * f, ny: a.ny + (b.ny - a.ny) * f };
+        }
+    }
+    return null;
+}
+
+function __v2SeedStartAnim() {
+    __v2SeedStopAnim();
+    const vid = document.getElementById('cv-seed-video');
+    const nodes = document.getElementById('cv-seed-nodes');
+    function frame() {
+        const s = __v2Seed;
+        if (!s || !s.clip) return;
+        const t = vid.currentTime || 0;
+        const els = nodes.children;
+        const tracks = s.clip.tracklets || [];
+        for (let i = 0; i < tracks.length && i < els.length; i++) {
+            const pos = __v2SeedPosAt(tracks[i].points, t);
+            const el = els[i];
+            if (!pos) { el.style.display = 'none'; continue; }
+            el.style.display = 'block';
+            el.style.left = (pos.nx * 100) + '%';
+            el.style.top = (pos.ny * 100) + '%';
+        }
+        __v2SeedRAF = requestAnimationFrame(frame);
+    }
+    __v2SeedRAF = requestAnimationFrame(frame);
+}
+
+function __v2SeedStopAnim() {
+    if (__v2SeedRAF) { cancelAnimationFrame(__v2SeedRAF); __v2SeedRAF = null; }
+}
+
+function __v2SeedPickNode(tr, key) {
+    const s = __v2Seed;
+    if (!s) return;
+    s.selectedTrackId = tr.id;
+    s.selectedTaps = tr.taps || [];
+    s.selectedFromKey = key;
+    if (s.cache[key]) s.cache[key].__picked = true;
+    const nodes = document.getElementById('cv-seed-nodes').children;
+    for (let i = 0; i < nodes.length; i++) {
+        nodes[i].classList.toggle('selected',
+            nodes[i].dataset.trackId === String(tr.id));
+    }
+    const nextBtn = document.getElementById('cv-seed-next');
+    if (nextBtn) nextBtn.disabled = !(s.selectedTaps && s.selectedTaps.length);
+    const hint = document.getElementById('cv-seed-hint');
+    if (hint) hint.innerText = 'Got you — built from ' + (s.selectedTaps || []).length +
+        ' views across the clip. Tap another marker to change, or find your touches.';
+    __v2SeedRenderClipNav();
+}
+
+function __v2SeedReroll() {
+    const s = __v2Seed;
+    if (!s) return;
+    s.reroll += 1;
+    s.selectedTrackId = null;
+    s.selectedTaps = null;
+    __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
+}
+
+function __v2SeedNextClip() {
+    const s = __v2Seed;
+    if (!s) return;
+    __v2SeedLoadClip((s.index + 1) % Math.max(1, s.nMoments));
 }
 
 function __v2SeedFinish() {
     const s = __v2Seed;
-    const taps = s ? s.taps : [];
-    document.getElementById('cv-seed-screen').classList.add('hidden');
+    const taps = (s && s.selectedTaps) ? s.selectedTaps : [];
     if (taps.length === 0) {
         const ok = window.confirm(
-            'You didn\'t tap yourself in any frame.\n\n' +
+            'You haven\'t selected yourself yet.\n\n' +
             'Analysis still runs, but without an appearance model it can\'t rank ' +
             'your touches as well — you\'ll just review more clips. Continue anyway?');
-        if (!ok) {
-            document.getElementById('cv-seed-screen').classList.remove('hidden');
-            s.idx = 0;
-            s.status = s.times.map(function () { return 'pending'; });
-            __v2SeedShowFrame();
-            return;
-        }
+        if (!ok) return;
     }
+    __v2SeedStopAnim();
+    var vid = document.getElementById('cv-seed-video');
+    if (vid) { try { vid.pause(); } catch (e) {} }
+    document.getElementById('cv-seed-screen').classList.add('hidden');
     startCvV2Analysis(taps);
 }
 
@@ -1833,13 +1954,18 @@ document.addEventListener('DOMContentLoaded', function () {
     });
     if (procCancel) procCancel.addEventListener('click', cancelCvAnalysis);
 
-    // v2 multi-frame seed controls
+    // v2 tracked-node seed controls
     var seedNext = document.getElementById('cv-seed-next');
     var seedSkip = document.getElementById('cv-seed-skip');
+    var seedReroll = document.getElementById('cv-seed-reroll');
     var seedCancel = document.getElementById('cv-seed-cancel');
-    if (seedNext) seedNext.addEventListener('click', function () { __v2SeedAdvance(true); });
-    if (seedSkip) seedSkip.addEventListener('click', function () { __v2SeedAdvance(false); });
+    if (seedNext) seedNext.addEventListener('click', function () { __v2SeedFinish(); });
+    if (seedSkip) seedSkip.addEventListener('click', function () { __v2SeedNextClip(); });
+    if (seedReroll) seedReroll.addEventListener('click', function () { __v2SeedReroll(); });
     if (seedCancel) seedCancel.addEventListener('click', function () {
+        __v2SeedStopAnim();
+        var sv = document.getElementById('cv-seed-video');
+        if (sv) { try { sv.pause(); } catch (e) {} }
         document.getElementById('cv-seed-screen').classList.add('hidden');
         hideProcessTracker();
         var setupScreen = document.getElementById('setup-screen');

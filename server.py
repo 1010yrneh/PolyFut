@@ -47,7 +47,14 @@ except Exception as exc:
 # v2 (ball-anchored, single-player) pipeline — experimental, alongside v1.
 try:
     from polyfut_v2.config import PipelineV2Config
-    from polyfut_v2.app_service import hotspots_from_decisions, run_to_montage
+    from polyfut_v2.app_service import (
+        build_one_seed_clip,
+        build_seed_clips_index,
+        hotspots_from_decisions,
+        run_to_montage,
+        taps_from_tracklet,
+        warm_seed_detector,
+    )
     PIPELINE_V2_OK = True
     PIPELINE_V2_ERR = ""
 except Exception as exc:  # pragma: no cover
@@ -930,6 +937,127 @@ def v2_process():
         target=_run_v2_job, args=(job_id, video_path, seed_taps, job_dir), daemon=False,
     ).start()
     return jsonify({"job_id": job_id, "token": token, "pipeline_version": "v2"})
+
+
+# --- seed clips: enhanced 3s clips with tracked, clickable player nodes ------ #
+
+_SEED_CLIP_LOCKS: dict[str, threading.Lock] = {}
+_SEED_CLIP_LOCKS_GUARD = threading.Lock()
+
+
+def _seed_clip_lock(key: str) -> threading.Lock:
+    with _SEED_CLIP_LOCKS_GUARD:
+        lk = _SEED_CLIP_LOCKS.get(key)
+        if lk is None:
+            lk = _SEED_CLIP_LOCKS[key] = threading.Lock()
+        return lk
+
+
+def _seed_token_video(token: str) -> tuple[Path | None, object | None]:
+    import re
+    if not re.fullmatch(r"[a-f0-9]{12}", token or ""):
+        return None, (jsonify({"error": "invalid token"}), 400)
+    video_path = UPLOADS / f"{token}.mp4"
+    if not video_path.exists():
+        return None, (jsonify({"error": "unknown or expired token"}), 400)
+    return video_path, None
+
+
+_SEED_WARM_STARTED = False
+_SEED_WARM_LOCK = threading.Lock()
+
+
+@app.route("/api/v2/warm", methods=["POST"])
+def v2_warm():
+    """Kick off soccer-model compile in the background so the first seed clip is
+    fast. Fire-and-forget; returns immediately. Idempotent per process."""
+    global _SEED_WARM_STARTED
+    if not PIPELINE_V2_OK:
+        return jsonify({"ok": False, "reason": "v2 unavailable"}), 200
+    with _SEED_WARM_LOCK:
+        if _SEED_WARM_STARTED:
+            return jsonify({"ok": True, "already": True})
+        _SEED_WARM_STARTED = True
+
+    def _warm():
+        try:
+            warm_seed_detector(PipelineV2Config(
+                ball_weights=WEIGHTS, player_weights=WEIGHTS, device=DEVICE))
+        except Exception:  # noqa: BLE001
+            traceback.print_exc()
+
+    threading.Thread(target=_warm, daemon=True).start()
+    return jsonify({"ok": True, "warming": True})
+
+
+@app.route("/api/v2/seed_clips_index", methods=["POST"])
+def v2_seed_clips_index():
+    """Cheap: the 4 moment timestamps for a reroll set (no clip building)."""
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    payload = request.get_json(silent=True) or {}
+    video_path, err = _seed_token_video(payload.get("token", ""))
+    if err:
+        return err
+    reroll = int(payload.get("reroll", 0) or 0)
+    return jsonify({"ok": True, "token": payload.get("token"),
+                    **build_seed_clips_index(str(video_path), reroll)})
+
+
+@app.route("/api/v2/seed_clip", methods=["POST"])
+def v2_seed_clip():
+    """Build (or return cached) one enhanced seed clip + tracked player nodes."""
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    payload = request.get_json(silent=True) or {}
+    token = payload.get("token", "")
+    video_path, err = _seed_token_video(token)
+    if err:
+        return err
+    verr = _validate_video(video_path)
+    if verr:
+        return jsonify({"error": verr, "invalid_video": True}), 400
+
+    index = int(payload.get("index", 0) or 0)
+    reroll = int(payload.get("reroll", 0) or 0)
+    seed_dir = EXPORTS / "seed" / token
+    seed_dir.mkdir(parents=True, exist_ok=True)
+    name = f"clip_{reroll}_{index}"
+    clip_path = seed_dir / f"{name}.mp4"
+    meta_path = seed_dir / f"{name}.json"
+
+    with _seed_clip_lock(f"{token}:{name}"):
+        if clip_path.exists() and meta_path.exists():
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+        else:
+            cfg = PipelineV2Config(ball_weights=WEIGHTS, player_weights=WEIGHTS, device=DEVICE)
+            try:
+                meta = build_one_seed_clip(
+                    str(video_path), index, str(clip_path), reroll=reroll, cfg=cfg)
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+            if meta is None:
+                return jsonify({"error": "could not read that moment of the video"}), 422
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+
+    return jsonify({
+        "ok": True, "token": token,
+        "clip_url": f"/api/v2/seed_clip_file/{token}/{name}.mp4",
+        **meta,
+    })
+
+
+@app.route("/api/v2/seed_clip_file/<token>/<name>", methods=["GET"])
+def v2_seed_clip_file(token: str, name: str):
+    import re
+    if not re.fullmatch(r"[a-f0-9]{12}", token or "") or \
+       not re.fullmatch(r"clip_\d+_\d+\.mp4", name or ""):
+        return jsonify({"error": "invalid path"}), 400
+    seed_dir = EXPORTS / "seed" / token
+    if not (seed_dir / name).is_file():
+        return jsonify({"error": "clip not found"}), 404
+    return send_from_directory(str(seed_dir), name, mimetype="video/mp4")
 
 
 @app.route("/api/v2/decisions/<job_id>", methods=["POST"])

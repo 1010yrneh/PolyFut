@@ -159,6 +159,94 @@ def build_seed_from_tap_specs(
     )
 
 
+_SEED_DETECTOR_CACHE: dict[str, object] = {}
+
+
+def _seed_player_detector(cfg: PipelineV2Config):
+    """A player detector for the seed step, cached per-weights so the OpenVINO
+    model is compiled once and reused across seed-clip requests."""
+    key = f"{cfg.player_weights}|{cfg.player_imgsz}|{cfg.device}"
+    det = _SEED_DETECTOR_CACHE.get(key)
+    if det is None:
+        det = YoloPlayerDetector(cfg)
+        _ = det.model  # force load/compile now
+        _SEED_DETECTOR_CACHE[key] = det
+    return det
+
+
+def warm_seed_detector(cfg: PipelineV2Config | None = None) -> None:
+    """Compile/load the soccer player model ahead of time (≈150s one-time on this
+    CPU) so the first seed clip doesn't pay for it. Safe to call repeatedly."""
+    cfg = cfg or PipelineV2Config()
+    _apply_soccer_model(cfg)
+    _seed_player_detector(cfg)
+
+
+def build_seed_clips_index(video_path: str, reroll: int = 0) -> dict:
+    """Return just the moment timestamps for a reroll set (cheap — no detection),
+    so the UI can list the clips before any are built."""
+    from polyfut_v2 import seed_clips as sc
+
+    info = probe_video(video_path)
+    dur = float(info.get("duration_sec") or 0.0)
+    return {"reroll": reroll, "duration_sec": dur,
+            "moments": sc.default_moments(dur, reroll)}
+
+
+def build_one_seed_clip(
+    video_path: str,
+    index: int,
+    out_path: str,
+    *,
+    reroll: int = 0,
+    cfg: PipelineV2Config | None = None,
+) -> dict | None:
+    """Build a single enhanced seed clip with tracked player nodes.
+
+    ``index`` selects which moment (0-3) of the ``reroll`` set. Writes the
+    enhanced clip to ``out_path`` and returns metadata + tracklets, or None if
+    the moment can't be read. Uses the soccer player model (cached).
+    """
+    from polyfut_v2 import seed_clips as sc
+
+    cfg = cfg or PipelineV2Config()
+    _apply_soccer_model(cfg)  # so nodes use the real soccer player model
+    detector = _seed_player_detector(cfg)
+
+    idx_info = build_seed_clips_index(video_path, reroll)
+    moments = idx_info["moments"]
+    if not moments:
+        return None
+    index = max(0, min(index, len(moments) - 1))
+    t_center = moments[index]
+
+    clip = sc.build_seed_clip(video_path, t_center, detector, out_path)
+    if clip is None:
+        return None
+    # Precompute the seed taps for each node so the UI can build a gallery from a
+    # click without re-deriving them (coords map back to the original video).
+    start = clip["start_sec"]
+    for tr in clip["tracklets"]:
+        tr["taps"] = taps_from_tracklet(tr, start)
+    clip.update(index=index, reroll=reroll, t_center=t_center,
+                moments=moments, n_moments=len(moments))
+    return clip
+
+
+def taps_from_tracklet(tracklet: dict, start_sec: float, max_taps: int = 8) -> list[dict]:
+    """Convert a selected player's tracklet into seed tap specs spread across the
+    clip → a multi-crop appearance gallery. Normalized coords map back to the
+    original video, so ``t_sec`` is the clip start plus the point's local time."""
+    pts = tracklet.get("points") or []
+    if not pts:
+        return []
+    if len(pts) > max_taps:
+        step = len(pts) / float(max_taps)
+        pts = [pts[int(i * step)] for i in range(max_taps)]
+    return [{"t_sec": round(start_sec + p["t"], 3), "nx": p["nx"], "ny": p["ny"]}
+            for p in pts]
+
+
 def run_to_montage(
     video_path: str,
     *,

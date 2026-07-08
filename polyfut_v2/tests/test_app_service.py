@@ -63,6 +63,44 @@ def test_validate_video_rejects_empty_accepts_real(client, tmp_path):
     assert server._validate_video(ok) is None
 
 
+def test_seed_clips_index_returns_moments(client, tmp_path):
+    server, c = client
+    if not server.PIPELINE_V2_OK:
+        pytest.skip("v2 pipeline not importable")
+    import cv2
+    import numpy as np
+    token = "a1b2c3d4e5f6"
+    vp = server.UPLOADS / f"{token}.mp4"
+    vp.parent.mkdir(parents=True, exist_ok=True)
+    vw = cv2.VideoWriter(str(vp), cv2.VideoWriter_fourcc(*"mp4v"), 20, (160, 120))
+    rng = np.random.default_rng(1)
+    for _ in range(120):  # ~6s clip
+        vw.write(rng.integers(0, 255, (120, 160, 3), dtype=np.uint8))
+    vw.release()
+    try:
+        r = c.post("/api/v2/seed_clips_index", json={"token": token, "reroll": 0})
+        assert r.status_code == 200
+        data = r.get_json()
+        assert data["ok"] is True
+        assert len(data["moments"]) == 4
+        assert data["duration_sec"] > 0
+        # reroll gives a different set
+        r2 = c.post("/api/v2/seed_clips_index", json={"token": token, "reroll": 1})
+        assert r2.get_json()["moments"] != data["moments"]
+    finally:
+        vp.unlink(missing_ok=True)
+
+
+def test_seed_clip_rejects_bad_token(client):
+    server, c = client
+    if not server.PIPELINE_V2_OK:
+        pytest.skip("v2 pipeline not importable")
+    r = c.post("/api/v2/seed_clip", json={"token": "zzz", "index": 0})
+    assert r.status_code == 400
+    r2 = c.post("/api/v2/seed_clip_file/zzz/clip_0_0.mp4")  # wrong method / bad token
+    assert r2.status_code in (400, 404, 405)
+
+
 def test_teams_rejects_empty_upload(client):
     server, c = client
     import io
