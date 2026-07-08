@@ -571,6 +571,7 @@ html, body {
     line-height: 1.4;
 }
 .cv-seed-loading.hidden { display: none; }
+.cv-seed-loading-msg { text-align: center; max-width: 88%; line-height: 1.5; }
 
 .cv-seed-hint {
     color: var(--fifa-green);

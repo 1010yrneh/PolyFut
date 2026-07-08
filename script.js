@@ -1704,6 +1704,8 @@ function pickTeam(i) {
 let cvV2Mode = false;
 let __v2Seed = null;
 let __v2SeedRAF = null;
+let __v2SeedBuilt = false;      // has any clip finished building this session?
+let __v2SeedLoadTimer = null;   // live elapsed-time ticker while a clip builds
 
 function showV2SeedScreen(url, duration) {
     __v2Seed = {
@@ -1748,8 +1750,35 @@ function __v2SeedRenderClipNav() {
 function __v2SeedSetLoading(on, msg) {
     const el = document.getElementById('cv-seed-loading');
     if (!el) return;
-    el.textContent = msg || 'Enhancing clip…';
+    if (msg != null) el.innerHTML = '<div class="cv-seed-loading-msg">' + msg + '</div>';
     el.classList.toggle('hidden', !on);
+    if (!on) __v2SeedStopLoadTicker();
+}
+
+// While a clip builds, show a live timer. The very first build of the session
+// also warns that a one-time model preparation makes it take a bit longer.
+function __v2SeedStartLoadTicker(index) {
+    __v2SeedStopLoadTicker();
+    const first = !__v2SeedBuilt;
+    const started = Date.now();
+    function render() {
+        const secs = Math.floor((Date.now() - started) / 1000);
+        let html = 'Enhancing clip ' + (index + 1) + '… <span style="opacity:.7">' +
+            secs + 's</span>';
+        if (first) {
+            html += '<br><span style="opacity:.75;font-size:.82em">' +
+                'First clip also prepares the detection model (a one-time step, ' +
+                'up to a couple of minutes on a CPU). Later clips are quick.' +
+                '</span>';
+        }
+        __v2SeedSetLoading(true, html);
+    }
+    render();
+    __v2SeedLoadTimer = setInterval(render, 1000);
+}
+
+function __v2SeedStopLoadTicker() {
+    if (__v2SeedLoadTimer) { clearInterval(__v2SeedLoadTimer); __v2SeedLoadTimer = null; }
 }
 
 function __v2SeedLoadClip(index) {
@@ -1769,8 +1798,12 @@ function __v2SeedLoadClip(index) {
     const cached = s.cache[key];
     if (cached) { __v2SeedShowClip(cached, key); __v2SeedPrefetchNext(); return; }
 
-    __v2SeedSetLoading(true, 'Enhancing clip ' + (index + 1) + '…');
-    if (hint) hint.innerText = 'Preparing an enhanced clip and tracking the players…';
+    __v2SeedStartLoadTicker(index);
+    if (hint) {
+        hint.innerText = __v2SeedBuilt
+            ? 'Preparing an enhanced clip and tracking the players…'
+            : 'Getting your first clip ready — this one takes a little longer.';
+    }
     fetch(__v2SeedApi('/api/v2/seed_clip'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: cvToken, index: index, reroll: s.reroll }),
@@ -1778,6 +1811,7 @@ function __v2SeedLoadClip(index) {
         if (!data || data.error || !data.clip_url) {
             throw new Error((data && data.error) || 'clip failed');
         }
+        __v2SeedBuilt = true;
         s.cache[key] = data;
         // Only render if the user hasn't navigated away while we loaded.
         if (s.reroll + '_' + s.index === key) { __v2SeedShowClip(data, key); }
@@ -1799,7 +1833,7 @@ function __v2SeedPrefetchNext() {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token: cvToken, index: nxt, reroll: s.reroll }),
     }).then(function (r) { return r.json(); }).then(function (data) {
-        if (data && data.clip_url) s.cache[s.reroll + '_' + nxt] = data;
+        if (data && data.clip_url) { __v2SeedBuilt = true; s.cache[s.reroll + '_' + nxt] = data; }
     }).catch(function () {});
 }
 
