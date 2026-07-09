@@ -17,6 +17,8 @@ upscale (real SR models don't load in this OpenCV build).
 from __future__ import annotations
 
 import math
+import shutil
+import subprocess
 from pathlib import Path
 
 import cv2
@@ -34,6 +36,51 @@ def enhance_frame(bgr: np.ndarray, scale: int = ENHANCE_SCALE) -> np.ndarray:
     up = cv2.resize(bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_LANCZOS4)
     blur = cv2.GaussianBlur(up, (0, 0), 1.0)
     return cv2.addWeighted(up, 1.6, blur, -0.6, 0)  # unsharp mask
+
+
+def _ffmpeg_exe() -> str | None:
+    return shutil.which("ffmpeg")
+
+
+def write_browser_clip(frames: list[np.ndarray], out_path: str, fps: float) -> bool:
+    """Write frames to a browser-playable MP4.
+
+    OpenCV on this platform can only emit ``mp4v`` (MPEG-4 Part 2), which
+    Chromium/pywebview can't decode — the <video> renders black. So encode
+    H.264 (yuv420p, +faststart) via ffmpeg when available, piping raw frames in.
+    Falls back to cv2 mp4v (unplayable in-browser but keeps offline tools working).
+    Returns True if an H.264 clip was written.
+    """
+    if not frames:
+        return False
+    h, w = frames[0].shape[:2]
+    w -= w % 2                      # H.264 yuv420p needs even dimensions
+    h -= h % 2
+    ff = _ffmpeg_exe()
+    if ff:
+        cmd = [
+            ff, "-y", "-loglevel", "error",
+            "-f", "rawvideo", "-pix_fmt", "bgr24",
+            "-s", f"{w}x{h}", "-r", f"{fps:.4f}", "-i", "pipe:0",
+            "-an", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+            "-pix_fmt", "yuv420p", "-movflags", "+faststart", out_path,
+        ]
+        try:
+            proc = subprocess.Popen(cmd, stdin=subprocess.PIPE,
+                                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+            for f in frames:
+                proc.stdin.write(np.ascontiguousarray(f[:h, :w]).tobytes())
+            proc.stdin.close()
+            proc.wait(timeout=120)
+            if proc.returncode == 0 and Path(out_path).exists():
+                return True
+        except Exception:  # noqa: BLE001 — fall back to cv2 below
+            pass
+    vw = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (w, h))
+    for f in frames:
+        vw.write(f[:h, :w])
+    vw.release()
+    return False
 
 
 def default_moments(duration_sec: float, reroll: int = 0, n: int = 4) -> list[float]:
@@ -128,10 +175,7 @@ def build_seed_clip(
 
     hs, ws = enhanced[0].shape[:2]
     Path(out_path).parent.mkdir(parents=True, exist_ok=True)
-    vw = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), fps, (ws, hs))
-    for e in enhanced:
-        vw.write(e)
-    vw.release()
+    write_browser_clip(enhanced, out_path, fps)
 
     dets_per_frame: list[tuple[int, list]] = []
     for i in range(0, len(enhanced), max(1, track_every)):
