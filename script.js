@@ -1847,26 +1847,41 @@ function __v2SeedShowClip(clip, key) {
     const n = (clip.tracklets || []).length;
     if (hint) {
         hint.innerText = n
-            ? 'Tap the marker on you. It follows you as the clip plays.'
+            ? 'Tap the marker on you. Tap the clip to pause if it helps.'
             : 'No players tracked in this clip — try another or shuffle.';
     }
-    // Build a node element per tracklet.
+    // One group per tracked player: a pin near the top + a thin leader line down
+    // to the player, so the marker never blocks the view of the player.
     const nodes = document.getElementById('cv-seed-nodes');
     nodes.innerHTML = '';
+    s.nodeEls = [];
     (clip.tracklets || []).forEach(function (tr) {
-        const node = document.createElement('div');
-        node.className = 'cv-seed-node';
-        node.dataset.trackId = String(tr.id);
-        node.style.display = 'none';
-        node.onclick = function () { __v2SeedPickNode(tr, key); };
-        nodes.appendChild(node);
+        const group = document.createElement('div');
+        group.className = 'cv-seed-track';
+        group.dataset.trackId = String(tr.id);
+        const leader = document.createElement('div');
+        leader.className = 'cv-seed-leader';
+        leader.style.display = 'none';
+        const pin = document.createElement('div');
+        pin.className = 'cv-seed-node';
+        pin.style.display = 'none';
+        pin.title = 'This is me';
+        pin.onclick = function (e) { e.stopPropagation(); __v2SeedPickNode(tr, key); };
+        group.appendChild(leader);
+        group.appendChild(pin);
+        nodes.appendChild(group);
+        s.nodeEls.push({ group: group, pin: pin, leader: leader });
     });
+    __v2SeedShowPlayPause(false);   // starts playing → hide indicator
     vid.src = cvApiUrl(clip.clip_url);
     vid.currentTime = 0;
     const p = vid.play();
     if (p && p.catch) p.catch(function () {});
     __v2SeedStartAnim();
 }
+
+// Node anchor: markers sit this far down from the top of the clip.
+const __V2_SEED_TOP_PCT = 6;
 
 // Interpolate a tracklet's normalized position at clip-local time t.
 function __v2SeedPosAt(points, t) {
@@ -1887,24 +1902,62 @@ function __v2SeedPosAt(points, t) {
 function __v2SeedStartAnim() {
     __v2SeedStopAnim();
     const vid = document.getElementById('cv-seed-video');
-    const nodes = document.getElementById('cv-seed-nodes');
+    const TOP = __V2_SEED_TOP_PCT;
     function frame() {
         const s = __v2Seed;
         if (!s || !s.clip) return;
+        // currentTime is constant while paused, so the markers freeze in place.
         const t = vid.currentTime || 0;
-        const els = nodes.children;
+        const els = s.nodeEls || [];
         const tracks = s.clip.tracklets || [];
         for (let i = 0; i < tracks.length && i < els.length; i++) {
             const pos = __v2SeedPosAt(tracks[i].points, t);
-            const el = els[i];
-            if (!pos) { el.style.display = 'none'; continue; }
-            el.style.display = 'block';
-            el.style.left = (pos.nx * 100) + '%';
-            el.style.top = (pos.ny * 100) + '%';
+            const e = els[i];
+            if (!pos) { e.pin.style.display = 'none'; e.leader.style.display = 'none'; continue; }
+            const xPct = pos.nx * 100, yPct = pos.ny * 100;
+            e.pin.style.display = 'block';
+            e.pin.style.left = xPct + '%';
+            e.pin.style.top = TOP + '%';
+            const h = yPct - TOP;                       // pin(top) → player line
+            e.leader.style.display = h > 0.5 ? 'block' : 'none';
+            e.leader.style.left = xPct + '%';
+            e.leader.style.top = TOP + '%';
+            e.leader.style.height = Math.max(0, h) + '%';
         }
         __v2SeedRAF = requestAnimationFrame(frame);
     }
     __v2SeedRAF = requestAnimationFrame(frame);
+}
+
+function __v2SeedTogglePlay() {
+    const s = __v2Seed;
+    if (!s || !s.clip) return;              // nothing to toggle while loading
+    const vid = document.getElementById('cv-seed-video');
+    if (!vid) return;
+    if (vid.paused) {
+        const p = vid.play();
+        if (p && p.catch) p.catch(function () {});
+        __v2SeedShowPlayPause(false);
+    } else {
+        vid.pause();
+        __v2SeedShowPlayPause(true);
+    }
+}
+
+// Show ▶ persistently while paused; flash the pause glyph briefly when resuming.
+let __v2SeedPPTimer = null;
+function __v2SeedShowPlayPause(paused) {
+    const ind = document.getElementById('cv-seed-playpause');
+    if (!ind) return;
+    if (__v2SeedPPTimer) { clearTimeout(__v2SeedPPTimer); __v2SeedPPTimer = null; }
+    if (paused) {
+        ind.textContent = '▶';
+        ind.classList.remove('hidden');
+    } else {
+        ind.textContent = '❚❚';
+        ind.classList.remove('hidden');
+        __v2SeedPPTimer = setTimeout(function () { ind.classList.add('hidden'); }, 500);
+    }
 }
 
 function __v2SeedStopAnim() {
@@ -1918,11 +1971,10 @@ function __v2SeedPickNode(tr, key) {
     s.selectedTaps = tr.taps || [];
     s.selectedFromKey = key;
     if (s.cache[key]) s.cache[key].__picked = true;
-    const nodes = document.getElementById('cv-seed-nodes').children;
-    for (let i = 0; i < nodes.length; i++) {
-        nodes[i].classList.toggle('selected',
-            nodes[i].dataset.trackId === String(tr.id));
-    }
+    (s.nodeEls || []).forEach(function (e) {
+        e.group.classList.toggle('selected',
+            e.group.dataset.trackId === String(tr.id));
+    });
     const nextBtn = document.getElementById('cv-seed-next');
     if (nextBtn) nextBtn.disabled = !(s.selectedTaps && s.selectedTaps.length);
     const hint = document.getElementById('cv-seed-hint');
@@ -1996,6 +2048,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (seedNext) seedNext.addEventListener('click', function () { __v2SeedFinish(); });
     if (seedSkip) seedSkip.addEventListener('click', function () { __v2SeedNextClip(); });
     if (seedReroll) seedReroll.addEventListener('click', function () { __v2SeedReroll(); });
+    var seedStage = document.getElementById('cv-seed-stage');
+    if (seedStage) seedStage.addEventListener('click', function () { __v2SeedTogglePlay(); });
     if (seedCancel) seedCancel.addEventListener('click', function () {
         __v2SeedStopAnim();
         var sv = document.getElementById('cv-seed-video');
