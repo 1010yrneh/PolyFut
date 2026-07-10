@@ -2312,7 +2312,9 @@ function __v2MontageShow() {
             // player, so perspective stays put.
             var crop = __v2MontageStableCrop(it, nW, nH, canvas.width / canvas.height);
             ctx.drawImage(vid, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
-            // The ring moves to the player instead of the frame moving to the ring.
+            // A subtle marker follows the player being asked about — a small
+            // chevron hovering just above them, so it points them out without a
+            // big circle covering the action.
             var pos = (it.__track && it.__track.length)
                 ? __v2MontagePosAt(it.__track, vid.currentTime) : null;
             var rx = canvas.width / 2, ry = canvas.height / 2;
@@ -2320,15 +2322,20 @@ function __v2MontageShow() {
                 rx = (pos.nx * nW - crop.x) / crop.w * canvas.width;
                 ry = (pos.ny * nH - crop.y) / crop.h * canvas.height;
             }
-            // Ring sized to a single player, not the whole cluster.
             var phN = (it.__track && it.__track.length && it.__track[0].nh)
                 ? it.__track[0].nh : 0.12;
-            var r = 0.62 * (phN * nH / crop.h) * canvas.height;
-            r = Math.max(7, Math.min(r, canvas.height * 0.22));
-            ctx.strokeStyle = 'rgba(48,255,143,0.95)';
-            ctx.lineWidth = 2;
+            var phC = (phN * nH / crop.h) * canvas.height;   // player height on canvas
+            var tipY = ry - phC * 0.55 - 3;                  // just above the head
+            var mw = 7, mh = 9;                              // small chevron
+            ctx.fillStyle = 'rgba(48,255,143,0.95)';
+            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.arc(rx, ry, r, 0, Math.PI * 2);
+            ctx.moveTo(rx, tipY);                            // tip points at the player
+            ctx.lineTo(rx - mw, tipY - mh);
+            ctx.lineTo(rx + mw, tipY - mh);
+            ctx.closePath();
+            ctx.fill();
             ctx.stroke();
         }
         requestAnimationFrame(draw);

@@ -507,6 +507,19 @@ html, body {
     font-size: 1rem;
 }
 
+/* subtle disclaimer under the sub-heading (what a screen is / isn't for) */
+.cv-overlay-note {
+    margin: -8px auto 16px;
+    max-width: 46ch;
+    font-size: 0.82rem;
+    line-height: 1.45;
+    color: var(--text-secondary);
+    opacity: 0.72;
+    border-left: 2px solid rgba(48, 255, 143, 0.4);
+    padding: 4px 0 4px 12px;
+    text-align: left;
+}
+
 /* v2 seed: enhanced clip with tracked, tappable player nodes */
 .cv-seed-stage {
     position: relative;
