@@ -2308,29 +2308,67 @@ function __v2MontageShow() {
         if (!m.playing || __v2Montage !== m) return;
         var nW = vid.videoWidth, nH = vid.videoHeight;
         if (nW && nH) {
-            // crop is in resized (target_width=640) space → scale to natural px
-            var resizedW = Math.min(nW, 640), sc = nW / resizedW;
-            var sw = (it.crop[2] - it.crop[0]) * sc, sh = (it.crop[3] - it.crop[1]) * sc;
-            // Centre the zoom box on the tracked player (normalized coords are
-            // scale-independent), so the ring stays on them; else the fixed crop.
-            var cx = ((it.crop[0] + it.crop[2]) / 2) * sc;
-            var cy = ((it.crop[1] + it.crop[3]) / 2) * sc;
+            // Stable view for the whole clip — the frame no longer pans with the
+            // player, so perspective stays put.
+            var crop = __v2MontageStableCrop(it, nW, nH, canvas.width / canvas.height);
+            ctx.drawImage(vid, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
+            // The ring moves to the player instead of the frame moving to the ring.
             var pos = (it.__track && it.__track.length)
                 ? __v2MontagePosAt(it.__track, vid.currentTime) : null;
-            if (pos) { cx = pos.nx * nW; cy = pos.ny * nH; }
-            var sx = cx - sw / 2, sy = cy - sh / 2;
-            sx = Math.max(0, Math.min(nW - 2, sx)); sy = Math.max(0, Math.min(nH - 2, sy));
-            sw = Math.max(2, Math.min(nW - sx, sw)); sh = Math.max(2, Math.min(nH - sy, sh));
-            ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
+            var rx = canvas.width / 2, ry = canvas.height / 2;
+            if (pos) {
+                rx = (pos.nx * nW - crop.x) / crop.w * canvas.width;
+                ry = (pos.ny * nH - crop.y) / crop.h * canvas.height;
+            }
+            // Ring sized to a single player, not the whole cluster.
+            var phN = (it.__track && it.__track.length && it.__track[0].nh)
+                ? it.__track[0].nh : 0.12;
+            var r = 0.62 * (phN * nH / crop.h) * canvas.height;
+            r = Math.max(7, Math.min(r, canvas.height * 0.22));
             ctx.strokeStyle = 'rgba(48,255,143,0.95)';
-            ctx.lineWidth = 2.5;
+            ctx.lineWidth = 2;
             ctx.beginPath();
-            ctx.arc(canvas.width / 2, canvas.height / 2, 30, 0, Math.PI * 2);
+            ctx.arc(rx, ry, r, 0, Math.PI * 2);
             ctx.stroke();
         }
         requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
+}
+
+// Stable zoom window for a review clip: covers the player's whole path with a
+// margin, computed once per touch, so the view doesn't pan. Falls back to the
+// stored contact crop when no tracklet is available.
+function __v2MontageStableCrop(it, nW, nH, aspect) {
+    var pts = it.__track;
+    var np = pts ? pts.length : 0;
+    if (it.__crop && it.__crop._nW === nW && it.__crop._np === np) return it.__crop;
+    var cx, cy, halfW, halfH;
+    if (np) {
+        var minx = 1, maxx = 0, miny = 1, maxy = 0, pw = 0.04, ph = 0.1;
+        for (var i = 0; i < pts.length; i++) {
+            var p = pts[i];
+            if (p.nx < minx) minx = p.nx; if (p.nx > maxx) maxx = p.nx;
+            if (p.ny < miny) miny = p.ny; if (p.ny > maxy) maxy = p.ny;
+            if (p.nw) pw = Math.max(pw, p.nw); if (p.nh) ph = Math.max(ph, p.nh);
+        }
+        cx = (minx + maxx) / 2; cy = (miny + maxy) / 2;
+        halfW = Math.max((maxx - minx) / 2 + pw * 1.8, pw * 4.0);
+        halfH = Math.max((maxy - miny) / 2 + ph * 1.2, ph * 2.4);
+    } else {
+        var resizedW = Math.min(nW, 640), sc = nW / resizedW;
+        cx = ((it.crop[0] + it.crop[2]) / 2) * sc / nW;
+        cy = ((it.crop[1] + it.crop[3]) / 2) * sc / nH;
+        halfW = ((it.crop[2] - it.crop[0]) * sc / nW) / 2;
+        halfH = ((it.crop[3] - it.crop[1]) * sc / nH) / 2;
+    }
+    var w = 2 * halfW * nW, h = 2 * halfH * nH;
+    if (w / h > aspect) h = w / aspect; else w = h * aspect;   // match canvas aspect
+    w = Math.min(w, nW); h = Math.min(h, nH);
+    var x = Math.max(0, Math.min(nW - w, cx * nW - w / 2));
+    var y = Math.max(0, Math.min(nH - h, cy * nH - h / 2));
+    it.__crop = { x: x, y: y, w: w, h: h, _nW: nW, _np: np };
+    return it.__crop;
 }
 
 function __v2MontageDecide(dec) {
