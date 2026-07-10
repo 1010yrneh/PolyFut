@@ -1711,10 +1711,39 @@ function showV2SeedScreen(url, duration) {
     __v2Seed = {
         reroll: 0, index: 0, moments: [], nMoments: 4,
         clip: null, cache: {},           // cache key `${reroll}_${index}` -> clip
-        selectedTrackId: null, selectedTaps: null, selectedFromKey: null,
+        // Mark yourself in as many clips as you appear in — every clip's taps
+        // are combined into a stronger appearance seed. key -> {trackId, taps}.
+        selections: {},
     };
     document.getElementById('cv-seed-screen').classList.remove('hidden');
     __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
+}
+
+function __v2SeedSelCount() {
+    const s = __v2Seed;
+    return (s && s.selections) ? Object.keys(s.selections).length : 0;
+}
+
+function __v2SeedCombinedTaps() {
+    const s = __v2Seed;
+    if (!s || !s.selections) return [];
+    let out = [];
+    Object.keys(s.selections).forEach(function (k) {
+        out = out.concat(s.selections[k].taps || []);
+    });
+    return out;
+}
+
+// Enable "Find my touches" once you've marked yourself in ≥1 clip; the label
+// shows how many clips you've marked so far.
+function __v2SeedUpdateFinishBtn() {
+    const n = __v2SeedSelCount();
+    const btn = document.getElementById('cv-seed-next');
+    if (!btn) return;
+    btn.disabled = n === 0;
+    btn.innerText = n > 0
+        ? 'Find my touches · ' + n + (n === 1 ? ' clip' : ' clips')
+        : 'Find my touches';
 }
 
 function __v2SeedApi(path) { return cvApiUrl(path); }
@@ -1740,7 +1769,7 @@ function __v2SeedRenderClipNav() {
         const dot = document.createElement('button');
         dot.type = 'button';
         dot.className = 'cv-seed-clip-dot' + (i === s.index ? ' active' : '') +
-            (s.cache[s.reroll + '_' + i] && s.cache[s.reroll + '_' + i].__picked ? ' picked' : '');
+            (s.selections[s.reroll + '_' + i] ? ' picked' : '');
         dot.title = 'Clip ' + (i + 1);
         dot.onclick = (function (idx) { return function () { __v2SeedLoadClip(idx); }; })(i);
         el.appendChild(dot);
@@ -1785,10 +1814,7 @@ function __v2SeedLoadClip(index) {
     const s = __v2Seed;
     if (!s) return;
     s.index = index;
-    s.selectedTrackId = null;
-    s.selectedTaps = null;
-    const nextBtn = document.getElementById('cv-seed-next');
-    if (nextBtn) nextBtn.disabled = true;
+    __v2SeedUpdateFinishBtn();       // reflects selections across all clips
     __v2SeedRenderClipNav();
     __v2SeedStopAnim();
     document.getElementById('cv-seed-nodes').innerHTML = '';
@@ -1845,10 +1871,11 @@ function __v2SeedShowClip(clip, key) {
     __v2SeedSetLoading(false);
     __v2SeedRenderClipNav();
     const n = (clip.tracklets || []).length;
+    const already = s.selections[key];
     if (hint) {
-        hint.innerText = n
-            ? 'Tap the marker on you. Tap the clip to pause if it helps.'
-            : 'No players tracked in this clip — try another or shuffle.';
+        if (!n) hint.innerText = 'No players tracked in this clip — try another or shuffle.';
+        else if (already) hint.innerText = 'Marked in this clip. Check the other clips too — each one you mark yourself in improves accuracy.';
+        else hint.innerText = 'Tap the marker on you (or skip if you\'re not here). Mark yourself in every clip you appear in.';
     }
     // One group per tracked player: a pin near the top + a thin leader line down
     // to the player, so the marker never blocks the view of the player.
@@ -1872,6 +1899,14 @@ function __v2SeedShowClip(clip, key) {
         nodes.appendChild(group);
         s.nodeEls.push({ group: group, pin: pin, leader: leader });
     });
+    // Re-highlight the marker you picked earlier in this clip, if any.
+    if (already) {
+        s.nodeEls.forEach(function (e) {
+            e.group.classList.toggle('selected',
+                e.group.dataset.trackId === String(already.trackId));
+        });
+    }
+    __v2SeedUpdateFinishBtn();
     __v2SeedShowPlayPause(false);   // starts playing → hide indicator
     vid.src = cvApiUrl(clip.clip_url);
     vid.currentTime = 0;
@@ -1967,28 +2002,30 @@ function __v2SeedStopAnim() {
 function __v2SeedPickNode(tr, key) {
     const s = __v2Seed;
     if (!s) return;
-    s.selectedTrackId = tr.id;
-    s.selectedTaps = tr.taps || [];
-    s.selectedFromKey = key;
-    if (s.cache[key]) s.cache[key].__picked = true;
+    const cur = s.selections[key];
+    const deselect = cur && String(cur.trackId) === String(tr.id);  // tap again → clear
+    if (deselect) delete s.selections[key];
+    else s.selections[key] = { trackId: tr.id, taps: tr.taps || [] };
     (s.nodeEls || []).forEach(function (e) {
         e.group.classList.toggle('selected',
-            e.group.dataset.trackId === String(tr.id));
+            !deselect && e.group.dataset.trackId === String(tr.id));
     });
-    const nextBtn = document.getElementById('cv-seed-next');
-    if (nextBtn) nextBtn.disabled = !(s.selectedTaps && s.selectedTaps.length);
     const hint = document.getElementById('cv-seed-hint');
-    if (hint) hint.innerText = 'Got you — built from ' + (s.selectedTaps || []).length +
-        ' views across the clip. Tap another marker to change, or find your touches.';
+    if (hint) {
+        const nsel = __v2SeedSelCount();
+        hint.innerText = deselect
+            ? 'Cleared this clip. Tap yourself, or move to another clip.'
+            : 'Got you in this clip (' + nsel + (nsel === 1 ? ' clip' : ' clips') +
+              ' marked). Check the other clips too, then find your touches.';
+    }
+    __v2SeedUpdateFinishBtn();
     __v2SeedRenderClipNav();
 }
 
 function __v2SeedReroll() {
     const s = __v2Seed;
     if (!s) return;
-    s.reroll += 1;
-    s.selectedTrackId = null;
-    s.selectedTaps = null;
+    s.reroll += 1;   // selections persist — every marked clip still counts
     __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
 }
 
@@ -2000,10 +2037,10 @@ function __v2SeedNextClip() {
 
 function __v2SeedFinish() {
     const s = __v2Seed;
-    const taps = (s && s.selectedTaps) ? s.selectedTaps : [];
+    const taps = __v2SeedCombinedTaps();
     if (taps.length === 0) {
         const ok = window.confirm(
-            'You haven\'t selected yourself yet.\n\n' +
+            'You haven\'t marked yourself in any clip yet.\n\n' +
             'Analysis still runs, but without an appearance model it can\'t rank ' +
             'your touches as well — you\'ll just review more clips. Continue anyway?');
         if (!ok) return;
