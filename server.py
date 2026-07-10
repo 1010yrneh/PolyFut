@@ -49,6 +49,7 @@ try:
     from polyfut_v2.config import PipelineV2Config
     from polyfut_v2.app_service import (
         build_one_seed_clip,
+        build_review_track_for_item,
         build_seed_clips_index,
         hotspots_from_decisions,
         run_to_montage,
@@ -1058,6 +1059,45 @@ def v2_seed_clip_file(token: str, name: str):
     if not (seed_dir / name).is_file():
         return jsonify({"error": "clip not found"}), 404
     return send_from_directory(str(seed_dir), name, mimetype="video/mp4")
+
+
+@app.route("/api/v2/review_track/<job_id>/<int:rank>", methods=["GET"])
+def v2_review_track(job_id: str, rank: int):
+    """Tracklet of the reviewed player across one montage clip, so the review
+    ring follows them. Cached per (job, rank); built on demand."""
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    j = _get_job(job_id)
+    if not j or not j.get("montage"):
+        return jsonify({"error": "unknown job or no montage"}), 404
+    item = next((it for it in j["montage"] if int(it.get("rank", -1)) == rank), None)
+    if item is None:
+        return jsonify({"error": "unknown rank"}), 404
+
+    tdir = EXPORTS / job_id / "tracks"
+    tdir.mkdir(parents=True, exist_ok=True)
+    cache = tdir / f"rank_{rank}.json"
+    if cache.exists():
+        return jsonify(json.loads(cache.read_text(encoding="utf-8")))
+
+    token = j.get("token")
+    video_path = UPLOADS / f"{token}.mp4"
+    if not token or not video_path.exists():
+        return jsonify({"error": "video unavailable"}), 400
+
+    with _seed_clip_lock(f"track:{job_id}:{rank}"):
+        if cache.exists():
+            return jsonify(json.loads(cache.read_text(encoding="utf-8")))
+        try:
+            tr = build_review_track_for_item(str(video_path), item, PipelineV2Config())
+        except Exception as exc:  # noqa: BLE001
+            traceback.print_exc()
+            return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+        # Graceful: no track → empty points, frontend keeps the fixed ring.
+        out = {"ok": True, "rank": rank, "points": (tr or {}).get("points", []),
+               "base_w": (tr or {}).get("base_w"), "base_h": (tr or {}).get("base_h")}
+        cache.write_text(json.dumps(out), encoding="utf-8")
+    return jsonify(out)
 
 
 @app.route("/api/v2/decisions/<job_id>", methods=["POST"])

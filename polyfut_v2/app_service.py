@@ -174,6 +174,28 @@ def _seed_player_detector(cfg: PipelineV2Config):
     return det
 
 
+def build_review_track_for_item(
+    video_path: str, item: dict, cfg: PipelineV2Config | None = None
+) -> dict | None:
+    """Track the reviewed player across a montage item's clip window so the
+    review ring can follow them. Returns a normalized tracklet, or None if it
+    can't be built (caller should fall back to the fixed crop)."""
+    from polyfut_v2 import review_track as rt
+
+    cfg = cfg or PipelineV2Config()
+    crop = item.get("crop")
+    if not crop or len(crop) != 4:
+        return None
+    try:
+        return rt.build_review_track(
+            video_path, [float(v) for v in crop],
+            float(item["t_sec"]), float(item["clip_start_sec"]),
+            float(item["clip_end_sec"]), target_width=cfg.target_width,
+        )
+    except (KeyError, TypeError, ValueError):
+        return None
+
+
 def warm_seed_detector(cfg: PipelineV2Config | None = None) -> None:
     """Compile/load the soccer player model ahead of time (≈150s one-time on this
     CPU) so the first seed clip doesn't pay for it. Safe to call repeatedly."""

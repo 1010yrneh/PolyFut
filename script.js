@@ -2209,6 +2209,34 @@ function __v2MontageRenderProgress() {
         '<span class="cv-montage-count">Touch ' + (m.idx + 1) + ' of ' + m.queue.length + ' to review</span>';
 }
 
+// Interpolate a review tracklet's normalized centre at absolute video time t.
+function __v2MontagePosAt(points, t) {
+    if (!points || !points.length) return null;
+    if (t <= points[0].t_sec) return points[0];
+    var last = points[points.length - 1];
+    if (t >= last.t_sec) return last;
+    for (var i = 0; i < points.length - 1; i++) {
+        var a = points[i], b = points[i + 1];
+        if (t >= a.t_sec && t <= b.t_sec) {
+            var f = (b.t_sec - a.t_sec) > 1e-6 ? (t - a.t_sec) / (b.t_sec - a.t_sec) : 0;
+            return { nx: a.nx + (b.nx - a.nx) * f, ny: a.ny + (b.ny - a.ny) * f };
+        }
+    }
+    return last;
+}
+
+// Fetch (and cache on the item) the tracklet that makes the ring follow the
+// reviewed player. Falls back silently to the fixed crop on any failure.
+function __v2MontageFetchTrack(it) {
+    var m = __v2Montage;
+    if (!m || !it || it.__track !== undefined) return;
+    it.__track = null;   // "requested" — avoid duplicate fetches
+    fetch(cvApiUrl('/api/v2/review_track/' + m.jobId + '/' + it.rank))
+        .then(function (r) { return r.json(); })
+        .then(function (d) { it.__track = (d && d.points) ? d.points : []; })
+        .catch(function () { it.__track = []; });
+}
+
 function __v2MontageShow() {
     var m = __v2Montage; if (!m) return;
     var it = m.queue[m.idx];
@@ -2223,6 +2251,8 @@ function __v2MontageShow() {
             '<span class="cv-montage-kinds">' + (it.kinds || []).join(' · ') + '</span>' +
             '<span class="cv-montage-conf">match ' + Math.round((it.confidence || 0) * 100) + '%</span>';
     }
+    __v2MontageFetchTrack(it);                     // ring-follow track for this touch
+    if (m.queue[m.idx + 1]) __v2MontageFetchTrack(m.queue[m.idx + 1]);  // prefetch next
     var start = it.clip_start_sec, end = it.clip_end_sec;
     m.playing = true;
     function seekStart() {
@@ -2243,8 +2273,15 @@ function __v2MontageShow() {
         if (nW && nH) {
             // crop is in resized (target_width=640) space → scale to natural px
             var resizedW = Math.min(nW, 640), sc = nW / resizedW;
-            var sx = it.crop[0] * sc, sy = it.crop[1] * sc;
             var sw = (it.crop[2] - it.crop[0]) * sc, sh = (it.crop[3] - it.crop[1]) * sc;
+            // Centre the zoom box on the tracked player (normalized coords are
+            // scale-independent), so the ring stays on them; else the fixed crop.
+            var cx = ((it.crop[0] + it.crop[2]) / 2) * sc;
+            var cy = ((it.crop[1] + it.crop[3]) / 2) * sc;
+            var pos = (it.__track && it.__track.length)
+                ? __v2MontagePosAt(it.__track, vid.currentTime) : null;
+            if (pos) { cx = pos.nx * nW; cy = pos.ny * nH; }
+            var sx = cx - sw / 2, sy = cy - sh / 2;
             sx = Math.max(0, Math.min(nW - 2, sx)); sy = Math.max(0, Math.min(nH - 2, sy));
             sw = Math.max(2, Math.min(nW - sx, sw)); sh = Math.max(2, Math.min(nH - sy, sh));
             ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
