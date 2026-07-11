@@ -2210,6 +2210,7 @@ function showV2Montage(j) {
         jobId: (j && j.job_id) || cvJobId, token: (j && j.token) || cvToken,
         all: items, queue: queue, idx: 0, decisions: {},
         duration: (j && j.duration_sec) || 0, playing: false,
+        total0: queue.length, done: 0, lastAuto: null,   // adaptive-grouping progress
         autoAccept: items.filter(function (it) { return it.status === 'auto_accept'; }).length,
         autoHide: items.filter(function (it) { return it.status === 'auto_hide'; }).length,
         warnings: (j && j.warnings) || []
@@ -2228,6 +2229,8 @@ function showV2Montage(j) {
     if (meBtn) meBtn.onclick = function () { __v2MontageDecide('me'); };
     if (notMeBtn) notMeBtn.onclick = function () { __v2MontageDecide('not_me'); };
     if (finishBtn) finishBtn.onclick = function () { __v2MontageFinalize(); };
+    var undoBtn = document.getElementById('cv-montage-undo-btn');
+    if (undoBtn) undoBtn.onclick = function () { __v2MontageUndo(); };
 
     var vid = document.getElementById('cv-montage-video');
     vid.src = cvApiUrl('/api/video/' + __v2Montage.token);
@@ -2241,9 +2244,12 @@ function __v2MontageRenderProgress() {
     var m = __v2Montage; if (!m) return;
     var el = document.getElementById('cv-montage-progress');
     if (!el) return;
+    var total = Math.max(1, m.total0 || 0);
+    var left = m.queue.length;
     el.innerHTML = '<div class="cv-montage-bar"><div class="cv-montage-bar-fill" style="width:' +
-        Math.round(100 * m.idx / Math.max(1, m.queue.length)) + '%"></div></div>' +
-        '<span class="cv-montage-count">Touch ' + (m.idx + 1) + ' of ' + m.queue.length + ' to review</span>';
+        Math.round(100 * m.done / total) + '%"></div></div>' +
+        '<span class="cv-montage-count">' + left + ' touch' + (left === 1 ? '' : 'es') +
+        ' left to review</span>';
 }
 
 // Interpolate a review tracklet's normalized centre at absolute video time t.
@@ -2276,7 +2282,8 @@ function __v2MontageFetchTrack(it) {
 
 function __v2MontageShow() {
     var m = __v2Montage; if (!m) return;
-    var it = m.queue[m.idx];
+    var it = m.queue[0];
+    if (!it) { __v2MontageFinalize(); return; }
     __v2MontageRenderProgress();
     var vid = document.getElementById('cv-montage-video');
     var canvas = document.getElementById('cv-montage-canvas');
@@ -2289,7 +2296,7 @@ function __v2MontageShow() {
             '<span class="cv-montage-conf">match ' + Math.round((it.confidence || 0) * 100) + '%</span>';
     }
     __v2MontageFetchTrack(it);                     // ring-follow track for this touch
-    if (m.queue[m.idx + 1]) __v2MontageFetchTrack(m.queue[m.idx + 1]);  // prefetch next
+    if (m.queue[1]) __v2MontageFetchTrack(m.queue[1]);  // prefetch next
     var start = it.clip_start_sec, end = it.clip_end_sec;
     m.playing = true;
     function seekStart() {
@@ -2378,12 +2385,74 @@ function __v2MontageStableCrop(it, nW, nH, aspect) {
     return it.__crop;
 }
 
+// Does deciding `it` as `dec` also settle queued touch `q`?
+//  • colour: "Not me" on the OTHER team clears every other same-kit opponent.
+//  • appearance: within your kit, a look-alike group settles both ways (soft).
+function __v2MontageMatches(it, q, dec) {
+    if (dec === 'not_me' && it.is_other_team && q.is_other_team &&
+        q.kit_group >= 0 && q.kit_group === it.kit_group) {
+        return 'hard';
+    }
+    if (!it.is_other_team && !q.is_other_team &&
+        it.appearance_group >= 0 && q.appearance_group === it.appearance_group) {
+        return 'soft';
+    }
+    return null;
+}
+
 function __v2MontageDecide(dec) {
     var m = __v2Montage; if (!m) return;
-    var it = m.queue[m.idx];
+    var it = m.queue[0];
+    if (!it) return;
     m.decisions[it.rank] = dec;
-    m.idx += 1;
-    if (m.idx >= m.queue.length) { __v2MontageFinalize(); return; }
+
+    // Pull auto-settled touches out of the rest of the queue.
+    var kept = [], removed = [], softCount = 0;
+    for (var i = 1; i < m.queue.length; i++) {
+        var q = m.queue[i];
+        var kind = __v2MontageMatches(it, q, dec);
+        if (kind) {
+            m.decisions[q.rank] = dec;
+            removed.push(q);
+            if (kind === 'soft') softCount++;
+        } else {
+            kept.push(q);
+        }
+    }
+    m.queue = kept;
+    m.done += 1 + removed.length;
+    m.lastAuto = removed.length ? { items: removed, dec: dec } : null;
+    if (removed.length) __v2MontageShowUndo(removed.length, dec, softCount);
+    else __v2MontageHideUndo();
+
+    if (m.queue.length === 0) { __v2MontageFinalize(); return; }
+    __v2MontageShow();
+}
+
+function __v2MontageShowUndo(n, dec, softCount) {
+    var el = document.getElementById('cv-montage-undo');
+    var txt = document.getElementById('cv-montage-undo-text');
+    if (!el || !txt) return;
+    var verb = dec === 'me' ? 'accepted' : 'cleared';
+    var kind = (softCount >= n) ? 'look-alike' : (softCount > 0 ? 'related' : 'same-kit');
+    txt.textContent = 'Also ' + verb + ' ' + n + ' ' + kind + ' touch' +
+        (n === 1 ? '' : 'es') + '.';
+    el.classList.remove('hidden');
+}
+
+function __v2MontageHideUndo() {
+    var el = document.getElementById('cv-montage-undo');
+    if (el) el.classList.add('hidden');
+}
+
+function __v2MontageUndo() {
+    var m = __v2Montage; if (!m || !m.lastAuto) return;
+    var a = m.lastAuto;
+    a.items.forEach(function (q) { delete m.decisions[q.rank]; });
+    m.queue = a.items.concat(m.queue);   // reinsert the auto-settled touches at the front
+    m.done -= a.items.length;
+    m.lastAuto = null;
+    __v2MontageHideUndo();
     __v2MontageShow();
 }
 

@@ -501,6 +501,18 @@ html, body {
     margin: 0 0 8px;
 }
 
+.cv-montage-undo {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    margin: 4px 0 12px;
+    font-size: 0.85rem;
+    color: #9fe8c2;
+}
+.cv-montage-undo.hidden { display: none; }
+.cv-montage-undo .cv-btn-link { font-size: 0.85rem; }
+
 .cv-overlay-sub {
     color: var(--text-secondary);
     margin: 0 0 18px;

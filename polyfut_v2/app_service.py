@@ -326,6 +326,18 @@ def run_to_montage(
         )
 
     items = [it.to_dict() for it in out["montage"]]
+    # Adaptive review grouping: tag kit colour / other-team / same-kit look-alike
+    # so the review UI can clear a whole team on one "Not me". Cheap (reuses the
+    # torso crops already captured); failures degrade to per-clip decisions.
+    try:
+        from polyfut_v2.pipeline.grouping import assign_player_groups
+        groups = assign_player_groups(out["montage"], seed, cfg)
+        for d in items:
+            g = groups.get(d["rank"])
+            if g:
+                d.update(g)
+    except Exception:  # noqa: BLE001 — grouping is a UX aid, never fatal
+        pass
     return {
         "pipeline_version": "v2",
         "duration_sec": duration,

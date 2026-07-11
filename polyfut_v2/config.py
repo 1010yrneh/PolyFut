@@ -141,6 +141,17 @@ class PipelineV2Config:
     montage_clip_pad_sec: float = 1.0    # ±1s around the contact → ~2s review clips
     montage_crop_half_px: float = 120.0  # zoom half-size (resized px) around the contact
 
+    # --- Adaptive review grouping (Stage 8 UX) ---
+    # Tag each review touch with a kit-colour group + (within your team) an
+    # appearance group, so "Not me" on the other team clears them all, and same-
+    # kit decisions propagate softly. Cheap: reuses the contact torso crops.
+    # Kit distance from your seed beyond this ⇒ confidently the *other team*
+    # (hard-removable). Deliberately looser than team_color_max_dist (60) so we
+    # only ever hard-remove clearly-different kits, never risk your own.
+    grouping_other_team_dist: float = 105.0
+    grouping_kit_cluster_dist: float = 55.0    # colour-clustering radius
+    grouping_appearance_min_sim: float = 0.62  # same-kit appearance grouping (soft)
+
     # --- Stage 9: hotspot assembly (v1 semantics; pad widened to ±2s per doc) ---
     hotspot_pad_before_sec: float = 2.0
     hotspot_pad_after_sec: float = 2.0
