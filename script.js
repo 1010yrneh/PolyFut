@@ -2315,32 +2315,41 @@ function __v2MontageShow() {
         if (!m.playing || __v2Montage !== m) return;
         var nW = vid.videoWidth, nH = vid.videoHeight;
         if (nW && nH) {
-            // Stable view for the whole clip — the frame no longer pans with the
-            // player, so perspective stays put.
-            var crop = __v2MontageStableCrop(it, nW, nH, canvas.width / canvas.height);
-            ctx.drawImage(vid, crop.x, crop.y, crop.w, crop.h, 0, 0, canvas.width, canvas.height);
-            // A subtle marker follows the player being asked about — a small
-            // chevron hovering just above them, so it points them out without a
-            // big circle covering the action.
+            // Show the WHOLE frame at its true aspect ratio (no square squeeze):
+            // size the canvas buffer to the video's aspect the first time we know it.
+            var bufW = Math.min(nW, 640);
+            var bufH = Math.round(bufW * nH / nW);
+            if (canvas.width !== bufW || canvas.height !== bufH) {
+                canvas.width = bufW; canvas.height = bufH;
+            }
+            ctx.drawImage(vid, 0, 0, nW, nH, 0, 0, canvas.width, canvas.height);
+
+            // Player position (normalized, whole-frame) + box height, so the arrow
+            // sits directly above the detection box — over the player's head.
             var pos = (it.__track && it.__track.length)
                 ? __v2MontagePosAt(it.__track, vid.currentTime) : null;
-            var rx = canvas.width / 2, ry = canvas.height / 2;
+            var nx, boxTopN;
+            var nhN = (it.__track && it.__track.length && it.__track[0].nh)
+                ? it.__track[0].nh : 0.14;
             if (pos) {
-                rx = (pos.nx * nW - crop.x) / crop.w * canvas.width;
-                ry = (pos.ny * nH - crop.y) / crop.h * canvas.height;
+                nx = pos.nx;
+                boxTopN = pos.ny - nhN / 2;                  // top of the player box
+            } else {
+                // No tracklet → fall back to the stored contact box (640-space).
+                var sc = nW / Math.min(nW, 640);
+                nx = ((it.crop[0] + it.crop[2]) / 2) * sc / nW;
+                boxTopN = (it.crop[1] * sc) / nH;
             }
-            var phN = (it.__track && it.__track.length && it.__track[0].nh)
-                ? it.__track[0].nh : 0.12;
-            var phC = (phN * nH / crop.h) * canvas.height;   // player height on canvas
-            var tipY = ry - phC * 0.55 - 3;                  // just above the head
-            var mw = 7, mh = 9;                              // small chevron
+            var ax = nx * canvas.width;
+            var ay = boxTopN * canvas.height - 4;            // just above the box top
+            var mw = 7, mh = 10;                             // small chevron ▼
             ctx.fillStyle = 'rgba(48,255,143,0.95)';
-            ctx.strokeStyle = 'rgba(0,0,0,0.5)';
+            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(rx, tipY);                            // tip points at the player
-            ctx.lineTo(rx - mw, tipY - mh);
-            ctx.lineTo(rx + mw, tipY - mh);
+            ctx.moveTo(ax, ay);                              // tip points down at the head
+            ctx.lineTo(ax - mw, ay - mh);
+            ctx.lineTo(ax + mw, ay - mh);
             ctx.closePath();
             ctx.fill();
             ctx.stroke();
@@ -2348,41 +2357,6 @@ function __v2MontageShow() {
         requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
-}
-
-// Stable zoom window for a review clip: covers the player's whole path with a
-// margin, computed once per touch, so the view doesn't pan. Falls back to the
-// stored contact crop when no tracklet is available.
-function __v2MontageStableCrop(it, nW, nH, aspect) {
-    var pts = it.__track;
-    var np = pts ? pts.length : 0;
-    if (it.__crop && it.__crop._nW === nW && it.__crop._np === np) return it.__crop;
-    var cx, cy, halfW, halfH;
-    if (np) {
-        var minx = 1, maxx = 0, miny = 1, maxy = 0, pw = 0.04, ph = 0.1;
-        for (var i = 0; i < pts.length; i++) {
-            var p = pts[i];
-            if (p.nx < minx) minx = p.nx; if (p.nx > maxx) maxx = p.nx;
-            if (p.ny < miny) miny = p.ny; if (p.ny > maxy) maxy = p.ny;
-            if (p.nw) pw = Math.max(pw, p.nw); if (p.nh) ph = Math.max(ph, p.nh);
-        }
-        cx = (minx + maxx) / 2; cy = (miny + maxy) / 2;
-        halfW = Math.max((maxx - minx) / 2 + pw * 1.8, pw * 4.0);
-        halfH = Math.max((maxy - miny) / 2 + ph * 1.2, ph * 2.4);
-    } else {
-        var resizedW = Math.min(nW, 640), sc = nW / resizedW;
-        cx = ((it.crop[0] + it.crop[2]) / 2) * sc / nW;
-        cy = ((it.crop[1] + it.crop[3]) / 2) * sc / nH;
-        halfW = ((it.crop[2] - it.crop[0]) * sc / nW) / 2;
-        halfH = ((it.crop[3] - it.crop[1]) * sc / nH) / 2;
-    }
-    var w = 2 * halfW * nW, h = 2 * halfH * nH;
-    if (w / h > aspect) h = w / aspect; else w = h * aspect;   // match canvas aspect
-    w = Math.min(w, nW); h = Math.min(h, nH);
-    var x = Math.max(0, Math.min(nW - w, cx * nW - w / 2));
-    var y = Math.max(0, Math.min(nH - h, cy * nH - h / 2));
-    it.__crop = { x: x, y: y, w: w, h: h, _nW: nW, _np: np };
-    return it.__crop;
 }
 
 // Does deciding `it` as `dec` also settle queued touch `q`?

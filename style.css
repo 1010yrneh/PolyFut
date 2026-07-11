@@ -675,7 +675,7 @@ html, body {
 .cv-montage-bar-fill { height: 100%; background: var(--fifa-green); transition: width 0.25s; }
 .cv-montage-count { color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
 .cv-montage-stage { display: flex; justify-content: center; align-items: center; background: #000; padding: 0; }
-#cv-montage-canvas { width: 320px; height: 320px; max-width: 100%; display: block; background: #050706; }
+#cv-montage-canvas { width: 100%; max-width: 560px; height: auto; display: block; background: #050706; }
 .cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 12px 0 18px; font-family: 'Rajdhani', sans-serif; }
 .cv-montage-time { color: #e8f5ec; font-weight: 700; }
 .cv-montage-kinds { color: #93a397; text-transform: capitalize; }
