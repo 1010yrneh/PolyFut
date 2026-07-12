@@ -25,6 +25,7 @@ import cv2
 import numpy as np
 
 from polyfut_video.pipeline.decode import probe_video
+from polyfut_v2.pipeline.color import median_hsv, torso_hsv
 
 CLIP_LEN_SEC = 3.0
 ENHANCE_SCALE = 2
@@ -101,32 +102,40 @@ def default_moments(duration_sec: float, reroll: int = 0, n: int = 4) -> list[fl
 def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
            max_dist_frac: float = 0.08) -> list[dict]:
     """Nearest-centroid tracking over sampled frames → tracklets in normalized
-    coords. Good enough for a 3s clip; no re-ID needed."""
+    coords, each tagged with a median kit colour (for team filtering in the UI).
+    Good enough for a 3s clip; no re-ID needed. Dets are (bbox, cx, cy, hsv)."""
     tracks: list[dict] = []
     max_dist = max_dist_frac * w
     for fi, dets in dets_per_frame:
         used: set[int] = set()
         for tr in tracks:
             best, bd = None, 1e9
-            for j, (bbox, cx, cy) in enumerate(dets):
+            for j, (bbox, cx, cy, hsv) in enumerate(dets):
                 if j in used:
                     continue
                 d = math.hypot(cx - tr["_cx"], cy - tr["_cy"])
                 if d < bd:
                     bd, best = d, j
             if best is not None and bd <= max_dist:
-                bbox, cx, cy = dets[best]
+                bbox, cx, cy, hsv = dets[best]
                 used.add(best)
                 tr["points"].append(_pt(fi, fps, bbox, cx, cy, w, h))
                 tr["_cx"], tr["_cy"] = cx, cy
-        for j, (bbox, cx, cy) in enumerate(dets):
+                if hsv is not None:
+                    tr["_hsv"].append(hsv)
+        for j, (bbox, cx, cy, hsv) in enumerate(dets):
             if j in used:
                 continue
             tracks.append({"_cx": cx, "_cy": cy,
-                           "points": [_pt(fi, fps, bbox, cx, cy, w, h)]})
+                           "points": [_pt(fi, fps, bbox, cx, cy, w, h)],
+                           "_hsv": [hsv] if hsv is not None else []})
     out = []
     for i, tr in enumerate(t for t in tracks if len(t["points"]) >= 2):
-        out.append({"id": i, "points": tr["points"]})
+        kit = median_hsv(tr["_hsv"]) if tr["_hsv"] else None
+        out.append({
+            "id": i, "points": tr["points"],
+            "kit_hsv": None if kit is None else [round(float(v), 1) for v in kit],
+        })
     return out
 
 
@@ -183,7 +192,10 @@ def build_seed_clip(
         dets = []
         for pl in players:
             x1, y1, x2, y2 = pl.bbox
-            dets.append((pl.bbox, (x1 + x2) / 2.0, (y1 + y2) / 2.0))
+            # Kit colour of this player (None if the crop is too small/unreliable
+            # → treated as "unknown" by the UI, which keeps it shown).
+            hsv = torso_hsv(enhanced[i], pl.bbox, min_area=100)
+            dets.append((pl.bbox, (x1 + x2) / 2.0, (y1 + y2) / 2.0, hsv))
         dets_per_frame.append((i, dets))
 
     tracklets = _track(dets_per_frame, ws, hs, fps)

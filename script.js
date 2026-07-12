@@ -1707,6 +1707,59 @@ let __v2SeedRAF = null;
 let __v2SeedBuilt = false;      // has any clip finished building this session?
 let __v2SeedLoadTimer = null;   // live elapsed-time ticker while a clip builds
 
+// --- team-colour filter: show only your team's markers (keep unknown shown) ---
+// Convert a #rrggbb kit colour to OpenCV-style HSV ([H 0-179, S/V 0-255]) so it
+// compares against the backend's per-tracklet kit_hsv.
+function __hexToHsv(hex) {
+    hex = String(hex || '').replace('#', '');
+    if (hex.length === 3) hex = hex.split('').map(function (c) { return c + c; }).join('');
+    if (hex.length < 6) return null;
+    var r = parseInt(hex.substr(0, 2), 16) / 255,
+        g = parseInt(hex.substr(2, 2), 16) / 255,
+        b = parseInt(hex.substr(4, 2), 16) / 255;
+    if (isNaN(r) || isNaN(g) || isNaN(b)) return null;
+    var mx = Math.max(r, g, b), mn = Math.min(r, g, b), d = mx - mn, hh = 0;
+    if (d !== 0) {
+        if (mx === r) hh = ((g - b) / d) % 6;
+        else if (mx === g) hh = (b - r) / d + 2;
+        else hh = (r - g) / d + 4;
+        hh *= 60; if (hh < 0) hh += 360;
+    }
+    return [hh / 2, (mx === 0 ? 0 : d / mx) * 255, mx * 255];
+}
+
+// Hue-weighted circular HSV distance (mirrors backend color.hsv_distance).
+function __hsvDist(a, b) {
+    if (!a || !b) return null;
+    var dh = Math.abs(a[0] - b[0]); dh = Math.min(dh, 180 - dh);
+    var ds = Math.abs(a[1] - b[1]), dv = Math.abs(a[2] - b[2]);
+    return Math.sqrt((2 * dh) * (2 * dh) + ds * ds + (0.5 * dv) * (0.5 * dv));
+}
+
+function __v2SeedDefaultKits() {
+    // The fallback red/white pair means kit detection failed → don't filter.
+    return (cvTeams || []).length === 2 &&
+        cvTeams[0].hex === '#e23b3b' && cvTeams[1].hex === '#e6efe6';
+}
+
+// True if a tracklet is CLEARLY on another team (hide it). Unknown colour or an
+// unreliable team read → false (keep shown), per the safety choice.
+function __v2SeedOtherTeam(tr) {
+    if (!cvMyTeam || !cvMyTeam.hex || __v2SeedDefaultKits()) return false;
+    var others = (cvTeams || []).filter(function (t) { return t !== cvMyTeam && t.hex; });
+    if (!others.length) return false;
+    var kh = tr && tr.kit_hsv;
+    if (!kh) return false;                              // unknown → shown
+    var dMine = __hsvDist(kh, __hexToHsv(cvMyTeam.hex));
+    if (dMine == null) return false;
+    var dOther = Infinity;
+    others.forEach(function (t) {
+        var d = __hsvDist(kh, __hexToHsv(t.hex));
+        if (d != null && d < dOther) dOther = d;
+    });
+    return dOther < dMine - 15 && dOther < 90;          // clearly nearer another kit
+}
+
 function showV2SeedScreen(url, duration) {
     __v2Seed = {
         reroll: 0, index: 0, moments: [], nMoments: 4,
@@ -1714,9 +1767,27 @@ function showV2SeedScreen(url, duration) {
         // Mark yourself in as many clips as you appear in — every clip's taps
         // are combined into a stronger appearance seed. key -> {trackId, taps}.
         selections: {},
+        showAll: false,          // reveal other-team markers (safety toggle)
+        teamFiltered: false,
     };
+    var chk = document.getElementById('cv-seed-showall');
+    if (chk) chk.checked = false;
     document.getElementById('cv-seed-screen').classList.remove('hidden');
     __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
+}
+
+// Show the "show all players" toggle only when the team filter actually hid
+// someone (and reflect current state).
+function __v2SeedUpdateShowAll() {
+    const s = __v2Seed;
+    const wrap = document.getElementById('cv-seed-showall-wrap');
+    if (!wrap || !s) return;
+    wrap.classList.toggle('hidden', !s.teamFiltered && !s.showAll);
+}
+
+function __v2SeedToggleShowAll(on) {
+    const s = __v2Seed;
+    if (s) s.showAll = !!on;   // anim loop reads this live
 }
 
 function __v2SeedSelCount() {
@@ -1879,10 +1950,18 @@ function __v2SeedShowClip(clip, key) {
     }
     // One group per tracked player: a pin near the top + a thin leader line down
     // to the player, so the marker never blocks the view of the player.
+    const tracks = clip.tracklets || [];
+    // Team filter: hide only players clearly on the other team. If that would
+    // hide *everyone* (bad colour read), fall back to showing all.
+    let hidden = tracks.map(function (tr) { return __v2SeedOtherTeam(tr); });
+    if (tracks.length && hidden.every(function (h) { return h; })) {
+        hidden = tracks.map(function () { return false; });
+    }
+    s.teamFiltered = hidden.some(function (h) { return h; });
     const nodes = document.getElementById('cv-seed-nodes');
     nodes.innerHTML = '';
     s.nodeEls = [];
-    (clip.tracklets || []).forEach(function (tr) {
+    tracks.forEach(function (tr, ti) {
         const group = document.createElement('div');
         group.className = 'cv-seed-track';
         group.dataset.trackId = String(tr.id);
@@ -1897,8 +1976,9 @@ function __v2SeedShowClip(clip, key) {
         group.appendChild(leader);
         group.appendChild(pin);
         nodes.appendChild(group);
-        s.nodeEls.push({ group: group, pin: pin, leader: leader });
+        s.nodeEls.push({ group: group, pin: pin, leader: leader, hidden: hidden[ti] });
     });
+    __v2SeedUpdateShowAll();
     // Re-highlight the marker you picked earlier in this clip, if any.
     if (already) {
         s.nodeEls.forEach(function (e) {
@@ -1946,9 +2026,11 @@ function __v2SeedStartAnim() {
         const els = s.nodeEls || [];
         const tracks = s.clip.tracklets || [];
         for (let i = 0; i < tracks.length && i < els.length; i++) {
-            const pos = __v2SeedPosAt(tracks[i].points, t);
             const e = els[i];
-            if (!pos) { e.pin.style.display = 'none'; e.leader.style.display = 'none'; continue; }
+            const pos = __v2SeedPosAt(tracks[i].points, t);
+            if (!pos || (e.hidden && !s.showAll)) {
+                e.pin.style.display = 'none'; e.leader.style.display = 'none'; continue;
+            }
             const xPct = pos.nx * 100, yPct = pos.ny * 100;
             e.pin.style.display = 'block';
             e.pin.style.left = xPct + '%';
@@ -2087,6 +2169,10 @@ document.addEventListener('DOMContentLoaded', function () {
     if (seedReroll) seedReroll.addEventListener('click', function () { __v2SeedReroll(); });
     var seedStage = document.getElementById('cv-seed-stage');
     if (seedStage) seedStage.addEventListener('click', function () { __v2SeedTogglePlay(); });
+    var seedShowAll = document.getElementById('cv-seed-showall');
+    if (seedShowAll) seedShowAll.addEventListener('change', function () {
+        __v2SeedToggleShowAll(this.checked);
+    });
     if (seedCancel) seedCancel.addEventListener('click', function () {
         __v2SeedStopAnim();
         var sv = document.getElementById('cv-seed-video');

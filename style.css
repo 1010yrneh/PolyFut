@@ -648,6 +648,19 @@ html, body {
     min-height: 1.2em;
 }
 
+.cv-seed-showall {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    margin: -8px 0 14px;
+    font-size: 0.82rem;
+    color: #9fe8c2;
+    cursor: pointer;
+    user-select: none;
+}
+.cv-seed-showall.hidden { display: none; }
+.cv-seed-showall input { accent-color: var(--fifa-green); cursor: pointer; }
+
 /* clip navigation dots */
 .cv-seed-clipnav { display: flex; align-items: center; justify-content: center; gap: 10px; margin-bottom: 12px; }
 .cv-seed-clip-dot {

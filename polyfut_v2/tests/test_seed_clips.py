@@ -30,9 +30,10 @@ def test_track_follows_a_moving_player():
     for fi in range(0, 30, 3):
         cx = 100 + fi * 5
         bbox = [cx - 20, 200, cx + 20, 300]
-        dets_per_frame.append((fi, [(bbox, float(cx), 250.0)]))
+        dets_per_frame.append((fi, [(bbox, float(cx), 250.0, None)]))
     tracks = sc._track(dets_per_frame, w, h, fps=25.0)
     assert len(tracks) == 1
+    assert "kit_hsv" in tracks[0]      # colour tag present (None here)
     pts = tracks[0]["points"]
     assert len(pts) == 10
     assert pts[0]["nx"] < pts[-1]["nx"]   # node followed the player rightward
@@ -45,9 +46,21 @@ def test_track_two_players_stay_separate():
     for fi in range(0, 15, 3):
         a = [100, 200, 140, 300]
         b = [800, 200, 840, 300]
-        dets_per_frame.append((fi, [(a, 120.0, 250.0), (b, 820.0, 250.0)]))
+        dets_per_frame.append((fi, [(a, 120.0, 250.0, None), (b, 820.0, 250.0, None)]))
     tracks = sc._track(dets_per_frame, w, h, fps=25.0)
     assert len(tracks) == 2
+
+
+def test_track_emits_median_kit_colour():
+    import numpy as np
+    w, h = 1000, 500
+    red = np.array([120, 200, 200], np.float32)   # HSV-ish tag
+    dets_per_frame = []
+    for fi in range(0, 15, 3):
+        bbox = [100, 200, 140, 300]
+        dets_per_frame.append((fi, [(bbox, 120.0, 250.0, red)]))
+    tracks = sc._track(dets_per_frame, w, h, fps=25.0)
+    assert tracks[0]["kit_hsv"] == [120.0, 200.0, 200.0]
 
 
 def test_taps_from_tracklet_subsamples_and_offsets():
