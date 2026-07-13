@@ -687,8 +687,35 @@ html, body {
 .cv-montage-bar { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .cv-montage-bar-fill { height: 100%; background: var(--fifa-green); transition: width 0.25s; }
 .cv-montage-count { color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
-.cv-montage-stage { display: flex; justify-content: center; align-items: center; background: #000; padding: 0; }
-#cv-montage-canvas { width: 100%; max-width: 560px; height: auto; display: block; background: #050706; }
+.cv-montage-card { max-width: min(94vw, 1200px); }
+.cv-montage-stage {
+    position: relative;
+    display: flex; justify-content: center; align-items: center;
+    background: #000; padding: 0; overflow: hidden;
+}
+#cv-montage-canvas {
+    width: 100%; height: auto; max-height: 72vh; display: block;
+    background: #050706; cursor: grab; touch-action: none;
+}
+#cv-montage-canvas.grabbing { cursor: grabbing; }
+#cv-montage-canvas.sharpen { filter: url(#cv-sharpen); }
+.cv-montage-controls {
+    position: absolute; top: 10px; right: 10px;
+    display: flex; align-items: center; gap: 6px;
+    background: rgba(0, 0, 0, 0.55); border-radius: 8px; padding: 5px 8px;
+    backdrop-filter: blur(3px);
+}
+.cv-montage-controls button {
+    min-width: 30px; height: 30px; padding: 0 8px;
+    border: 1px solid rgba(255, 255, 255, 0.25); border-radius: 6px;
+    background: rgba(255, 255, 255, 0.08); color: #eafff2;
+    font-size: 0.9rem; cursor: pointer; line-height: 1;
+}
+.cv-montage-controls button:hover { background: rgba(48, 255, 143, 0.25); }
+.cv-montage-controls button:disabled { opacity: 0.4; cursor: default; }
+#cv-montage-enhance { font-weight: 600; }
+#cv-montage-enhance.on { background: var(--fifa-green); color: #04180d; border-color: var(--fifa-green); }
+#cv-montage-zoomlevel { color: #9fe8c2; font-size: 0.78rem; min-width: 34px; text-align: center; }
 .cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 12px 0 18px; font-family: 'Rajdhani', sans-serif; }
 .cv-montage-time { color: #e8f5ec; font-weight: 700; }
 .cv-montage-kinds { color: #93a397; text-transform: capitalize; }

@@ -54,3 +54,17 @@ def test_build_review_track_for_item_shapes_and_guards(tmp_path):
 def test_review_track_unreadable_returns_none(tmp_path):
     missing = tmp_path / "nope.mp4"
     assert rt.build_review_track(str(missing), [10, 10, 30, 40], 1.0, 0.0, 2.0) is None
+
+
+def test_build_enhanced_review_clip(tmp_path):
+    from polyfut_v2.app_service import build_enhanced_review_clip
+    vp = tmp_path / "clip.mp4"
+    fps, n = _moving_box_clip(vp)
+    item = {"clip_start_sec": 0.2, "clip_end_sec": (n - 1) / fps}
+    out = tmp_path / "enh.mp4"
+    meta = build_enhanced_review_clip(str(vp), item, str(out))
+    assert meta is not None
+    assert out.exists() and out.stat().st_size > 0
+    assert meta["start_sec"] == 0.2 and meta["duration"] > 0
+    # unreadable → None (frontend keeps the original)
+    assert build_enhanced_review_clip(str(tmp_path / "no.mp4"), item, str(out)) is None

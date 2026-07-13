@@ -2318,12 +2318,54 @@ function showV2Montage(j) {
     var undoBtn = document.getElementById('cv-montage-undo-btn');
     if (undoBtn) undoBtn.onclick = function () { __v2MontageUndo(); };
 
+    // zoom / enhance controls (re-created on restore)
+    var zin = document.getElementById('cv-montage-zoomin');
+    var zout = document.getElementById('cv-montage-zoomout');
+    var zreset = document.getElementById('cv-montage-zoomreset');
+    var enh = document.getElementById('cv-montage-enhance');
+    if (zin) zin.onclick = function () { __v2MontageZoomStep(1.4); };
+    if (zout) zout.onclick = function () { __v2MontageZoomStep(1 / 1.4); };
+    if (zreset) zreset.onclick = function () { __v2MontageResetView(); };
+    if (enh) enh.onclick = function () { __v2MontageEnhance(); };
+    __v2MontageWireCanvas();
+
     var vid = document.getElementById('cv-montage-video');
-    vid.src = cvApiUrl('/api/video/' + __v2Montage.token);
-    vid.load();
+    vid.removeAttribute('data-src'); vid.removeAttribute('src');   // __v2MontageLoadSource sets it
 
     if (queue.length === 0) { __v2MontageFinalize(); return; }
     __v2MontageShow();
+}
+
+// Wheel-zoom and drag-to-pan on the review canvas.
+function __v2MontageWireCanvas() {
+    var canvas = document.getElementById('cv-montage-canvas');
+    if (!canvas) return;
+    canvas.onwheel = function (e) {
+        e.preventDefault();
+        var r = canvas.getBoundingClientRect();
+        var cx = (e.clientX - r.left) / r.width, cy = (e.clientY - r.top) / r.height;
+        var m = __v2Montage; if (!m) return;
+        __v2MontageZoomAt((m.zoom || 1) * (e.deltaY < 0 ? 1.15 : 1 / 1.15), cx, cy);
+    };
+    var drag = null;
+    canvas.onpointerdown = function (e) {
+        var m = __v2Montage; if (!m || (m.zoom || 1) <= 1.001) return;
+        drag = { x: e.clientX, y: e.clientY, panX: m.panX, panY: m.panY };
+        canvas.classList.add('grabbing');
+        try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    };
+    canvas.onpointermove = function (e) {
+        if (!drag) return;
+        var m = __v2Montage; if (!m) return;
+        var r = canvas.getBoundingClientRect();
+        m.panX = drag.panX - (e.clientX - drag.x) / r.width / (m.zoom || 1);
+        m.panY = drag.panY - (e.clientY - drag.y) / r.height / (m.zoom || 1);
+        __v2MontageClampPan();
+    };
+    canvas.onpointerup = canvas.onpointercancel = function (e) {
+        drag = null; canvas.classList.remove('grabbing');
+        try { canvas.releasePointerCapture(e.pointerId); } catch (err) {}
+    };
 }
 
 function __v2MontageRenderProgress() {
@@ -2370,10 +2412,12 @@ function __v2MontageShow() {
     var m = __v2Montage; if (!m) return;
     var it = m.queue[0];
     if (!it) { __v2MontageFinalize(); return; }
+    m.curItem = it;
+    m.zoom = 1; m.panX = 0.5; m.panY = 0.5;        // reset view for each clip
+    m.enhanced = false; m.timeOffset = 0;
+    __v2MontageUpdateZoomUI();
+    __v2MontageUpdateEnhanceUI(true, false);
     __v2MontageRenderProgress();
-    var vid = document.getElementById('cv-montage-video');
-    var canvas = document.getElementById('cv-montage-canvas');
-    var ctx = canvas.getContext('2d');
     var meta = document.getElementById('cv-montage-meta');
     if (meta) {
         meta.innerHTML =
@@ -2383,57 +2427,94 @@ function __v2MontageShow() {
     }
     __v2MontageFetchTrack(it);                     // ring-follow track for this touch
     if (m.queue[1]) __v2MontageFetchTrack(m.queue[1]);  // prefetch next
-    var start = it.clip_start_sec, end = it.clip_end_sec;
     m.playing = true;
+    __v2MontageLoadSource();
+    __v2MontageStartDraw();
+}
+
+// Point the video at the right source for the current mode (original full video,
+// seeked to the clip window; or the standalone enhanced clip) without disturbing
+// the zoom/pan state — so the Enhance toggle keeps your current view.
+function __v2MontageLoadSource() {
+    var m = __v2Montage; if (!m || !m.curItem) return;
+    var it = m.curItem;
+    var vid = document.getElementById('cv-montage-video');
+    var srcUrl, start, end;
+    if (m.enhanced && it.__enh) {
+        srcUrl = cvApiUrl(it.__enh.clip_url); start = 0;
+        end = it.__enh.duration || 2; m.timeOffset = it.__enh.start_sec || 0;
+    } else {
+        srcUrl = cvApiUrl('/api/video/' + m.token);
+        start = it.clip_start_sec; end = it.clip_end_sec; m.timeOffset = 0;
+    }
+    m.playStart = start; m.playEnd = end;
     function seekStart() {
         try { vid.currentTime = start; } catch (e) {}
         var p = vid.play(); if (p && p.catch) p.catch(function () {});
     }
-    if (vid.readyState >= 1) seekStart();
-    else vid.addEventListener('loadeddata', function ol() { vid.removeEventListener('loadeddata', ol); seekStart(); });
+    if (vid.getAttribute('data-src') !== srcUrl) {
+        vid.setAttribute('data-src', srcUrl);
+        vid.src = srcUrl; vid.load();
+        vid.addEventListener('loadeddata', function ol() {
+            vid.removeEventListener('loadeddata', ol); seekStart();
+        });
+    } else if (vid.readyState >= 1) {
+        seekStart();
+    }
     vid.ontimeupdate = function () {
-        if (vid.currentTime >= end || vid.currentTime < start - 0.2) {
-            try { vid.currentTime = start; } catch (e) {}
+        if (vid.currentTime >= m.playEnd || vid.currentTime < m.playStart - 0.2) {
+            try { vid.currentTime = m.playStart; } catch (e) {}
         }
     };
+}
 
+// One draw loop for the whole review; reads the live zoom/pan + current clip.
+function __v2MontageStartDraw() {
+    var m = __v2Montage; if (!m || m.__drawing) return;
+    m.__drawing = true;
+    var vid = document.getElementById('cv-montage-video');
+    var canvas = document.getElementById('cv-montage-canvas');
+    var ctx = canvas.getContext('2d');
     function draw() {
-        if (!m.playing || __v2Montage !== m) return;
+        var mm = __v2Montage;
+        if (!mm || mm !== m || !mm.playing) { m.__drawing = false; return; }
+        var it = mm.curItem;
         var nW = vid.videoWidth, nH = vid.videoHeight;
-        if (nW && nH) {
-            // Show the WHOLE frame at its true aspect ratio (no square squeeze):
-            // size the canvas buffer to the video's aspect the first time we know it.
-            var bufW = Math.min(nW, 640);
+        if (it && nW && nH) {
+            var bufW = Math.min(nW, 960);                    // sharper buffer for zoom
             var bufH = Math.round(bufW * nH / nW);
             if (canvas.width !== bufW || canvas.height !== bufH) {
                 canvas.width = bufW; canvas.height = bufH;
             }
-            ctx.drawImage(vid, 0, 0, nW, nH, 0, 0, canvas.width, canvas.height);
+            // Digital zoom/pan: draw a sub-region of the frame to fill the canvas.
+            var zoom = mm.zoom || 1;
+            var sw = nW / zoom, sh = nH / zoom;
+            var sx = Math.max(0, Math.min(nW - sw, (mm.panX || 0.5) * nW - sw / 2));
+            var sy = Math.max(0, Math.min(nH - sh, (mm.panY || 0.5) * nH - sh / 2));
+            ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-            // Player position (normalized, whole-frame) + box height, so the arrow
-            // sits directly above the detection box — over the player's head.
+            // Arrow over the player's box top (absolute time handles enhanced mode).
+            var absT = (vid.currentTime || 0) + (mm.timeOffset || 0);
             var pos = (it.__track && it.__track.length)
-                ? __v2MontagePosAt(it.__track, vid.currentTime) : null;
-            var nx, boxTopN;
+                ? __v2MontagePosAt(it.__track, absT) : null;
             var nhN = (it.__track && it.__track.length && it.__track[0].nh)
                 ? it.__track[0].nh : 0.14;
+            var fx, fy;
             if (pos) {
-                nx = pos.nx;
-                boxTopN = pos.ny - nhN / 2;                  // top of the player box
+                fx = pos.nx * nW; fy = (pos.ny - nhN / 2) * nH;
             } else {
-                // No tracklet → fall back to the stored contact box (640-space).
-                var sc = nW / Math.min(nW, 640);
-                nx = ((it.crop[0] + it.crop[2]) / 2) * sc / nW;
-                boxTopN = (it.crop[1] * sc) / nH;
+                var scc = nW / Math.min(nW, 640);            // crop is in 640-space
+                fx = ((it.crop[0] + it.crop[2]) / 2) * scc;
+                fy = it.crop[1] * scc;
             }
-            var ax = nx * canvas.width;
-            var ay = boxTopN * canvas.height - 4;            // just above the box top
-            var mw = 7, mh = 10;                             // small chevron ▼
+            var ax = (fx - sx) / sw * canvas.width;
+            var ay = (fy - sy) / sh * canvas.height - 4;
+            var mw = 7, mh = 10;
             ctx.fillStyle = 'rgba(48,255,143,0.95)';
             ctx.strokeStyle = 'rgba(0,0,0,0.55)';
             ctx.lineWidth = 1;
             ctx.beginPath();
-            ctx.moveTo(ax, ay);                              // tip points down at the head
+            ctx.moveTo(ax, ay);
             ctx.lineTo(ax - mw, ay - mh);
             ctx.lineTo(ax + mw, ay - mh);
             ctx.closePath();
@@ -2443,6 +2524,91 @@ function __v2MontageShow() {
         requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
+}
+
+// --- zoom / pan / enhance controls ---
+function __v2MontageUpdateZoomUI() {
+    var m = __v2Montage; if (!m) return;
+    var lvl = document.getElementById('cv-montage-zoomlevel');
+    if (lvl) lvl.textContent = (m.zoom || 1).toFixed(1) + '×';
+    var out = document.getElementById('cv-montage-zoomout');
+    if (out) out.disabled = (m.zoom || 1) <= 1.001;
+}
+
+function __v2MontageUpdateEnhanceUI(enabled, on, label) {
+    var b = document.getElementById('cv-montage-enhance');
+    if (!b) return;
+    b.disabled = enabled === false;
+    b.textContent = label || (on ? 'Enhanced' : 'Enhance');
+    b.classList.toggle('on', !!on);
+}
+
+function __v2MontageClampPan() {
+    var m = __v2Montage; var half = 0.5 / (m.zoom || 1);
+    m.panX = Math.max(half, Math.min(1 - half, m.panX));
+    m.panY = Math.max(half, Math.min(1 - half, m.panY));
+}
+
+// Zoom toward a point given as fractions of the canvas [0,1], keeping that point
+// fixed under the cursor.
+function __v2MontageZoomAt(newZoom, cxFrac, cyFrac) {
+    var m = __v2Montage; if (!m) return;
+    newZoom = Math.max(1, Math.min(6, newZoom));
+    var zOld = m.zoom || 1;
+    var swOld = 1 / zOld;
+    var sxOld = Math.max(0, Math.min(1 - swOld, (m.panX || 0.5) - swOld / 2));
+    var syOld = Math.max(0, Math.min(1 - swOld, (m.panY || 0.5) - swOld / 2));
+    var fXn = sxOld + cxFrac * swOld, fYn = syOld + cyFrac * swOld;
+    var swNew = 1 / newZoom;
+    m.zoom = newZoom;
+    if (newZoom <= 1.001) { m.panX = 0.5; m.panY = 0.5; }
+    else {
+        m.panX = (fXn - cxFrac * swNew) + swNew / 2;
+        m.panY = (fYn - cyFrac * swNew) + swNew / 2;
+        __v2MontageClampPan();
+    }
+    __v2MontageUpdateZoomUI();
+}
+
+function __v2MontageZoomStep(factor) {
+    var m = __v2Montage; if (!m) return;
+    __v2MontageZoomAt((m.zoom || 1) * factor, 0.5, 0.5);
+}
+
+function __v2MontageResetView() {
+    var m = __v2Montage; if (!m) return;
+    m.zoom = 1; m.panX = 0.5; m.panY = 0.5;
+    __v2MontageUpdateZoomUI();
+}
+
+function __v2MontageEnhance() {
+    var m = __v2Montage; if (!m || !m.curItem) return;
+    var it = m.curItem;
+    if (m.enhanced) {                                  // toggle back to original
+        m.enhanced = false;
+        __v2MontageUpdateEnhanceUI(true, false);
+        __v2MontageLoadSource();
+        return;
+    }
+    if (it.__enh) {                                    // already built → instant
+        m.enhanced = true;
+        __v2MontageUpdateEnhanceUI(true, true);
+        __v2MontageLoadSource();
+        return;
+    }
+    __v2MontageUpdateEnhanceUI(false, false, 'Enhancing…');
+    fetch(cvApiUrl('/api/v2/enhance_clip/' + m.jobId + '/' + it.rank))
+        .then(function (r) { return r.json(); })
+        .then(function (d) {
+            if (!d || d.error || !d.clip_url) throw new Error('enhance failed');
+            it.__enh = d;
+            if (m.curItem === it) {
+                m.enhanced = true;
+                __v2MontageUpdateEnhanceUI(true, true);
+                __v2MontageLoadSource();
+            }
+        })
+        .catch(function () { __v2MontageUpdateEnhanceUI(true, false, 'Enhance'); });
 }
 
 // Does deciding `it` as `dec` also settle queued touch `q`?

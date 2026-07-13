@@ -196,6 +196,47 @@ def build_review_track_for_item(
         return None
 
 
+def build_enhanced_review_clip(
+    video_path: str, item: dict, out_path: str, cfg: PipelineV2Config | None = None
+) -> dict | None:
+    """Build an upscaled + sharpened version of a review touch's clip window so
+    the user can look more closely. Reuses the seed-clip enhancer. Returns
+    ``{start_sec, duration, fps}`` (the clip is standalone, starting at 0)."""
+    import cv2
+
+    from polyfut_v2 import seed_clips as sc
+
+    try:
+        info = probe_video(video_path)
+    except Exception:  # noqa: BLE001
+        return None
+    fps = float(info.get("fps") or 25.0)
+    start = float(item.get("clip_start_sec") or 0.0)
+    end = float(item.get("clip_end_sec") or (start + 2.0))
+    start_frame = int(start * fps)
+    n = max(1, int(round((end - start) * fps)))
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        return None
+    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
+    frames = []
+    for _ in range(n):
+        ok, fr = cap.read()
+        if not ok or fr is None:
+            break
+        frames.append(sc.enhance_frame(fr))
+    cap.release()
+    if not frames:
+        return None
+
+    from pathlib import Path as _P
+    _P(out_path).parent.mkdir(parents=True, exist_ok=True)
+    sc.write_browser_clip(frames, out_path, fps)
+    return {"start_sec": round(start, 3), "duration": round(len(frames) / fps, 3),
+            "fps": fps}
+
+
 def warm_seed_detector(cfg: PipelineV2Config | None = None) -> None:
     """Compile/load the soccer player model ahead of time (≈150s one-time on this
     CPU) so the first seed clip doesn't pay for it. Safe to call repeatedly."""

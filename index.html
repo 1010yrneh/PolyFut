@@ -132,7 +132,20 @@
             <div id="cv-montage-progress" class="cv-montage-progress"></div>
             <div class="cv-montage-stage" id="cv-montage-stage">
                 <video id="cv-montage-video" playsinline muted style="display:none"></video>
-                <canvas id="cv-montage-canvas" width="320" height="320"></canvas>
+                <canvas id="cv-montage-canvas" class="sharpen" width="640" height="360"></canvas>
+                <div class="cv-montage-controls" id="cv-montage-controls">
+                    <button type="button" id="cv-montage-zoomout" title="Zoom out">−</button>
+                    <span id="cv-montage-zoomlevel">1.0×</span>
+                    <button type="button" id="cv-montage-zoomin" title="Zoom in">+</button>
+                    <button type="button" id="cv-montage-zoomreset" title="Reset view">Reset</button>
+                    <button type="button" id="cv-montage-enhance" title="Sharpen this clip for a closer look">Enhance</button>
+                </div>
+                <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+                    <filter id="cv-sharpen">
+                        <feConvolveMatrix order="3" preserveAlpha="true"
+                            kernelMatrix="0 -0.4 0  -0.4 2.6 -0.4  0 -0.4 0"/>
+                    </filter>
+                </svg>
             </div>
             <div class="cv-montage-meta" id="cv-montage-meta"></div>
             <div class="cv-montage-undo hidden" id="cv-montage-undo">

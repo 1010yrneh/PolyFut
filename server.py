@@ -48,6 +48,7 @@ except Exception as exc:
 try:
     from polyfut_v2.config import PipelineV2Config
     from polyfut_v2.app_service import (
+        build_enhanced_review_clip,
         build_one_seed_clip,
         build_review_track_for_item,
         build_seed_clips_index,
@@ -1098,6 +1099,56 @@ def v2_review_track(job_id: str, rank: int):
                "base_w": (tr or {}).get("base_w"), "base_h": (tr or {}).get("base_h")}
         cache.write_text(json.dumps(out), encoding="utf-8")
     return jsonify(out)
+
+
+@app.route("/api/v2/enhance_clip/<job_id>/<int:rank>", methods=["GET"])
+def v2_enhance_clip(job_id: str, rank: int):
+    """Build (or return cached) an upscaled + sharpened version of one review
+    touch's clip, for looking more closely. Standalone clip starting at 0."""
+    if not PIPELINE_V2_OK:
+        return jsonify({"error": f"v2 pipeline unavailable: {PIPELINE_V2_ERR}"}), 503
+    j = _get_job(job_id)
+    if not j or not j.get("montage"):
+        return jsonify({"error": "unknown job or no montage"}), 404
+    item = next((it for it in j["montage"] if int(it.get("rank", -1)) == rank), None)
+    if item is None:
+        return jsonify({"error": "unknown rank"}), 404
+    token = j.get("token")
+    video_path = UPLOADS / f"{token}.mp4"
+    if not token or not video_path.exists():
+        return jsonify({"error": "video unavailable"}), 400
+
+    edir = EXPORTS / job_id / "enhanced"
+    edir.mkdir(parents=True, exist_ok=True)
+    name = f"rank_{rank}.mp4"
+    clip_path = edir / name
+    meta_path = edir / f"rank_{rank}.json"
+    with _seed_clip_lock(f"enh:{job_id}:{rank}"):
+        if not (clip_path.exists() and meta_path.exists()):
+            try:
+                meta = build_enhanced_review_clip(str(video_path), item, str(clip_path))
+            except Exception as exc:  # noqa: BLE001
+                traceback.print_exc()
+                return jsonify({"error": f"{type(exc).__name__}: {exc}"}), 500
+            if meta is None:
+                return jsonify({"error": "could not read that clip"}), 422
+            meta_path.write_text(json.dumps(meta), encoding="utf-8")
+        else:
+            meta = json.loads(meta_path.read_text(encoding="utf-8"))
+    return jsonify({"ok": True, "rank": rank,
+                    "clip_url": f"/api/v2/enhance_clip_file/{job_id}/{name}", **meta})
+
+
+@app.route("/api/v2/enhance_clip_file/<job_id>/<name>", methods=["GET"])
+def v2_enhance_clip_file(job_id: str, name: str):
+    import re
+    if not re.fullmatch(r"[a-f0-9]{6,32}", job_id or "") or \
+       not re.fullmatch(r"rank_\d+\.mp4", name or ""):
+        return jsonify({"error": "invalid path"}), 400
+    edir = EXPORTS / job_id / "enhanced"
+    if not (edir / name).is_file():
+        return jsonify({"error": "clip not found"}), 404
+    return send_from_directory(str(edir), name, mimetype="video/mp4")
 
 
 @app.route("/api/v2/decisions/<job_id>", methods=["POST"])
