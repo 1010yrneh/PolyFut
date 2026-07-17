@@ -30,6 +30,13 @@ body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); 
 .pf-net-b { animation: pf-net-drift-b 22s ease-in-out infinite; transform-origin: 50% 50%; }
 .pf-net-node { animation: pf-net-pulse 5s ease-in-out infinite; }
 
+/* Same drifting net, scoped inside a container — used on waiting/loading
+   surfaces (which sit above the fixed page background) so they aren't static. */
+.pf-net-inline {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    z-index: 0; pointer-events: none; opacity: 0.5;
+}
+
 /* ===== APP HEADER ===== */
 .app-header {
     position: sticky;
@@ -483,6 +490,8 @@ html, body {
 }
 
 .cv-overlay-card {
+    position: relative;      /* sit above the inline net on waiting screens */
+    z-index: 1;
     width: 100%;
     max-width: 760px;
     background: var(--bg-panel);
@@ -639,7 +648,10 @@ html, body {
     line-height: 1.4;
 }
 .cv-seed-loading.hidden { display: none; }
-.cv-seed-loading-msg { text-align: center; max-width: 88%; line-height: 1.5; }
+.cv-seed-loading-msg {
+    position: relative; z-index: 1;   /* above the inline net */
+    text-align: center; max-width: 88%; line-height: 1.5;
+}
 
 .cv-seed-hint {
     color: var(--fifa-green);

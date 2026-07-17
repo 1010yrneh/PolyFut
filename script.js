@@ -38,6 +38,19 @@ function cvApiUrl(path) {
     return (cvServerBase || resolveCvServerBase()) + path;
 }
 
+// Drop a copy of the homepage's drifting neon net inside a container. Waiting
+// screens sit above the fixed page background, so they'd otherwise be a static
+// black box while work happens. Idempotent — the clone keeps animating.
+function __pfNetInto(el) {
+    if (!el || el.querySelector('.pf-net-inline')) return;
+    const src = document.querySelector('.pf-net-bg');
+    if (!src) return;
+    const net = src.cloneNode(true);
+    net.setAttribute('class', 'pf-net-inline');
+    net.setAttribute('aria-hidden', 'true');
+    el.insertBefore(net, el.firstChild);
+}
+
 function loadCvSession() {
     try {
         var raw = localStorage.getItem(CV_SESSION_KEY);
@@ -1850,7 +1863,16 @@ function __v2SeedRenderClipNav() {
 function __v2SeedSetLoading(on, msg) {
     const el = document.getElementById('cv-seed-loading');
     if (!el) return;
-    if (msg != null) el.innerHTML = '<div class="cv-seed-loading-msg">' + msg + '</div>';
+    __pfNetInto(el);                       // drifting net behind the message
+    // Update only the message node — replacing the whole innerHTML each tick
+    // would rebuild (and restart) the net animation every second.
+    let box = el.querySelector('.cv-seed-loading-msg');
+    if (!box) {
+        box = document.createElement('div');
+        box.className = 'cv-seed-loading-msg';
+        el.appendChild(box);
+    }
+    if (msg != null) box.innerHTML = msg;
     el.classList.toggle('hidden', !on);
     if (!on) __v2SeedStopLoadTicker();
 }
@@ -2138,6 +2160,9 @@ document.addEventListener('DOMContentLoaded', function () {
     initProcessTracker();
     tryResumeCvSession();
     refreshMatchCatalogue();
+    // Keep the waiting screens alive with the homepage's drifting net.
+    __pfNetInto(document.getElementById('cv-processing-screen'));
+    __pfNetInto(document.getElementById('cv-seed-loading'));
     const teamCancel = document.getElementById('cv-team-cancel');
     const procCancel = document.getElementById('cv-processing-cancel');
     const resumeBtn = document.getElementById('cv-resume-btn');
