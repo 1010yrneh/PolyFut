@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 
 from polyfut_video.pipeline.decode import probe_video
-from polyfut_v2.pipeline.color import median_hsv, torso_hsv
+from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_hsv
 
 CLIP_LEN_SEC = 3.0
 ENHANCE_SCALE = 2
@@ -100,19 +100,33 @@ def default_moments(duration_sec: float, reroll: int = 0, n: int = 4) -> list[fl
 
 
 def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
-           max_dist_frac: float = 0.08) -> list[dict]:
-    """Nearest-centroid tracking over sampled frames → tracklets in normalized
-    coords, each tagged with a median kit colour (for team filtering in the UI).
-    Good enough for a 3s clip; no re-ID needed. Dets are (bbox, cx, cy, hsv)."""
+           max_dist_frac: float = 0.08, color_max_dist: float = 60.0) -> list[dict]:
+    """Colour-locked nearest-centroid tracking over sampled frames → tracklets in
+    normalized coords, each tagged with a median kit colour.
+
+    A tag is hard-locked to one kit colour: matching a track to a detection first
+    rejects any detection whose (known) colour is clearly different from the
+    track's established colour, THEN takes the nearest survivor. This stops a tag
+    from jumping between, say, a yellow and a black player when they cross —
+    same-colour swaps can still happen (unavoidable without re-ID), but a
+    cross-colour switch cannot. Detections with an unreadable colour fall back to
+    position only, so a momentary bad frame doesn't drop the tag. Dets are
+    (bbox, cx, cy, hsv)."""
     tracks: list[dict] = []
     max_dist = max_dist_frac * w
     for fi, dets in dets_per_frame:
         used: set[int] = set()
         for tr in tracks:
+            tcol = tr.get("_color")
             best, bd = None, 1e9
             for j, (bbox, cx, cy, hsv) in enumerate(dets):
                 if j in used:
                     continue
+                # Colour lock FIRST: skip a detection of a clearly different kit.
+                if tcol is not None and hsv is not None:
+                    cd = hsv_distance(hsv, tcol)
+                    if cd is not None and cd > color_max_dist:
+                        continue
                 d = math.hypot(cx - tr["_cx"], cy - tr["_cy"])
                 if d < bd:
                     bd, best = d, j
@@ -123,12 +137,14 @@ def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
                 tr["_cx"], tr["_cy"] = cx, cy
                 if hsv is not None:
                     tr["_hsv"].append(hsv)
+                    tr["_color"] = median_hsv(tr["_hsv"])
         for j, (bbox, cx, cy, hsv) in enumerate(dets):
             if j in used:
                 continue
+            hs = [hsv] if hsv is not None else []
             tracks.append({"_cx": cx, "_cy": cy,
                            "points": [_pt(fi, fps, bbox, cx, cy, w, h)],
-                           "_hsv": [hsv] if hsv is not None else []})
+                           "_hsv": hs, "_color": (median_hsv(hs) if hs else None)})
     out = []
     for i, tr in enumerate(t for t in tracks if len(t["points"]) >= 2):
         kit = median_hsv(tr["_hsv"]) if tr["_hsv"] else None

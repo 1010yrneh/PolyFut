@@ -51,6 +51,34 @@ def test_track_two_players_stay_separate():
     assert len(tracks) == 2
 
 
+def test_track_colour_lock_no_cross_team_swap():
+    """A yellow and a black player cross paths. With colour-locked tracking each
+    tag must stay on its own colour — never jump teams at the crossover frame."""
+    import numpy as np
+    w, h = 1000, 500
+    yellow = np.array([27, 200, 200], np.float32)
+    black = np.array([0, 30, 40], np.float32)
+    dets_per_frame = []
+    for k, fi in enumerate(range(0, 21, 3)):        # 8 sampled frames
+        # yellow drifts right, black drifts left; they swap sides at the middle,
+        # passing within a few px of each other (would confuse position-only).
+        yx = 200 + k * 80
+        bx = 760 - k * 80
+        y = ([yx - 20, 200, yx + 20, 300], float(yx), 250.0, yellow)
+        b = ([bx - 20, 200, bx + 20, 300], float(bx), 250.0, black)
+        dets_per_frame.append((fi, [y, b]))
+    tracks = sc._track(dets_per_frame, w, h, fps=25.0)
+    # Each surviving tag must be a single colour end-to-end.
+    for tr in tracks:
+        kit = tr["kit_hsv"]
+        assert kit is not None
+        # kit is close to exactly one of the two team colours (not an average).
+        from polyfut_v2.pipeline.color import hsv_distance
+        d_yellow = hsv_distance(np.array(kit, np.float32), yellow)
+        d_black = hsv_distance(np.array(kit, np.float32), black)
+        assert min(d_yellow, d_black) < 30   # firmly one colour, not blended
+
+
 def test_track_emits_median_kit_colour():
     import numpy as np
     w, h = 1000, 500
