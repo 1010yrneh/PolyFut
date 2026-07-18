@@ -1755,22 +1755,55 @@ function __v2SeedDefaultKits() {
         cvTeams[0].hex === '#e23b3b' && cvTeams[1].hex === '#e6efe6';
 }
 
-// True if a tracklet is CLEARLY on another team (hide it). Unknown colour or an
-// unreliable team read → false (keep shown), per the safety choice.
-function __v2SeedOtherTeam(tr) {
-    if (!cvMyTeam || !cvMyTeam.hex || __v2SeedDefaultKits()) return false;
-    var others = (cvTeams || []).filter(function (t) { return t !== cvMyTeam && t.hex; });
-    if (!others.length) return false;
-    var kh = tr && tr.kit_hsv;
-    if (!kh) return false;                              // unknown → shown
-    var dMine = __hsvDist(kh, __hexToHsv(cvMyTeam.hex));
-    if (dMine == null) return false;
-    var dOther = Infinity;
-    others.forEach(function (t) {
-        var d = __hsvDist(kh, __hexToHsv(t.hex));
-        if (d != null && d < dOther) dOther = d;
-    });
-    return dOther < dMine - 15 && dOther < 90;          // clearly nearer another kit
+// Split a clip's players into two kit colours and hide the team you didn't pick.
+// Rather than testing each player against the detected team hex with an absolute
+// threshold (which let black players far from *both* detected colours slip
+// through), we cluster the players actually in the clip into two colours, then
+// keep the cluster nearest your selected kit and hide the other outright.
+// Returns a boolean[] (hidden) aligned to `tracklets`. Unknown-colour players are
+// left shown so you're never accidentally hidden.
+function __v2SeedTeamHiddenFlags(tracklets) {
+    var n = tracklets.length, hidden = new Array(n).fill(false);
+    if (!cvMyTeam || !cvMyTeam.hex || __v2SeedDefaultKits()) return hidden;
+    var mine = __hexToHsv(cvMyTeam.hex);
+    if (!mine) return hidden;
+
+    var idx = [], cols = [];
+    for (var i = 0; i < n; i++) {
+        if (tracklets[i].kit_hsv) { idx.push(i); cols.push(tracklets[i].kit_hsv); }
+    }
+    if (cols.length < 3) return hidden;              // too few to trust a 2-way split
+
+    // Seed 2-means with the two most different colours, then a few iterations.
+    var a = 0, b = 1, bestD = -1;
+    for (var p = 0; p < cols.length; p++) {
+        for (var q = p + 1; q < cols.length; q++) {
+            var d = __hsvDist(cols[p], cols[q]);
+            if (d != null && d > bestD) { bestD = d; a = p; b = q; }
+        }
+    }
+    var c0 = cols[a].slice(), c1 = cols[b].slice(), assign = new Array(cols.length);
+    for (var it = 0; it < 4; it++) {
+        var s0 = [0, 0, 0], n0 = 0, s1 = [0, 0, 0], n1 = 0;
+        for (var k = 0; k < cols.length; k++) {
+            var g = (__hsvDist(cols[k], c0) <= __hsvDist(cols[k], c1)) ? 0 : 1;
+            assign[k] = g;
+            var s = (g === 0) ? s0 : s1;
+            s[0] += cols[k][0]; s[1] += cols[k][1]; s[2] += cols[k][2];
+            if (g === 0) n0++; else n1++;
+        }
+        if (n0) c0 = [s0[0] / n0, s0[1] / n0, s0[2] / n0];
+        if (n1) c1 = [s1[0] / n1, s1[1] / n1, s1[2] / n1];
+    }
+    // If the two clusters aren't clearly different, it's really one team on
+    // screen — don't split it in half.
+    if (__hsvDist(c0, c1) < 45) return hidden;
+
+    var mineCluster = (__hsvDist(c0, mine) <= __hsvDist(c1, mine)) ? 0 : 1;
+    for (var k2 = 0; k2 < cols.length; k2++) {
+        if (assign[k2] !== mineCluster) hidden[idx[k2]] = true;
+    }
+    return hidden;
 }
 
 function showV2SeedScreen(url, duration) {
@@ -1973,9 +2006,10 @@ function __v2SeedShowClip(clip, key) {
     // One group per tracked player: a pin near the top + a thin leader line down
     // to the player, so the marker never blocks the view of the player.
     const tracks = clip.tracklets || [];
-    // Team filter: hide only players clearly on the other team. If that would
-    // hide *everyone* (bad colour read), fall back to showing all.
-    let hidden = tracks.map(function (tr) { return __v2SeedOtherTeam(tr); });
+    // Team filter: split the clip's players into two kit colours and hide the
+    // team you didn't pick. If that would hide *everyone* (bad colour read),
+    // fall back to showing all.
+    let hidden = __v2SeedTeamHiddenFlags(tracks);
     if (tracks.length && hidden.every(function (h) { return h; })) {
         hidden = tracks.map(function () { return false; });
     }
