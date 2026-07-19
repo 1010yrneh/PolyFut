@@ -2035,12 +2035,19 @@ function __v2SeedShowClip(clip, key) {
         s.nodeEls.push({ group: group, pin: pin, leader: leader, hidden: hidden[ti] });
     });
     __v2SeedUpdateShowAll();
-    // Re-highlight the marker you picked earlier in this clip, if any.
+    // Re-highlight the marker you picked earlier in this clip, if any, and
+    // restore its switch flag; otherwise clear the flag row for a fresh clip.
     if (already) {
         s.nodeEls.forEach(function (e) {
             e.group.classList.toggle('selected',
                 e.group.dataset.trackId === String(already.trackId));
         });
+        var picked = tracks.filter(function (t) {
+            return String(t.id) === String(already.trackId);
+        })[0];
+        __v2SeedSetFlag(true, !!(picked && __v2SeedTrackSwitched(picked)));
+    } else {
+        __v2SeedSetFlag(false, false);
     }
     __v2SeedUpdateFinishBtn();
     __v2SeedShowPlayPause(false);   // starts playing → hide indicator
@@ -2137,17 +2144,72 @@ function __v2SeedStopAnim() {
     if (__v2SeedRAF) { cancelAnimationFrame(__v2SeedRAF); __v2SeedRAF = null; }
 }
 
+// Build the appearance sample from a short window around the moment you tapped
+// (you confirmed it was you then), not the whole clip — so a tag that switches a
+// second later never poisons your gallery.
+const __V2_SEED_TAP_WINDOW = 0.75;   // seconds each side of the tap
+function __v2SeedWindowTaps(tr, clip, tapT) {
+    const start = clip.start_sec || 0;
+    const pts = tr.points || [];
+    if (!pts.length) return tr.taps || [];
+    let win = pts.filter(function (p) {
+        return Math.abs(p.t - tapT) <= __V2_SEED_TAP_WINDOW;
+    });
+    if (win.length < 3) {                       // sparse here → nearest few points
+        win = pts.slice().sort(function (a, b) {
+            return Math.abs(a.t - tapT) - Math.abs(b.t - tapT);
+        }).slice(0, Math.min(6, pts.length));
+    }
+    if (win.length > 8) {                        // cap, spread across the window
+        const step = win.length / 8, out = [];
+        for (let i = 0; i < 8; i++) out.push(win[Math.floor(i * step)]);
+        win = out;
+    }
+    return win.map(function (p) {
+        return { t_sec: Math.round((start + p.t) * 1000) / 1000, nx: p.nx, ny: p.ny };
+    });
+}
+
+// A tag likely switched players if the tracked colour flips across the clip:
+// compare the median colour of the early points to the late points.
+function __v2SeedTrackSwitched(tr) {
+    const cols = (tr.points || []).map(function (p) { return p.c; }).filter(Boolean);
+    if (cols.length < 4) return false;
+    function med(arr) {
+        const m = [0, 1, 2].map(function (k) {
+            const v = arr.map(function (c) { return c[k]; }).sort(function (a, b) { return a - b; });
+            return v[Math.floor(v.length / 2)];
+        });
+        return m;
+    }
+    const n = cols.length, third = Math.max(1, Math.floor(n * 0.4));
+    const early = med(cols.slice(0, third)), late = med(cols.slice(n - third));
+    const d = __hsvDist(early, late);
+    return d != null && d > 55;                  // clear colour flip → probable switch
+}
+
 function __v2SeedPickNode(tr, key) {
     const s = __v2Seed;
     if (!s) return;
+    const vid = document.getElementById('cv-seed-video');
+    const tapT = (vid && vid.currentTime) || 0;
     const cur = s.selections[key];
     const deselect = cur && String(cur.trackId) === String(tr.id);  // tap again → clear
-    if (deselect) delete s.selections[key];
-    else s.selections[key] = { trackId: tr.id, taps: tr.taps || [] };
+    if (deselect) {
+        delete s.selections[key];
+    } else {
+        s.selections[key] = {
+            trackId: tr.id,
+            taps: __v2SeedWindowTaps(tr, s.clip, tapT),   // tap-anchored sample
+        };
+    }
     (s.nodeEls || []).forEach(function (e) {
         e.group.classList.toggle('selected',
             !deselect && e.group.dataset.trackId === String(tr.id));
     });
+    // Auto-flag a likely tag switch on the player you picked.
+    const switched = !deselect && __v2SeedTrackSwitched(tr);
+    __v2SeedSetFlag(!deselect, switched);
     const hint = document.getElementById('cv-seed-hint');
     if (hint) {
         const nsel = __v2SeedSelCount();
@@ -2158,6 +2220,34 @@ function __v2SeedPickNode(tr, key) {
     }
     __v2SeedUpdateFinishBtn();
     __v2SeedRenderClipNav();
+}
+
+// Show/hide the "this clip is wrong" row; highlight it when a switch is detected.
+function __v2SeedSetFlag(show, switched) {
+    const row = document.getElementById('cv-seed-flag');
+    const warn = document.getElementById('cv-seed-flag-warn');
+    if (!row) return;
+    row.classList.toggle('hidden', !show);
+    if (warn) {
+        warn.textContent = switched
+            ? '⚠ This tag looks like it jumped to another player partway through.'
+            : '';
+        warn.classList.toggle('hidden', !switched);
+    }
+    row.classList.toggle('flagged', !!switched);
+}
+
+// Manual override: this clip's tracking is unreliable → drop it and move on.
+function __v2SeedRejectClip() {
+    const s = __v2Seed;
+    if (!s) return;
+    const key = s.reroll + '_' + s.index;
+    delete s.selections[key];
+    (s.nodeEls || []).forEach(function (e) { e.group.classList.remove('selected'); });
+    __v2SeedSetFlag(false, false);
+    __v2SeedUpdateFinishBtn();
+    __v2SeedRenderClipNav();
+    __v2SeedNextClip();
 }
 
 function __v2SeedReroll() {
@@ -2176,11 +2266,20 @@ function __v2SeedNextClip() {
 function __v2SeedFinish() {
     const s = __v2Seed;
     const taps = __v2SeedCombinedTaps();
+    const nsel = __v2SeedSelCount();
     if (taps.length === 0) {
         const ok = window.confirm(
             'You haven\'t marked yourself in any clip yet.\n\n' +
             'Analysis still runs, but without an appearance model it can\'t rank ' +
             'your touches as well — you\'ll just review more clips. Continue anyway?');
+        if (!ok) return;
+    } else if (nsel < 2) {
+        // Soft nudge: one clip is fragile if its tag ever switched.
+        const ok = window.confirm(
+            'You\'ve marked yourself in just 1 clip.\n\n' +
+            'Marking yourself in 2–3 clips makes identifying you much more ' +
+            'reliable — if one clip’s tag is off, the others cover for it.\n\n' +
+            'Find my touches with only 1 clip anyway?');
         if (!ok) return;
     }
     __v2SeedStopAnim();
@@ -2226,6 +2325,8 @@ document.addEventListener('DOMContentLoaded', function () {
     if (seedNext) seedNext.addEventListener('click', function () { __v2SeedFinish(); });
     if (seedSkip) seedSkip.addEventListener('click', function () { __v2SeedNextClip(); });
     if (seedReroll) seedReroll.addEventListener('click', function () { __v2SeedReroll(); });
+    var seedReject = document.getElementById('cv-seed-reject');
+    if (seedReject) seedReject.addEventListener('click', function () { __v2SeedRejectClip(); });
     var seedStage = document.getElementById('cv-seed-stage');
     if (seedStage) seedStage.addEventListener('click', function () { __v2SeedTogglePlay(); });
     var seedShowAll = document.getElementById('cv-seed-showall');

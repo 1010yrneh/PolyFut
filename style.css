@@ -660,6 +660,26 @@ html, body {
     min-height: 1.2em;
 }
 
+/* "this clip is wrong" row — appears once you've tapped a player; highlights
+   when a tag switch is auto-detected */
+.cv-seed-flag {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 8px 14px;
+    margin: -6px 0 12px;
+    font-size: 0.85rem;
+}
+.cv-seed-flag.hidden { display: none; }
+.cv-seed-flag-warn { color: #ffcf5a; }
+.cv-seed-flag-warn.hidden { display: none; }
+.cv-seed-flag .cv-btn-link { font-size: 0.85rem; color: #8fa39a; }
+.cv-seed-flag .cv-btn-link:hover { color: var(--fifa-green); }
+.cv-seed-flag.flagged .cv-btn-link {
+    color: #ffcf5a; font-weight: 600; text-decoration: underline;
+}
+
 .cv-seed-showall {
     display: inline-flex;
     align-items: center;

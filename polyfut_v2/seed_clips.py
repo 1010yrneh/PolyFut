@@ -133,7 +133,7 @@ def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
             if best is not None and bd <= max_dist:
                 bbox, cx, cy, hsv = dets[best]
                 used.add(best)
-                tr["points"].append(_pt(fi, fps, bbox, cx, cy, w, h))
+                tr["points"].append(_pt(fi, fps, bbox, cx, cy, w, h, hsv))
                 tr["_cx"], tr["_cy"] = cx, cy
                 if hsv is not None:
                     tr["_hsv"].append(hsv)
@@ -143,7 +143,7 @@ def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
                 continue
             hs = [hsv] if hsv is not None else []
             tracks.append({"_cx": cx, "_cy": cy,
-                           "points": [_pt(fi, fps, bbox, cx, cy, w, h)],
+                           "points": [_pt(fi, fps, bbox, cx, cy, w, h, hsv)],
                            "_hsv": hs, "_color": (median_hsv(hs) if hs else None)})
     out = []
     for i, tr in enumerate(t for t in tracks if len(t["points"]) >= 2):
@@ -155,12 +155,16 @@ def _track(dets_per_frame: list[tuple[int, list]], w: int, h: int, fps: float,
     return out
 
 
-def _pt(fi: int, fps: float, bbox, cx: float, cy: float, w: int, h: int) -> dict:
+def _pt(fi: int, fps: float, bbox, cx: float, cy: float, w: int, h: int,
+        hsv=None) -> dict:
     return {
         "t": round(fi / fps, 3),
         "nx": round(cx / w, 4), "ny": round(cy / h, 4),
         "nw": round((bbox[2] - bbox[0]) / w, 4),
         "nh": round((bbox[3] - bbox[1]) / h, 4),
+        # Per-point kit colour (or None) so the UI can spot a mid-clip colour flip
+        # (a likely tag switch) and warn / drop the clip.
+        "c": None if hsv is None else [round(float(v), 1) for v in hsv],
     }
 
 
