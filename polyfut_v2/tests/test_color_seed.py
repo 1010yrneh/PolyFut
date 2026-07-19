@@ -2,7 +2,9 @@
 
 import numpy as np
 
-from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_hsv
+from polyfut_v2.pipeline.color import (
+    hsv_distance, jersey_hsv, median_hsv, torso_hsv,
+)
 from polyfut_v2.pipeline.player_detector import PlayerDetection
 from polyfut_v2.pipeline.seed import build_seed_from_taps, build_seed_from_torso_crops
 
@@ -21,6 +23,37 @@ def test_torso_hsv_on_solid_player():
     assert 0 <= hsv[0] <= 179
     # Red sits near hue 0.
     assert hsv[0] < 10 or hsv[0] > 170
+
+
+def _hsv_solid(h, s, v, hh=80, ww=60):
+    """A solid block of a given HSV colour, as a BGR image."""
+    import cv2
+    hsv = np.full((hh, ww, 3), (h, s, v), np.uint8)
+    return cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)
+
+
+def test_jersey_hsv_ignores_grass_and_recovers_kit():
+    import cv2
+    grass = _hsv_solid(55, 180, 150)                 # green pitch
+    # A distant black player: torso is mostly grass with a dark jersey patch.
+    frame = grass.copy()
+    frame[30:55, 20:45] = _hsv_solid(0, 20, 30, 25, 25)   # dark jersey pixels
+    kit = jersey_hsv(frame, [0, 0, 60, 80])
+    assert kit is not None
+    assert kit[2] < 90                               # reads DARK, not bright green
+    # A yellow player likewise: grass removed → yellow survives.
+    frame2 = grass.copy()
+    frame2[25:60, 18:48] = _hsv_solid(27, 200, 200, 35, 30)
+    kit2 = jersey_hsv(frame2, [0, 0, 60, 80])
+    assert kit2 is not None
+    assert kit2[0] < 34 and kit2[2] > 120            # reads yellow, bright
+    # The two kits are now clearly separable.
+    assert hsv_distance(kit, kit2) > 60
+
+
+def test_jersey_hsv_all_grass_returns_none():
+    grass = _hsv_solid(55, 180, 150)
+    assert jersey_hsv(grass, [0, 0, 60, 80]) is None  # nothing but grass → unknown
 
 
 def test_hsv_distance_same_is_zero_and_circular():

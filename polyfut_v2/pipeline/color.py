@@ -56,6 +56,42 @@ def torso_hsv(
     return hsv_feature(crop)
 
 
+# Pitch grass is a fairly tight green band in HSV. On distant footage a player's
+# torso crop is mostly grass, which swamps the jersey colour, so team-colour
+# reads (yellow vs black) collapse toward green. Excluding grass first recovers
+# the actual kit.
+_GRASS_H_LO, _GRASS_H_HI = 32, 95   # OpenCV hue (0-179): yellow ~20-31, grass ~35-85
+_GRASS_S_MIN = 40
+_GRASS_V_MIN = 40
+
+
+def jersey_hsv(
+    frame: np.ndarray,
+    bbox: list[float],
+    *,
+    min_area: int = 0,
+    min_keep_frac: float = 0.12,
+) -> np.ndarray | None:
+    """Median torso HSV with pitch-grass pixels removed, so a distant player's
+    kit colour isn't drowned out by the grass in the crop. Returns None if the
+    crop is too small or almost entirely grass (colour unmeasurable)."""
+    crop = torso_crop(frame, bbox)
+    if crop is None or crop.size == 0:
+        return None
+    if min_area > 0 and (crop.shape[0] * crop.shape[1]) < min_area:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    grass = ((h >= _GRASS_H_LO) & (h <= _GRASS_H_HI)
+             & (s >= _GRASS_S_MIN) & (v >= _GRASS_V_MIN))
+    keep = ~grass
+    n = int(keep.sum())
+    if n < max(8, int(min_keep_frac * keep.size)):
+        return None                       # mostly grass → don't trust it
+    px = hsv.reshape(-1, 3)[keep.reshape(-1)]
+    return np.median(px, axis=0).astype(np.float32)
+
+
 def median_hsv(features: list[np.ndarray]) -> np.ndarray | None:
     """Robust median across several HSV samples (drops per-frame noise)."""
     if not features:

@@ -25,7 +25,7 @@ import cv2
 import numpy as np
 
 from polyfut_video.pipeline.decode import probe_video
-from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_hsv
+from polyfut_v2.pipeline.color import hsv_distance, jersey_hsv, median_hsv
 
 CLIP_LEN_SEC = 3.0
 ENHANCE_SCALE = 2
@@ -208,9 +208,10 @@ def build_seed_clip(
         dets = []
         for pl in players:
             x1, y1, x2, y2 = pl.bbox
-            # Kit colour of this player (None if the crop is too small/unreliable
-            # → treated as "unknown" by the UI, which keeps it shown).
-            hsv = torso_hsv(enhanced[i], pl.bbox, min_area=100)
+            # Kit colour of this player, with pitch grass removed so a black kit
+            # doesn't read as green (None if too small/mostly grass → "unknown",
+            # which the UI keeps shown).
+            hsv = jersey_hsv(enhanced[i], pl.bbox, min_area=100)
             dets.append((pl.bbox, (x1 + x2) / 2.0, (y1 + y2) / 2.0, hsv))
         dets_per_frame.append((i, dets))
 
