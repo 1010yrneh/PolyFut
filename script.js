@@ -2266,22 +2266,18 @@ function __v2SeedNextClip() {
 function __v2SeedFinish() {
     const s = __v2Seed;
     const taps = __v2SeedCombinedTaps();
-    const nsel = __v2SeedSelCount();
     if (taps.length === 0) {
         const ok = window.confirm(
             'You haven\'t marked yourself in any clip yet.\n\n' +
             'Analysis still runs, but without an appearance model it can\'t rank ' +
             'your touches as well — you\'ll just review more clips. Continue anyway?');
         if (!ok) return;
-    } else if (nsel < 2) {
-        // Soft nudge: one clip is fragile if its tag ever switched.
-        const ok = window.confirm(
-            'You\'ve marked yourself in just 1 clip.\n\n' +
-            'Marking yourself in 2–3 clips makes identifying you much more ' +
-            'reliable — if one clip’s tag is off, the others cover for it.\n\n' +
-            'Find my touches with only 1 clip anyway?');
-        if (!ok) return;
     }
+    // Marking 2-3 clips is more reliable than 1 (the other clips cover for a bad
+    // tag), and clip-nav + "Not here — next clip" already make that path clear —
+    // so we nudge via the inline hint text (see __v2SeedPickNode), not a blocking
+    // dialog on the way out. The button itself always reflects how many you've
+    // marked ("Find my touches · N clips"), so the choice is informed either way.
     __v2SeedStopAnim();
     var vid = document.getElementById('cv-seed-video');
     if (vid) { try { vid.pause(); } catch (e) {} }
