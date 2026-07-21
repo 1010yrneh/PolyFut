@@ -3635,21 +3635,6 @@ async function generateScoutReport() {
     }
 }
 
-// --- 14. HELP MODAL ---
-function openHelp() { document.getElementById('help-modal').classList.remove('hidden'); }
-function closeHelp() { document.getElementById('help-modal').classList.add('hidden'); }
-function switchTab(tabId, btnElement) {
-    document.querySelectorAll('#help-modal .tab-content').forEach(t => t.classList.remove('active'));
-    document.querySelectorAll('#help-modal .tab-btn').forEach(b => b.classList.remove('active'));
-    document.getElementById(tabId).classList.add('active');
-    btnElement.classList.add('active');
-}
-function openGroqHelp() {
-    openHelp();
-    const aiTabBtn = document.querySelector("button[onclick=\"switchTab('tab-ai', this)\"]");
-    if (aiTabBtn) aiTabBtn.click();
-}
-
 function escapeHtml(str) {
     return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }

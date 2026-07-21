@@ -124,16 +124,6 @@ body:has(#setup-screen.hidden) .app-header { display: none; }
     color: var(--text-secondary);
 }
 
-.setup-hint {
-    margin: 0 0 6px 0;
-    font-size: 0.82rem;
-    line-height: 1.35;
-    color: #8b8b9e;
-    font-weight: 500;
-    text-transform: none;
-    letter-spacing: 0;
-}
-
 .setup-input {
     width: 100%;
     box-sizing: border-box;
@@ -318,7 +308,6 @@ body:has(#setup-screen.hidden) .app-header { display: none; }
 
 /* Results */
 .stat-card { background: #1e1e1e; border: 1px solid #333; box-shadow: 0 4px 6px rgba(0,0,0,0.3); }
-.res-value { font-family: 'Rajdhani', sans-serif; }
 /* =========================================
    NEW: HYBRID DASHBOARD & AI AGENT STYLES
    ========================================= */
@@ -360,93 +349,6 @@ body:has(#setup-screen.hidden) .app-header { display: none; }
         flex-direction: column;
         align-items: flex-end;
     }
-}
-
-/* =========================================
-   HOW TO USE MODAL STYLES
-   ========================================= */
-#help-modal {
-    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-    background: rgba(0,0,0,0.85); 
-    z-index: 99999; /* BOOStED TO THE ABSOLUTE FRONT */
-    display: flex; justify-content: center; align-items: center;
-}
-#help-modal.hidden { display: none !important; }
-
-.help-content {
-    background: #161b22; width: 90%; max-width: 600px;
-    padding: 25px; border-radius: 0; border: 1px solid #333;
-    max-height: 85vh; overflow-y: auto; position: relative;
-    color: #fff; font-family: 'Rajdhani', sans-serif;
-}
-.help-close {
-    position: absolute; top: 15px; right: 20px; font-size: 1.8rem;
-    cursor: pointer; color: #ff2e4d; font-weight: bold; line-height: 1;
-}
-.help-tabs {
-    display: flex; gap: 15px; margin-bottom: 20px;
-    border-bottom: 1px solid #333; padding-bottom: 10px; overflow-x: auto;
-}
-.tab-btn {
-    background: transparent; color: #a0a0b0; border: none;
-    font-family: 'Rajdhani', sans-serif; font-size: 1.1rem; font-weight: bold; cursor: pointer;
-    padding: 0 5px 5px 5px; border-bottom: 2px solid transparent;
-}
-.tab-btn.active { color: #f2c94c; border-bottom: 2px solid #f2c94c; }
-
-.tab-content { display: none; font-size: 0.95rem; line-height: 1.5; color: #ddd; }
-.tab-content.active { display: block; }
-.tab-content h4 { color: #f2c94c; margin-top: 20px; margin-bottom: 5px; font-size: 1.1rem; text-transform: uppercase; }
-.tab-content ul { margin: 0; padding-left: 20px; }
-.tab-content li { margin-bottom: 8px; }
-.tab-content strong { color: #fff; }
-
-/* --- HOW TO USE BUTTON ANIMATION --- */
-@keyframes attention-pulse {
-    0% {
-        box-shadow: 0 0 0 0 rgba(48, 255, 143, 0.6);
-        transform: scale(1);
-        border-color: rgba(255, 255, 255, 0.2);
-    }
-    50% {
-        box-shadow: 0 0 14px 4px rgba(48, 255, 143, 0);
-        transform: scale(1.04);
-        border-color: var(--fifa-green);
-    }
-    100% {
-        box-shadow: 0 0 0 0 rgba(48, 255, 143, 0);
-        transform: scale(1);
-        border-color: rgba(255, 255, 255, 0.2);
-    }
-}
-
-/* Floating help pill — bottom-left, out of the header's way */
-.help-btn-top {
-    position: fixed;
-    bottom: 22px;
-    left: 22px;
-    background: rgba(11, 13, 11, 0.9);
-    backdrop-filter: blur(8px);
-    color: #c9d3ca;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    padding: 9px 16px;
-    font-size: 0.85rem;
-    letter-spacing: 0.08em;
-    text-transform: uppercase;
-    border-radius: 0;
-    cursor: pointer;
-    font-family: 'Rajdhani', sans-serif;
-    font-weight: 700;
-    z-index: 600;
-    transition: color 0.2s, border-color 0.2s, background 0.2s;
-    animation: attention-pulse 2.5s infinite;
-}
-
-.help-btn-top:hover {
-    color: var(--fifa-green);
-    border-color: var(--fifa-green);
-    background: rgba(48, 255, 143, 0.1);
-    animation: none;
 }
 
 /* --- LAPTOP SCALING & SCROLLING FIX --- */
@@ -722,12 +624,11 @@ html, body {
 .cv-v2-toggle-sub { color: #93a397; font-size: 0.82rem; line-height: 1.35; }
 
 /* v2 me/not-me montage review */
-.cv-montage-card { max-width: 460px; }
+.cv-montage-card { max-width: min(94vw, 1200px); }
 .cv-montage-progress { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 14px; }
 .cv-montage-bar { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .cv-montage-bar-fill { height: 100%; background: var(--fifa-green); transition: width 0.25s; }
 .cv-montage-count { color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
-.cv-montage-card { max-width: min(94vw, 1200px); }
 .cv-montage-stage {
     position: relative;
     display: flex; justify-content: center; align-items: center;
@@ -1098,12 +999,6 @@ html, body {
     width: 0%;
     background: linear-gradient(90deg, var(--fifa-purple), var(--fifa-green));
     transition: width 0.3s ease;
-}
-
-.cv-processing-note {
-    color: #6f7585;
-    font-size: 0.85rem;
-    margin: 0 0 18px;
 }
 
 /* Floating side progress tracker */
