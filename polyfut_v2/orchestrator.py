@@ -73,6 +73,12 @@ def assemble_touches(
 
     progress(0.88, f"Stages 5-6: player + colour over {len(candidates)} candidate(s)…")
     enriched = enrich_contacts(candidates, provider, player_detector, seed, cfg)
+    # Always drop contacts whose kit is CLEARLY the other team (conservative,
+    # grass-masked colour) — this removes the "wrong team touched the ball" clips
+    # without the aggressive same-team filter. Colour-undecided contacts survive.
+    n_before = len(enriched)
+    enriched = [c for c in enriched if c.is_my_team is not False]
+    n_other_dropped = n_before - len(enriched)
     kept = filter_my_team(enriched, enabled=cfg.team_filter_enabled)
 
     progress(0.93, "Stage 7: appearance × orbital scoring…")
@@ -90,6 +96,7 @@ def assemble_touches(
     return {
         "candidates": candidates,
         "n_candidates_raw": n_candidates_raw,
+        "n_other_team_dropped": n_other_dropped,
         "kept": kept,
         "scored": scored,
         "montage": montage,

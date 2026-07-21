@@ -102,6 +102,13 @@ class PipelineV2Config:
     contact_color_window: int = 1   # frames each side of the contact to sample jersey
     contact_color_step: int = 1     # window step, in analysed-frame units
     team_color_max_dist: float = 60.0  # hue-weighted HSV distance ≤ this ⇒ your team
+    # Conservative "clearly the other team" cutoff (grass-masked colours). A
+    # contact whose kit is THIS far from the seed kit is dropped even when the
+    # aggressive team_filter is off — the wide margin above team_color_max_dist
+    # means only obviously-different kits (e.g. dark team, ref, keeper) are
+    # dropped, never a same-team touch that merely reads noisy. Set high because
+    # the seed player's own touches ranged up to ~95 on real footage.
+    contact_other_team_dist: float = 115.0
     # Min torso crop area (px) to trust a jersey colour. On wide footage tiny
     # crops are grass-contaminated; below this the contact is left undecided
     # (kept) rather than mislabelled. Real-frame debug: 10-30px-tall players give

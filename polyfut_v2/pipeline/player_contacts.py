@@ -22,7 +22,7 @@ from typing import Iterable, Protocol
 import numpy as np
 
 from polyfut_v2.config import PipelineV2Config
-from polyfut_v2.pipeline.color import hsv_distance, median_hsv, torso_crop, torso_hsv
+from polyfut_v2.pipeline.color import hsv_distance, jersey_hsv, median_hsv, torso_crop
 from polyfut_v2.pipeline.contacts import ContactCandidate
 from polyfut_v2.pipeline.player_detector import PlayerDetection
 from polyfut_v2.pipeline.seed import TargetSeed
@@ -119,7 +119,11 @@ def enrich_contact(
         pl, d = nearest_player(players, ball_pt, cfg.contact_max_player_dist_px)
         if pl is None:
             continue
-        hsv = torso_hsv(frame, pl.bbox, min_area=cfg.color_min_torso_px)
+        # No min-area floor: grass-masking has its own reliability guard (it needs
+        # enough non-grass pixels), and the old area floor (tuned for grass-
+        # contaminated torso_hsv) would blind the team gate on exactly the small,
+        # distant players where wrong-team touches happen.
+        hsv = jersey_hsv(frame, pl.bbox)
         if hsv is not None:
             feats.append(hsv)
         gap = abs(idx - cand.frame_index)
@@ -129,24 +133,29 @@ def enrich_contact(
             # separate torso-crop pass over the video.
             torso = torso_crop(frame, pl.bbox)
 
-    jersey_hsv = median_hsv(feats)
+    kit = median_hsv(feats)
     n_samples = len(feats)
-    color_dist = hsv_distance(jersey_hsv, seed.kit_hsv)
+    color_dist = hsv_distance(kit, seed.kit_hsv)
+    # Grass-masked colour now separates teams reliably, so classify three ways —
+    # independent of the aggressive team_filter switch:
+    #   clearly the other team (drop) / clearly your team / undecided (keep).
+    # The conservative "other" cutoff sits well above the same-team band so only
+    # obviously-different kits are ever labelled opponent.
     is_my_team: bool | None
-    if not cfg.team_filter_enabled or color_dist is None:
-        # Filter off (colour unreliable on this footage) or colour unmeasurable →
-        # leave undecided. color_dist is still recorded for diagnostics/ranking,
-        # but is never used to hard-label — so it can't drop or de-anchor a real
-        # touch on footage where colour doesn't separate teams.
-        is_my_team = None
+    if color_dist is None:
+        is_my_team = None                                  # colour unmeasurable → keep
+    elif color_dist > cfg.contact_other_team_dist:
+        is_my_team = False                                 # clearly other team → drop
+    elif color_dist <= cfg.team_color_max_dist:
+        is_my_team = True
     else:
-        is_my_team = color_dist <= cfg.team_color_max_dist
+        is_my_team = None                                  # in-between → keep (undecided)
 
     return PlayerContact(
         candidate=cand,
         player_bbox=player_bbox,
         player_dist_px=player_dist,
-        jersey_hsv=None if jersey_hsv is None else [float(v) for v in jersey_hsv],
+        jersey_hsv=None if kit is None else [float(v) for v in kit],
         color_dist=color_dist,
         is_my_team=is_my_team,
         n_color_samples=n_samples,

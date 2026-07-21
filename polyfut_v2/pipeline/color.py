@@ -65,6 +65,24 @@ _GRASS_S_MIN = 40
 _GRASS_V_MIN = 40
 
 
+def jersey_hsv_from_crop(
+    crop: np.ndarray | None, *, min_keep_frac: float = 0.12
+) -> np.ndarray | None:
+    """Median HSV of an already-cropped torso image with pitch-grass pixels
+    removed. Returns None if the crop is empty or almost entirely grass."""
+    if crop is None or crop.size == 0:
+        return None
+    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
+    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
+    grass = ((h >= _GRASS_H_LO) & (h <= _GRASS_H_HI)
+             & (s >= _GRASS_S_MIN) & (v >= _GRASS_V_MIN))
+    keep = ~grass
+    if int(keep.sum()) < max(8, int(min_keep_frac * keep.size)):
+        return None                       # mostly grass → don't trust it
+    px = hsv.reshape(-1, 3)[keep.reshape(-1)]
+    return np.median(px, axis=0).astype(np.float32)
+
+
 def jersey_hsv(
     frame: np.ndarray,
     bbox: list[float],
@@ -80,16 +98,7 @@ def jersey_hsv(
         return None
     if min_area > 0 and (crop.shape[0] * crop.shape[1]) < min_area:
         return None
-    hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
-    grass = ((h >= _GRASS_H_LO) & (h <= _GRASS_H_HI)
-             & (s >= _GRASS_S_MIN) & (v >= _GRASS_V_MIN))
-    keep = ~grass
-    n = int(keep.sum())
-    if n < max(8, int(min_keep_frac * keep.size)):
-        return None                       # mostly grass → don't trust it
-    px = hsv.reshape(-1, 3)[keep.reshape(-1)]
-    return np.median(px, axis=0).astype(np.float32)
+    return jersey_hsv_from_crop(crop, min_keep_frac=min_keep_frac)
 
 
 def median_hsv(features: list[np.ndarray]) -> np.ndarray | None:

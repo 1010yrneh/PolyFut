@@ -19,7 +19,9 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
-from polyfut_v2.pipeline.color import hsv_feature, median_hsv, torso_crop, torso_hsv
+from polyfut_v2.pipeline.color import (
+    jersey_hsv, jersey_hsv_from_crop, median_hsv, torso_crop,
+)
 
 
 @dataclass
@@ -77,7 +79,10 @@ def build_seed_from_taps(
         if pl is None:
             continue
         crop = torso_crop(frame, pl.bbox)
-        hsv = torso_hsv(frame, pl.bbox, min_area=min_torso_px)
+        # Grass-masked kit colour, measured the SAME way (no area floor — the
+        # grass mask self-guards) as the contacts it's compared against, so the
+        # seed kit and contact colours are on equal footing for the team gate.
+        hsv = jersey_hsv(frame, pl.bbox)
         if crop is not None and crop.size > 0:
             gallery.append(crop)
         if hsv is not None:
@@ -86,7 +91,5 @@ def build_seed_from_taps(
 
 
 def _hsv_of(crop: np.ndarray) -> np.ndarray | None:
-    """Median HSV of an already-cropped torso image."""
-    if crop is None or crop.size == 0:
-        return None
-    return hsv_feature(crop)
+    """Grass-masked median HSV of an already-cropped torso image."""
+    return jersey_hsv_from_crop(crop)

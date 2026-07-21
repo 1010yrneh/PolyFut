@@ -123,11 +123,13 @@ def test_build_seed_from_taps_tap_misses_player():
     assert not seed.has_color() and seed.gallery == []
 
 
-def test_build_seed_from_taps_min_torso_guard():
-    # Tiny player box → colour rejected by the guard, but gallery still kept.
-    frames = [(_solid(RED, 100, 100), (15, 18)) for _ in range(2)]
-    seed = build_seed_from_taps(frames, _FakeDetector([10, 10, 20, 25]),
-                                max_tap_dist_px=40, min_torso_px=50)
+def test_build_seed_from_taps_grass_crop_has_no_colour():
+    # A player crop that is essentially all pitch grass → no reliable kit colour
+    # (grass-masked away), but the gallery crop is still kept for appearance.
+    grass = (40, 130, 40)   # BGR, inside the grass hue band
+    frames = [(_solid(grass, 100, 100), (50, 50)) for _ in range(2)]
+    seed = build_seed_from_taps(frames, _FakeDetector([30, 30, 70, 70]),
+                                max_tap_dist_px=40)
     assert seed.n_samples == 2
-    assert not seed.has_color()      # torso too small → no reliable colour
+    assert not seed.has_color()      # all grass → no reliable colour
     assert len(seed.gallery) == 2    # crops still gathered for appearance

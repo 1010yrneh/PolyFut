@@ -15,6 +15,7 @@ from polyfut_v2.pipeline.trajectory import BallSample, BallTrajectory
 from polyfut_v2.pipeline.seed import build_seed_from_torso_crops
 
 RED = (0, 0, 200)
+BLUE = (200, 0, 0)
 
 
 def _traj(n_turns=5, dt=0.25):
@@ -65,9 +66,11 @@ def test_pipeline_produces_candidates_and_montage():
     res = assemble_touches(_traj(), 60.0, cfg, _seed(),
                            FakePlayerDetector(), FakeProvider())
     assert len(res["candidates"]) > 0
-    # Colour filter off by default → every contact kept, undecided.
+    # Same kit as the seed → contacts labelled clearly-mine and all kept (the
+    # conservative other-team drop only removes clearly-different kits).
     assert len(res["kept"]) == len(res["candidates"])
-    assert all(k.is_my_team is None for k in res["kept"])
+    assert res["n_other_team_dropped"] == 0
+    assert all(k.is_my_team is True for k in res["kept"])
     assert all(k.torso_crop is not None for k in res["kept"])  # crops captured in enrich
     # Montage is 1:1 with kept and ranked by descending confidence.
     m = res["montage"]
@@ -75,6 +78,21 @@ def test_pipeline_produces_candidates_and_montage():
     confs = [it.confidence for it in m]
     assert confs == sorted(confs, reverse=True)
     assert [it.rank for it in m] == list(range(len(m)))
+
+
+def test_clearly_other_team_contacts_are_dropped():
+    """A blue-kit contact vs a red seed is clearly the other team → dropped before
+    scoring, even with the aggressive team filter off. This is the fix that
+    removes 'wrong team touched the ball' clips."""
+    class BlueProvider(FakeProvider):
+        def _frame(self):
+            return np.full((360, 640, 3), BLUE, dtype=np.uint8)
+
+    res = assemble_touches(_traj(), 60.0, PipelineV2Config(), _seed(),
+                           FakePlayerDetector(), BlueProvider())
+    assert res["n_candidates_raw"] > 0
+    assert res["n_other_team_dropped"] == len(res["candidates"])  # all wrong-team
+    assert res["kept"] == [] and res["montage"] == []
 
 
 def test_decisions_flow_through_to_hotspots():

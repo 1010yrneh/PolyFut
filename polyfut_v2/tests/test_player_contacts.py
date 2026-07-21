@@ -15,6 +15,7 @@ from polyfut_v2.pipeline.seed import build_seed_from_torso_crops
 
 RED = (0, 0, 200)
 BLUE = (200, 0, 0)
+GRASS = (40, 130, 40)   # BGR → falls in the pitch-grass hue band, gets masked out
 BOX = [10, 10, 90, 90]
 
 # The colour filter is OFF by default (amateur footage); tests of the colour
@@ -127,18 +128,20 @@ def test_filter_off_detects_only_contact_frame_and_captures_crop():
     contacts = enrich_contacts([_cand()], FakeProvider(RED), det, _seed(RED), cfg)
     assert det.calls == 1             # only the contact frame — 3x cheaper
     assert contacts[0].torso_crop is not None   # crop captured for Stage 7 (no 2nd pass)
-    assert contacts[0].is_my_team is None       # undecided (filter off)
+    # Same kit as the seed → clearly your team, even with the aggressive filter off.
+    assert contacts[0].is_my_team is True
 
 
-def test_tiny_torso_crop_is_undecided_not_dropped():
-    # A tiny player box (wide-footage grass contamination) → colour unmeasurable,
-    # so the contact stays undecided and is kept, never confidently dropped.
-    tiny = FakePlayerDetector(bbox=[10, 10, 20, 25])  # torso ~6x6 = 36px < 50
-    contacts = enrich_contacts([_cand(x=15, y=20)], FakeProvider(BLUE), tiny, _seed(RED), FILTER_ON)
+def test_grass_dominated_crop_is_undecided_not_dropped():
+    # A distant player whose torso crop is essentially all pitch grass → colour
+    # unmeasurable (grass-masked away) → undecided → kept, never confidently
+    # dropped. This is the recall safety net now that the area floor is gone.
+    contacts = enrich_contacts([_cand()], FakeProvider(GRASS), FakePlayerDetector(),
+                               _seed(RED), FILTER_ON)
     c = contacts[0]
-    assert c.player_bbox == [10, 10, 20, 25]  # player still detected (Stage 5)
-    assert c.jersey_hsv is None               # colour rejected as too small (Stage 6)
-    assert c.is_my_team is None               # undecided, not False
+    assert c.player_bbox == BOX               # player still detected (Stage 5)
+    assert c.jersey_hsv is None               # all grass → colour unmeasurable
+    assert c.is_my_team is None               # undecided, not dropped
     assert len(filter_my_team(contacts)) == 1  # kept
 
 
@@ -149,12 +152,14 @@ def test_filter_disabled_keeps_everything():
     assert len(filter_my_team(opp, enabled=False)) == 1      # off → kept
 
 
-def test_disabled_filter_leaves_team_undecided_but_records_color():
-    # Filter off → is_my_team undecided (can't drop/de-anchor), colour still measured.
+def test_disabled_filter_still_flags_clearly_other_team():
+    # Even with the aggressive filter off, a kit clearly different from the seed
+    # (grass-masked colour) is labelled opponent so the orchestrator can drop it —
+    # this is what removes "wrong team touched the ball" clips.
     cfg = PipelineV2Config(team_filter_enabled=False)
     opp = enrich_contacts([_cand()], FakeProvider(BLUE), FakePlayerDetector(), _seed(RED), cfg)
-    assert opp[0].is_my_team is None
-    assert opp[0].color_dist is not None
+    assert opp[0].is_my_team is False
+    assert opp[0].color_dist is not None and opp[0].color_dist > cfg.contact_other_team_dist
 
 
 def test_to_dict_shape():
