@@ -33,15 +33,15 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 try:
-    from polyfut_video.config import PipelineConfig
-    from polyfut_video.main import run_pipeline
+    # Shared video utilities used by the v2 pipeline and the /api/teams kit
+    # preview. probe_video imports fine at top level; team kit detection runs in
+    # an isolated subprocess (see _detect_team_kits_isolated).
     from polyfut_video.pipeline.decode import probe_video
     PIPELINE_OK = True
     PIPELINE_IMPORT_ERR = ""
 except Exception as exc:
     PIPELINE_OK = False
     PIPELINE_IMPORT_ERR = f"{type(exc).__name__}: {exc}"
-    run_pipeline = None  # type: ignore
     probe_video = None  # type: ignore
 
 # v2 (ball-anchored, single-player) pipeline — experimental, alongside v1.
@@ -438,135 +438,6 @@ def _detect_team_kits_isolated(video_path: str) -> tuple[list[dict] | None, str 
         return None, str(exc)
 
 
-def _run_job(job_id: str, video_path: Path, my_team: str, out_dir: Path) -> None:
-    seg_path = out_dir / "clip_segments.json"
-    timeline_path = out_dir / "possession_timeline.json"
-
-    def progress(frac: float, msg: str) -> None:
-        partial = None
-        if seg_path.exists():
-            try:
-                partial = json.loads(seg_path.read_text(encoding="utf-8")).get("segments")
-            except Exception:
-                pass
-        elapsed = time.time() - JOB_START.get(job_id, time.time())
-        cur, tot, unit = _parse_progress_counts(msg)
-        _set_job(
-            job_id,
-            progress=frac,
-            status=msg,
-            stage=_parse_stage(msg),
-            stage_progress=frac,
-            elapsed_sec=round(elapsed, 1),
-            segments_partial=partial,
-            progress_current=cur,
-            progress_total=tot,
-            progress_unit=unit,
-            status_updated_at=time.time(),
-        )
-        if cur is not None and tot is not None:
-            # region agent log
-            _dbg_log("B3", "server.py:progress", "progress counts", {
-                "job_id": job_id,
-                "current": cur,
-                "total": tot,
-                "unit": unit,
-                "frac": round(frac, 3),
-                "status": msg[:120],
-            }, run_id="general-audit-v1")
-            # endregion
-
-    def should_cancel() -> bool:
-        j = _get_job(job_id)
-        return bool(j and j.get("cancel"))
-
-    with during_analysis():
-        try:
-            if FAKE_CV or not PIPELINE_OK:
-                dur = _probe_duration(video_path)
-                for i in range(30):
-                    if should_cancel():
-                        raise RuntimeError("cancelled")
-                    progress(0.05 + 0.9 * i / 30, f"Analyzing (demo)... {i+1}/30")
-                    time.sleep(0.1)
-                segments = _fake_segments(dur)
-                out_dir.mkdir(parents=True, exist_ok=True)
-                seg_path.write_text(
-                    json.dumps({"version": 2, "segments": segments, "my_team": my_team}, indent=2),
-                    encoding="utf-8",
-                )
-                note = "demo" if FAKE_CV else f"CV unavailable ({PIPELINE_IMPORT_ERR})"
-                _set_job(
-                    job_id, progress=1.0, status="Done", state="done", stage="done",
-                    segments=segments, note=note, finished_at=time.time(),
-                )
-                return
-
-            cfg = PipelineConfig(
-                yolo_weights=WEIGHTS,
-                device=DEVICE,
-                output_dir=out_dir,
-            )
-            progress(0.02, f"Level 1 pipeline: weights={WEIGHTS}, device={DEVICE}")
-            meta = run_pipeline(
-                video_path,
-                out_dir,
-                cfg=cfg,
-                my_team=my_team,
-                progress=progress,
-                should_cancel=should_cancel,
-            )
-            seg_data = json.loads(Path(meta["clip_segments_path"]).read_text(encoding="utf-8"))
-            timeline = None
-            if timeline_path.exists():
-                timeline = json.loads(timeline_path.read_text(encoding="utf-8"))
-            _set_job(
-                job_id,
-                progress=1.0,
-                status="Done",
-                state="done",
-                stage="done",
-                segments=seg_data.get("segments", []),
-                possession_timeline=timeline,
-                timings=meta.get("timings_sec"),
-                finished_at=time.time(),
-            )
-            # region agent log
-            _dbg_log("B5", "server.py:_run_job", "job done", {
-                "job_id": job_id,
-                "n_segments": len(seg_data.get("segments", [])),
-                "live_shots": meta.get("live_shots"),
-            }, run_id="general-audit-v1")
-            # endregion
-        except MemoryError:
-            traceback.print_exc()
-            _dbg_log("B5", "server.py:_run_job", "job MemoryError", {
-                "job_id": job_id,
-            }, run_id="general-audit-v1")
-            _set_job(
-                job_id,
-                state="error",
-                status="Out of memory during analysis",
-                stage="error",
-                error=(
-                    "MemoryError in pipeline (usually stages 1–2 on long videos). "
-                    "Stop the server, run python server.py again, hard-refresh the browser, "
-                    "and re-run. Stage 1–2 progress should mention v1.1.0."
-                ),
-            )
-        except Exception as exc:
-            if str(exc) == "cancelled":
-                _set_job(job_id, state="cancelled", status="Cancelled", stage="cancelled")
-            else:
-                traceback.print_exc()
-                # region agent log
-                _dbg_log("B5", "server.py:_run_job", "job error", {
-                    "job_id": job_id,
-                    "error": str(exc),
-                }, run_id="general-audit-v1")
-                # endregion
-                _set_job(job_id, state="error", status="Error", stage="error", error=str(exc))
-
 
 def _validate_video(video_path: Path) -> str | None:
     """Return a user-facing error if the video is empty/unreadable, else None.
@@ -723,62 +594,6 @@ def teams():
     return jsonify(resp)
 
 
-@app.route("/api/process", methods=["POST"])
-def process():
-    token = request.form.get("token")
-    if token:
-        video_path = UPLOADS / f"{token}.mp4"
-        if not video_path.exists():
-            return jsonify({"error": "unknown or expired token"}), 400
-    elif "video" in request.files:
-        token = uuid.uuid4().hex[:12]
-        video_path = UPLOADS / f"{token}.mp4"
-        request.files["video"].save(str(video_path))
-        TOKEN_META[token] = {"video": str(video_path)}
-    else:
-        return jsonify({"error": "No video or token in request."}), 400
-
-    verr = _validate_video(video_path)
-    if verr:
-        return jsonify({"error": verr, "invalid_video": True}), 400
-
-    my_team = request.form.get("my_team", "team_a")
-    if my_team not in ("team_a", "team_b"):
-        my_team = "team_a"
-
-    existing = _find_running_job_for_token(token)
-    if existing:
-        return jsonify({"job_id": existing, "resumed": True, "token": token})
-
-    job_id = uuid.uuid4().hex[:12]
-    job_dir = EXPORTS / job_id
-    job_dir.mkdir(parents=True, exist_ok=True)
-
-    started = time.time()
-    JOB_START[job_id] = started
-    _set_job(
-        job_id,
-        progress=0.0,
-        status="Queued",
-        state="running",
-        stage="init",
-        cancel=False,
-        segments=None,
-        segments_partial=None,
-        error=None,
-        token=token,
-        my_team=my_team,
-        started_at=started,
-        video_path=str(video_path),
-        **_match_metadata_from_form(),
-    )
-    t = threading.Thread(
-        target=_run_job,
-        args=(job_id, video_path, my_team, job_dir),
-        daemon=False,
-    )
-    t.start()
-    return jsonify({"job_id": job_id, "token": token, "resumed": False})
 
 
 @app.route("/api/process/active")

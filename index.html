@@ -87,9 +87,9 @@
             </label>
             <div class="cv-overlay-actions">
                 <button type="button" class="cv-btn-secondary" id="cv-seed-cancel">Back</button>
-                <button type="button" class="cv-btn-secondary" id="cv-seed-reroll">Shuffle clips</button>
-                <button type="button" class="cv-btn-secondary" id="cv-seed-skip">Not here — next clip</button>
-                <button type="button" class="cv-btn-primary" id="cv-seed-next" disabled>Find my touches</button>
+                <button type="button" class="cv-btn-secondary" id="cv-seed-reroll">Not here - Shuffle Clips</button>
+                <button type="button" class="cv-btn-secondary" id="cv-seed-skip">Next Clip</button>
+                <button type="button" class="cv-btn-primary" id="cv-seed-next" disabled>Find My Touches</button>
             </div>
         </div>
     </div>
@@ -216,17 +216,11 @@
                     </div>
                 </div>
 
-                <div class="setup-group cv-v2-toggle-row">
-                    <label class="cv-v2-toggle">
-                        <input type="checkbox" id="cv-v2-mode">
-                        <span class="cv-v2-toggle-text">
-                            <strong>Single-player mode (experimental)</strong>
-                            <span class="cv-v2-toggle-sub">Ball-anchored v2 pipeline: find only <em>your</em> touches, then confirm them in a quick review. You'll tap yourself in a few frames next.</span>
-                        </span>
-                    </label>
-                </div>
-
-                <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">Find touch hotspots</button>
+                <button id="start-btn" class="start-btn" onclick="initApp()" disabled style="opacity: 0.5;">Find my touches</button>
+                <label class="pf-alert-toggle-row">
+                    <input type="checkbox" id="pf-alert-toggle">
+                    <span>🔔 Notify me when PolyFut needs my input</span>
+                </label>
                 <p class="setup-analysis-hint">Full-match analysis runs on your CPU and may take several hours. You can close this tab and reopen PolyFut later — progress is kept until you cancel the run.</p>
             </div>
 
@@ -374,18 +368,18 @@
 
         <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 800px;">
             <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1;">
-                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET HYBRID</h3>
+                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET THREAT (TP)</h3>
                 <p id="res-overall" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:30px; color:#f2f7f1; margin:8px 0 0;">0.0</p>
             </div>
             <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
                 <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">OFFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (xG gained)</span><br>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (TP gained)</span><br>
                         <span id="res-off-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#30ff8f;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible xG Lost)</span><br>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible TP Lost)</span><br>
                         <span id="res-off-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#8fdcae;">0.0</span>
                     </div>
                 </div>
@@ -394,11 +388,11 @@
                 <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">DEFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (xGA prevented)</span><br>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (TP prevented)</span><br>
                         <span id="res-def-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#4aa3ff;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible xGA increased)</span><br>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible TP increased)</span><br>
                         <span id="res-def-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#9ec9ff;">0.0</span>
                     </div>
                 </div>

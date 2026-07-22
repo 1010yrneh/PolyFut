@@ -1,8 +1,7 @@
-"""Level 1 broadcast possession pipeline — team A/B/contested timeline."""
+"""Shared video utilities for the v2 pipeline.
 
-__all__ = ["run_pipeline"]
-
-
-def run_pipeline(*args, **kwargs):
-    from polyfut_video.main import run_pipeline as _run
-    return _run(*args, **kwargs)
+Formerly the Level 1 broadcast possession pipeline (team A/B/contested). That
+engine has been retired; this package now provides the decode / ball-smoothing /
+shot-segmentation / kit-preview primitives that ``polyfut_v2`` and the
+``/api/teams`` kit preview build on.
+"""

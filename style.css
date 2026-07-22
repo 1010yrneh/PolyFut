@@ -454,12 +454,21 @@ html, body {
 /* v2 seed: enhanced clip with tracked, tappable player nodes */
 .cv-seed-stage {
     position: relative;
-    width: 100%;
+    /* Cap the width to a height-derived value so a 16:9 clip stays short enough
+       to fit the window without scrolling. The stage stays equal to the video
+       (video is width:100%), so the tap markers stay perfectly aligned. */
+    width: min(100%, 70vh);
+    margin: 0 auto;
     border-radius: 0;
     overflow: hidden;
     background: #000;
     line-height: 0;
 }
+/* Seed-scoped header trims — reclaim vertical space so the whole step fits. */
+#cv-seed-screen .cv-overlay-card { padding: 16px 28px 18px; }
+#cv-seed-screen .cv-overlay-title { font-size: 1.3rem; margin-bottom: 6px; }
+#cv-seed-screen .cv-overlay-sub { margin: 0 0 8px; font-size: 0.92rem; }
+#cv-seed-screen .cv-overlay-note { margin: -2px auto 8px; }
 
 .cv-seed-stage video {
     width: 100%;
@@ -614,18 +623,51 @@ html, body {
 .cv-seed-clip-dot.picked { background: #9fe8c2; }
 .cv-btn-primary:disabled, .cv-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
-/* v2 mode toggle in setup */
-.cv-v2-toggle-row { margin-top: 6px; }
-.cv-v2-toggle { display: flex; align-items: flex-start; gap: 12px; cursor: pointer; padding: 12px 14px; border: 1px solid rgba(48, 255, 143, 0.25); background: rgba(48, 255, 143, 0.05); }
-.cv-v2-toggle:hover { border-color: rgba(48, 255, 143, 0.5); }
-.cv-v2-toggle input { margin-top: 3px; accent-color: var(--fifa-green); width: 18px; height: 18px; flex: 0 0 auto; }
-.cv-v2-toggle-text { display: flex; flex-direction: column; gap: 3px; }
-.cv-v2-toggle-text strong { color: #e8f5ec; font-size: 0.95rem; letter-spacing: 0.5px; }
-.cv-v2-toggle-sub { color: #93a397; font-size: 0.82rem; line-height: 1.35; }
+/* Setup-screen toggle: alerts when PolyFut needs the user's input */
+.pf-alert-toggle-row {
+    display: flex; align-items: center; gap: 9px;
+    margin: 12px 0 4px; cursor: pointer;
+    color: var(--text-secondary); font-size: 0.86rem;
+    user-select: none;
+}
+.pf-alert-toggle-row input {
+    width: 16px; height: 16px; accent-color: var(--fifa-green);
+    flex: 0 0 auto; cursor: pointer;
+}
+.pf-alert-toggle-row:hover { color: #d7e3da; }
+
+/* One-time "notify me when input is needed?" opt-in prompt */
+.pf-alert-ask {
+    position: fixed; inset: 0; z-index: 6000;
+    display: flex; align-items: center; justify-content: center;
+    background: rgba(6, 8, 10, 0.72); backdrop-filter: blur(3px);
+    padding: 24px;
+}
+.pf-alert-ask-card {
+    width: 100%; max-width: 440px;
+    background: var(--bg-panel); border: 1px solid #333;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.7);
+    padding: 24px 26px; text-align: left;
+}
+.pf-alert-ask-title {
+    color: var(--fifa-gold); font-size: 1.15rem;
+    text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px;
+}
+.pf-alert-ask-body {
+    color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px;
+}
+.pf-alert-ask-actions { display: flex; gap: 12px; justify-content: flex-end; }
 
 /* v2 me/not-me montage review */
-.cv-montage-card { max-width: min(94vw, 1200px); }
-.cv-montage-progress { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 14px; }
+.cv-montage-card {
+    max-width: min(94vw, 1200px);
+    padding: 18px 28px 20px;
+}
+/* Montage-scoped trims: reclaim vertical space so the video can be larger. */
+.cv-montage-card .cv-overlay-title { font-size: 1.35rem; margin-bottom: 6px; }
+.cv-montage-card .cv-overlay-sub { margin: 0 0 10px; font-size: 0.95rem; }
+.cv-montage-card .cv-overlay-note { margin: -4px auto 10px; }
+.cv-montage-progress { display: flex; flex-direction: column; align-items: center; gap: 6px; margin-bottom: 10px; }
 .cv-montage-bar { width: 100%; height: 4px; background: rgba(255, 255, 255, 0.12); overflow: hidden; }
 .cv-montage-bar-fill { height: 100%; background: var(--fifa-green); transition: width 0.25s; }
 .cv-montage-count { color: #9fe8c2; font-size: 0.78rem; letter-spacing: 0.5px; text-transform: uppercase; }
@@ -635,11 +677,15 @@ html, body {
     background: #000; padding: 0; overflow: hidden;
 }
 #cv-montage-canvas {
-    /* Leaves headroom for the title/note/progress above and the meta/undo/
-       action buttons below, so the dialog fits typical windows without
-       scrolling (the overlay now scrolls if it still doesn't fit — see
-       .cv-overlay-screen — but this keeps that the exception, not the norm). */
-    width: 100%; height: auto; max-height: 58vh; display: block;
+    /* Auto width/height + max bounds scale the canvas to fit while preserving
+       the real video aspect ratio — no horizontal stretch (the old width:100% +
+       max-height squashed it). Capping height at 46vh leaves room for the
+       title/note/progress above and the meta/buttons below, so the whole review
+       fits the window without scrolling. */
+    width: auto; height: auto;
+    max-width: 100%; max-height: 46vh;
+    object-fit: contain;
+    display: block; margin: 0 auto;
     background: #050706; cursor: grab; touch-action: none;
 }
 #cv-montage-canvas.grabbing { cursor: grabbing; }
@@ -661,7 +707,7 @@ html, body {
 #cv-montage-enhance { font-weight: 600; }
 #cv-montage-enhance.on { background: var(--fifa-green); color: #04180d; border-color: var(--fifa-green); }
 #cv-montage-zoomlevel { color: #9fe8c2; font-size: 0.78rem; min-width: 34px; text-align: center; }
-.cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 12px 0 18px; font-family: 'Rajdhani', sans-serif; }
+.cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 10px 0 12px; font-family: 'Rajdhani', sans-serif; }
 .cv-montage-time { color: #e8f5ec; font-weight: 700; }
 .cv-montage-kinds { color: #93a397; text-transform: capitalize; }
 .cv-montage-conf { color: var(--fifa-green); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.85rem; align-self: center; }

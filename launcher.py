@@ -115,6 +115,57 @@ def _warn_analysis_still_running() -> None:
         print(msg)
 
 
+def _flash_taskbar(title: str, on: bool) -> None:
+    """Flash (or stop flashing) the app's taskbar button + caption on Windows.
+
+    Located by exact window title so it works across pywebview backends without
+    poking at native handles. ``on`` uses FLASHW_TIMERNOFG so it keeps flashing
+    until the user brings the window to the foreground, then stops on its own.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        import ctypes
+        from ctypes import wintypes
+
+        user32 = ctypes.windll.user32
+        hwnd = user32.FindWindowW(None, title)
+        if not hwnd:
+            return
+
+        class FLASHWINFO(ctypes.Structure):
+            _fields_ = [
+                ("cbSize", wintypes.UINT),
+                ("hwnd", wintypes.HWND),
+                ("dwFlags", wintypes.DWORD),
+                ("uCount", wintypes.UINT),
+                ("dwTimeout", wintypes.DWORD),
+            ]
+
+        FLASHW_STOP = 0x0
+        FLASHW_ALL = 0x3
+        FLASHW_TIMERNOFG = 0xC
+        flags = (FLASHW_ALL | FLASHW_TIMERNOFG) if on else FLASHW_STOP
+        info = FLASHWINFO(ctypes.sizeof(FLASHWINFO), hwnd, flags, 0, 0)
+        user32.FlashWindowEx(ctypes.byref(info))
+    except Exception:  # never let a notification break the app
+        pass
+
+
+class _DesktopApi:
+    """Bridge exposed to the page as window.pywebview.api — lets the front-end
+    ask the OS shell for attention when it needs the user's input."""
+
+    def __init__(self, title: str) -> None:
+        self._title = title
+
+    def flash(self) -> None:
+        _flash_taskbar(self._title, True)
+
+    def unflash(self) -> None:
+        _flash_taskbar(self._title, False)
+
+
 def main() -> int:
     if not _single_instance_guard():
         return 1
@@ -175,6 +226,7 @@ def main() -> int:
         height=800,
         min_size=(960, 640),
         text_select=True,
+        js_api=_DesktopApi(window_title),
     )
 
     def on_closing() -> bool:

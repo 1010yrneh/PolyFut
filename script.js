@@ -26,6 +26,75 @@ const CV_SESSION_KEY = 'polyfut_cv_session';
 const CV_CATALOGUE_KEY = 'polyfut_match_catalogue';
 let cvServerBase = '';
 
+// --- NOTIFICATIONS: get the user's attention when input is needed ---------
+// Long analyses run in the background, so when PolyFut reaches a step that
+// needs the user (pick your team, tap yourself, review touches) we flash the
+// taskbar (desktop, via the pywebview bridge) or the title bar (browser) until
+// they come back. Only fires when the window is NOT focused, and only if the
+// user opted in once (remembered).
+const PF_ALERT_PREF_KEY = 'pf_alert_pref';   // 'on' | 'off' | (null = not asked)
+const __pfBaseTitle = (typeof document !== 'undefined' && document.title) || 'PolyFut';
+let __pfTitleFlash = null;
+
+function pfAlertsEnabled() {
+    try { return localStorage.getItem(PF_ALERT_PREF_KEY) === 'on'; } catch (e) { return false; }
+}
+
+function pfHasNativeFlash() {
+    return !!(window.pywebview && window.pywebview.api && window.pywebview.api.flash);
+}
+
+// Flash to signal "your input is needed". No-op if disabled or already focused.
+function pfAlertInputNeeded() {
+    if (!pfAlertsEnabled()) return;
+    if (document.hasFocus && document.hasFocus()) return;   // they're already here
+    if (pfHasNativeFlash()) {
+        try { window.pywebview.api.flash(); } catch (e) {}
+    }
+    if (!__pfTitleFlash) {                                   // title-bar fallback
+        let on = false;
+        __pfTitleFlash = setInterval(function () {
+            on = !on;
+            document.title = on ? '🔔 Input needed — PolyFut' : __pfBaseTitle;
+        }, 900);
+    }
+}
+
+// Called when the window regains focus — stop nagging.
+function pfStopAlert() {
+    if (__pfTitleFlash) { clearInterval(__pfTitleFlash); __pfTitleFlash = null; }
+    if (typeof document !== 'undefined') document.title = __pfBaseTitle;
+    if (pfHasNativeFlash() && window.pywebview.api.unflash) {
+        try { window.pywebview.api.unflash(); } catch (e) {}
+    }
+}
+if (typeof window !== 'undefined') window.addEventListener('focus', pfStopAlert);
+
+// One-time, remembered opt-in — a small styled prompt (never a native dialog).
+function pfMaybeAskAlerts() {
+    try { if (localStorage.getItem(PF_ALERT_PREF_KEY) !== null) return; } catch (e) { return; }
+    if (document.getElementById('pf-alert-ask')) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'pf-alert-ask';
+    wrap.className = 'pf-alert-ask';
+    wrap.innerHTML =
+        '<div class="pf-alert-ask-card">' +
+        '<div class="pf-alert-ask-title">Notify you when PolyFut needs you?</div>' +
+        '<div class="pf-alert-ask-body">Analysis can take a while. PolyFut can flash its taskbar icon when it needs your input — picking your team, tapping yourself, or reviewing touches — so you can do something else and come back when it&rsquo;s ready.</div>' +
+        '<div class="pf-alert-ask-actions">' +
+        '<button type="button" class="cv-btn-secondary" id="pf-alert-no">Not now</button>' +
+        '<button type="button" class="cv-btn-primary" id="pf-alert-yes">Notify me</button>' +
+        '</div></div>';
+    document.body.appendChild(wrap);
+    function choose(pref) {
+        try { localStorage.setItem(PF_ALERT_PREF_KEY, pref); } catch (e) {}
+        pfSyncAlertToggle();   // keep the setup-screen toggle in step
+        wrap.remove();
+    }
+    document.getElementById('pf-alert-yes').onclick = function () { choose('on'); };
+    document.getElementById('pf-alert-no').onclick = function () { choose('off'); };
+}
+
 function resolveCvServerBase() {
     if (location.protocol === 'http:' || location.protocol === 'https:') {
         return '';
@@ -1279,7 +1348,25 @@ function checkStartReady() {
 document.addEventListener('DOMContentLoaded', () => {
     const vInput = document.getElementById('video-input');
     if (vInput) vInput.addEventListener('change', checkStartReady);
+    pfInitAlertToggle();
 });
+
+// Setup-screen toggle to turn the "needs your input" alerts on/off any time.
+function pfInitAlertToggle() {
+    const t = document.getElementById('pf-alert-toggle');
+    if (!t) return;
+    t.checked = pfAlertsEnabled();
+    t.addEventListener('change', function () {
+        try { localStorage.setItem(PF_ALERT_PREF_KEY, t.checked ? 'on' : 'off'); } catch (e) {}
+        if (!t.checked) pfStopAlert();   // stop any flash in progress when turning off
+    });
+}
+
+// Keep the setup toggle in sync when the pref changes elsewhere (the one-time ask).
+function pfSyncAlertToggle() {
+    const t = document.getElementById('pf-alert-toggle');
+    if (t) t.checked = pfAlertsEnabled();
+}
 
 // --- 2. POSITION SELECTOR ---
 function selectPosition(pos) {
@@ -1475,6 +1562,10 @@ function initApp() {
     const fileInput = document.getElementById('video-input');
     if (!fileInput.files || !fileInput.files[0]) return;
 
+    // Offer notifications once, up front — the whole flow can leave the user
+    // waiting, so ask while they're here and remember their choice.
+    pfMaybeAskAlerts();
+
     // Capture optional metadata for the (later) scoring/logging screens.
     const oppName = document.getElementById('opponent-name').value || 'Opponent';
     const scoreUs = parseInt(document.getElementById('score-us').value, 10) || 0;
@@ -1487,8 +1578,6 @@ function initApp() {
 
     cvVideoFile = fileInput.files[0];
     cvVideoURL = URL.createObjectURL(cvVideoFile);
-    var v2Toggle = document.getElementById('cv-v2-mode');
-    cvV2Mode = !!(v2Toggle && v2Toggle.checked);
     clearReviewSession();
     captureSetupMetadataToSession();
 
@@ -1586,7 +1675,7 @@ function startTeamDetection() {
                 saveCvSession({ token: cvToken, teams: cvTeams });
                 // v2: start compiling the soccer model now so the first seed clip
                 // is fast by the time the user finishes picking their team.
-                if (cvV2Mode && cvToken) {
+                if (cvToken) {
                     fetch(cvApiUrl('/api/v2/warm'), {
                         method: 'POST', headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ token: cvToken }),
@@ -1686,6 +1775,7 @@ function renderTeamOptions(warningText) {
         opts.appendChild(btn);
     });
     if (!cvTeams.length && sub) sub.innerText = 'No players detected to read colours from. Try another clip.';
+    pfAlertInputNeeded();   // team picker is ready — needs the user to choose
 }
 
 function pickTeam(i) {
@@ -1700,22 +1790,24 @@ function pickTeam(i) {
     cvMyTeam = cvTeams[i] || null;
     cvMyTeamId = (cvMyTeam && cvMyTeam.id) ? cvMyTeam.id : (i === 0 ? 'team_a' : 'team_b');
     document.getElementById('cv-team-screen').classList.add('hidden');
-    if (cvV2Mode) {
-        // v2: identify YOU (not just the team) via a few tapped frames.
-        var seedVid = document.getElementById('cv-seed-video');
-        var dur = (seedVid && isFinite(seedVid.duration) && seedVid.duration > 0)
-            ? seedVid.duration : 0;
-        showV2SeedScreen(cvVideoURL, dur);
+    if (!cvToken) {
+        // Offline / server unreachable: no token to analyse against, so fall
+        // back to the in-browser sample demo.
+        runBrowserDemo();
         return;
     }
-    startCvAnalysis();
+    // v2: identify YOU (not just the team) via a few tapped frames.
+    var seedVid = document.getElementById('cv-seed-video');
+    var dur = (seedVid && isFinite(seedVid.duration) && seedVid.duration > 0)
+        ? seedVid.duration : 0;
+    showV2SeedScreen(cvVideoURL, dur);
 }
 
 // --- 4a. v2 SEED SCREEN: tap yourself on a tracked node in a 3s enhanced clip ---
 // Each detected player gets a marker that follows them; tapping one turns that
 // player's whole-clip track into seed taps [{t_sec, nx, ny}] for /api/v2/process.
-let cvV2Mode = false;
 let __v2Seed = null;
+let __pfSeedReadyAlerted = false;   // fire the "seed ready" alert only once per session
 let __v2SeedRAF = null;
 let __v2SeedBuilt = false;      // has any clip finished building this session?
 let __v2SeedLoadTimer = null;   // live elapsed-time ticker while a clip builds
@@ -1807,6 +1899,7 @@ function __v2SeedTeamHiddenFlags(tracklets) {
 }
 
 function showV2SeedScreen(url, duration) {
+    __pfSeedReadyAlerted = false;   // arm the one-shot "seed ready" alert
     __v2Seed = {
         reroll: 0, index: 0, moments: [], nMoments: 4,
         clip: null, cache: {},           // cache key `${reroll}_${index}` -> clip
@@ -1859,8 +1952,8 @@ function __v2SeedUpdateFinishBtn() {
     if (!btn) return;
     btn.disabled = n === 0;
     btn.innerText = n > 0
-        ? 'Find my touches · ' + n + (n === 1 ? ' clip' : ' clips')
-        : 'Find my touches';
+        ? 'Find My Touches (' + n + ')' + (n === 1 ? ' clip' : ' clips')
+        : 'Find My Touches';
 }
 
 function __v2SeedApi(path) { return cvApiUrl(path); }
@@ -1907,7 +2000,13 @@ function __v2SeedSetLoading(on, msg) {
     }
     if (msg != null) box.innerHTML = msg;
     el.classList.toggle('hidden', !on);
-    if (!on) __v2SeedStopLoadTicker();
+    if (!on) {
+        __v2SeedStopLoadTicker();
+        // First time a seed clip finishes building this session, the screen is
+        // now tappable — alert the user (once) in case they stepped away during
+        // the one-time model prep.
+        if (!__pfSeedReadyAlerted) { __pfSeedReadyAlerted = true; pfAlertInputNeeded(); }
+    }
 }
 
 // While a clip builds, show a live timer. The very first build of the session
@@ -2340,61 +2439,6 @@ document.addEventListener('DOMContentLoaded', function () {
     });
 });
 
-// --- 4b. RUN ANALYSIS (token + chosen colours -> poll) ---
-function startCvAnalysis() {
-    const proc = document.getElementById('cv-processing-screen');
-    proc.classList.remove('hidden');
-    showProcessTracker();
-    setCvProgress({ progress: 0, status: 'Starting analysis…', stage: 'init' });
-
-    // No token means we're offline (demo) -> straight to browser demo.
-    if (!cvToken) {
-        runBrowserDemo();
-        return;
-    }
-
-    const fd = new FormData();
-    fd.append('token', cvToken);
-    if (cvMyTeamId) {
-        fd.append('my_team', cvMyTeamId);
-    }
-    var meta = getSetupMetadataFields();
-    fd.append('opponent', meta.opponent || '');
-    fd.append('match_date', meta.match_date || '');
-    fd.append('score_us', String(meta.score_us != null ? meta.score_us : 0));
-    fd.append('score_them', String(meta.score_them != null ? meta.score_them : 0));
-    fd.append('position', meta.position || '');
-
-    fetch(cvApiUrl('/api/process'), { method: 'POST', body: fd })
-        .then(function (r) { return r.json(); })
-        .then(function (data) {
-            if (data.error) throw new Error(data.error);
-            cvJobId = data.job_id;
-            cvSegmentsAreDemo = false;
-            saveCvSession({
-                job_id: cvJobId,
-                token: cvToken,
-                my_team: cvMyTeamId,
-                state: 'running'
-            });
-            captureSetupMetadataToSession();
-            if (data.resumed) {
-                setCvProgress({ progress: 0, status: 'Reconnected to analysis in progress…', stage: 'inference' });
-            }
-            // region agent log
-            __dbgJs('B5', 'script.js:startCvAnalysis', 'job started', {
-                job_id: cvJobId,
-                my_team: cvMyTeamId
-            });
-            // endregion
-            pollCvStatus();
-        })
-        .catch(function () {
-            // Server became unreachable mid-flow -> fall back to browser demo.
-            runBrowserDemo();
-        });
-}
-
 // --- 4b-v2. RUN v2 ANALYSIS (token + seed taps -> montage review) ---
 function startCvV2Analysis(taps) {
     const proc = document.getElementById('cv-processing-screen');
@@ -2421,7 +2465,6 @@ function startCvV2Analysis(taps) {
             if (data.error) throw new Error(data.error);
             cvJobId = data.job_id;
             cvSegmentsAreDemo = false;
-            cvV2Mode = true;
             saveCvSession({ job_id: cvJobId, token: cvToken, my_team: cvMyTeamId, state: 'running', v2: true });
             captureSetupMetadataToSession();
             pollCvStatus();
@@ -2432,6 +2475,7 @@ function startCvV2Analysis(taps) {
 function enterV2Review(j) {
     hideProcessTracker();
     document.getElementById('cv-processing-screen').classList.add('hidden');
+    pfAlertInputNeeded();   // analysis done — the "was this you?" review needs the user
     showV2Montage(j);
 }
 
@@ -2649,33 +2693,40 @@ function __v2MontageStartDraw() {
             var sy = Math.max(0, Math.min(nH - sh, (mm.panY || 0.5) * nH - sh / 2));
             ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-            // Arrow over the player's box top (absolute time handles enhanced mode).
+            // Rectangle outlining the player we believe made this touch. It
+            // follows the tracklet across the clip (absolute time handles the
+            // enhanced clip's own clock); size comes from the tracked body box.
             var absT = (vid.currentTime || 0) + (mm.timeOffset || 0);
             var pos = (it.__track && it.__track.length)
                 ? __v2MontagePosAt(it.__track, absT) : null;
-            var nhN = (it.__track && it.__track.length && it.__track[0].nh)
-                ? it.__track[0].nh : 0.14;
-            var fx, fy;
+            var bcx, bcy, bboxW, bboxH;   // body-box centre + size, native frame px
             if (pos) {
-                fx = pos.nx * nW; fy = (pos.ny - nhN / 2) * nH;
-            } else {
+                var p0 = it.__track[0];
+                var nwN = (p0 && p0.nw) ? p0.nw : 0.055;
+                var nhN = (p0 && p0.nh) ? p0.nh : 0.14;
+                bcx = pos.nx * nW; bcy = pos.ny * nH;
+                bboxW = nwN * nW; bboxH = nhN * nH;
+            } else if (it.crop) {
                 var scc = nW / Math.min(nW, 640);            // crop is in 640-space
-                fx = ((it.crop[0] + it.crop[2]) / 2) * scc;
-                fy = it.crop[1] * scc;
+                bcx = ((it.crop[0] + it.crop[2]) / 2) * scc;
+                bcy = ((it.crop[1] + it.crop[3]) / 2) * scc;
+                bboxW = (it.crop[2] - it.crop[0]) * scc;
+                bboxH = (it.crop[3] - it.crop[1]) * scc;
             }
-            var ax = (fx - sx) / sw * canvas.width;
-            var ay = (fy - sy) / sh * canvas.height - 4;
-            var mw = 7, mh = 10;
-            ctx.fillStyle = 'rgba(48,255,143,0.95)';
-            ctx.strokeStyle = 'rgba(0,0,0,0.55)';
-            ctx.lineWidth = 1;
-            ctx.beginPath();
-            ctx.moveTo(ax, ay);
-            ctx.lineTo(ax - mw, ay - mh);
-            ctx.lineTo(ax + mw, ay - mh);
-            ctx.closePath();
-            ctx.fill();
-            ctx.stroke();
+            if (bboxW) {
+                bboxW *= 1.06; bboxH *= 1.08;                // small pad around the body
+                // Map native-frame px through the current zoom/pan window.
+                var rx = (bcx - bboxW / 2 - sx) / sw * canvas.width;
+                var ry = (bcy - bboxH / 2 - sy) / sh * canvas.height;
+                var rw = bboxW / sw * canvas.width;
+                var rh = bboxH / sh * canvas.height;
+                ctx.lineWidth = Math.max(2, canvas.width * 0.004);
+                ctx.strokeStyle = 'rgba(48,255,143,0.95)';
+                ctx.shadowColor = 'rgba(0,0,0,0.65)';
+                ctx.shadowBlur = 4;
+                ctx.strokeRect(rx, ry, rw, rh);
+                ctx.shadowBlur = 0;
+            }
         }
         requestAnimationFrame(draw);
     }
@@ -3067,7 +3118,6 @@ function cancelCvAnalysis() {
 // Route a status/catalogue payload to the right view (v1 segments vs v2 review/hotspots).
 function finishFromStatus(j) {
     if (j && j.pipeline_version === 'v2') {
-        cvV2Mode = true;
         if (j.state === 'review') { enterV2Review(j); return; }
         finishCvAnalysis(v2HotspotsToSegments(j.hotspots || []), 'v2');
         return;
@@ -3496,7 +3546,7 @@ function renderWPAChart(data, maxDuration, excludedRanges) {
         type: 'line',
         data: {
             datasets: [{
-                label: 'Hybrid Value', data: data,
+                label: 'Threat Points (TP)', data: data,
                 borderColor: '#30ff8f', backgroundColor: 'rgba(48, 255, 143, 0.1)',
                 borderWidth: 2, fill: true, tension: 0.1, pointRadius: 0
             }]
@@ -3576,20 +3626,15 @@ async function generateScoutReport() {
     const systemPrompt = `You are a professional Premier League scout.
 
     Analyze the following player stats for a single match.
-    The player position is ${position}. Their final score was ${netScore}. Their direct contributions were ${totalMarkov} (Markov score), however the long term impacts of their actions and their risks could actually be ${totalRidge} (Ridge score).
+    The player position is ${position}. Their final score was ${netScore} Threat Points (TP). Their direct contributions were ${totalMarkov} TP (Markov), however the long term impacts of their actions and their risks could actually be ${totalRidge} TP (Ridge).
 
-    The score is a hybrid valuation made from Markov matrices evaluating the
-    immediate impact their actions have on improving xG as well as Ridge Regression
-    which evaluates the long term impacts their actions have on winning and
-    losing. For example, Progression may have a direct positive impact on the
-    Markov level, but it has long term risks embodied by the Ridge regression
-    since dribbling a lot can lead to more dispossessions.
+    Scores are in Threat Points: 1 TP = 1% of a goal (so a goal is worth 100 TP). The score is a hybrid valuation from Markov matrices (immediate chain impact) and Ridge Regression (long-term win/loss signal). Progression may help on the Markov level but carry Ridge risks if excess volume leads to turnovers. A Goal auto-suppresses a preceding Shot Taken so goals are not double-counted.
 
     Here is the action count: ${JSON.stringify(statSummary)}.
 
-    To help you analyze risk vs reward, here are the underlying coefficients used for a ${position}:
-    - Markov Valuations (Immediate xG impact): ${markovValuations}
-    - Ridge Valuations (Long term Win/Loss impact): ${ridgeValuations}
+    To help you analyze risk vs reward, here are relative action importance labels for a ${position} (not exact numeric weights):
+    - Markov (Immediate threat): ${markovValuations}
+    - Ridge (Long term Win/Loss impact): ${ridgeValuations}
 
     Here is the chronological timeline of their actions: ${timelineString}.
 
