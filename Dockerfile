@@ -8,9 +8,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 COPY requirements.txt .
-COPY cv/ cv/
-RUN pip install --no-cache-dir -r requirements.txt \
-    && pip install --no-cache-dir -e cv/
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
 ENV POLYFUT_DATA_DIR=/data

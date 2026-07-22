@@ -17,7 +17,6 @@ models/
 uploads/
 exports/
 server_exports/
-cv/server_exports/
 output/
 output_v2*/
 _v2*.mp4
@@ -37,3 +36,6 @@ Thumbs.db
 
 # Release artifacts (host on polyfut.com, not in git)
 website/downloads/*.exe
+
+# Local notebooks (exploratory, carry output cruft)
+notebooks/

@@ -11,20 +11,5 @@ services:
       - MKL_NUM_THREADS=2
     command: python server.py
 
-  eval:
-    build: .
-    profiles: ["ci"]
-    volumes:
-      - ./sample_data:/app/sample_data:ro
-      - ./exports:/app/exports
-    entrypoint: ["python", "cv/scripts/eval_segments.py"]
-    command:
-      - --segments
-      - exports/d3bb30bb3953/clip_segments.json
-      - --labels
-      - sample_data/labels.json
-      - --out
-      - exports/eval_report.json
-
 volumes:
   polyfut-data:

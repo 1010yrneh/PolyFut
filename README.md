@@ -80,8 +80,8 @@ pytest polyfut_video/tests -q
 
 ```
 PolyFut/
-├── polyfut_video/          # Level 1 pipeline (active)
-├── cv/                     # legacy polyfut_cv (reference)
+├── polyfut_v2/             # current ball-anchored single-player pipeline
+├── polyfut_video/          # v1 pipeline + shared decode/shot/team utilities
 ├── index.html / script.js / style.css / calculations.js
 ├── server.py / launcher.py
 └── uploads/ exports/
