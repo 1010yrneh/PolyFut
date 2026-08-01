@@ -837,6 +837,9 @@ def _run_v2_job(job_id: str, video_path: Path, seed_taps: list, out_dir: Path,
                 on_pitch_sec=result.get("on_pitch_sec"),
                 attribution=result.get("attribution"),
                 calibration_status=result.get("calibration_status"),
+                # Needed again at decision time: hotspots are rebuilt from
+                # scratch there, and the possession extension needs the ball.
+                ball_track=result.get("ball_track"),
                 timings=result.get("stage_timings_sec") or result.get("timings_sec"),
                 finished_at=time.time(),
             )
@@ -1391,6 +1394,7 @@ def v2_decisions(job_id: str):
     cfg = PipelineV2Config()
     hotspots, items = hotspots_from_decisions(
         j["montage"], decisions, cfg, duration_sec=j.get("duration_sec"),
+        ball_track=j.get("ball_track"),
     )
     state = "done" if payload.get("finalize") else "review"
     _set_job(job_id, montage=items, hotspots=hotspots, state=state,

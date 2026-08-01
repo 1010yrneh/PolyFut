@@ -28,7 +28,10 @@ from polyfut_v2.orchestrator import assemble_touches
 from polyfut_v2.pipeline import play_ranges as pr
 from polyfut_v2.pipeline.color import hex_to_hsv, hexes_to_hsv, hsv_distance_multi
 from polyfut_v2.pipeline.frame_provider import VideoFrameProvider
-from polyfut_v2.pipeline.hotspots import assemble_hotspots
+from polyfut_v2.pipeline.hotspots import (
+    assemble_hotspots,
+    ball_track_from_trajectory,
+)
 from polyfut_v2.pipeline.player_detector import YoloPlayerDetector
 from polyfut_v2.pipeline.seed import TargetSeed, build_seed_from_taps
 
@@ -86,7 +89,13 @@ def _footage_warnings(info: dict, cfg: PipelineV2Config) -> list[str]:
             f"a few pixels and each player ~15px, so ball-detection recall is low "
             f"(typically 15-50%) and the appearance filter usually can't tell you "
             f"apart from teammates, so most touches end up in review. 720p "
-            f"(1280x720) or higher gives dramatically better results.")
+            f"(1280x720) or higher gives dramatically better results — this is "
+            f"the source file's own resolution, so re-exporting the same footage "
+            f"at a higher setting is what changes it.")
+    elif w and cfg.analysis_follow_source and w > cfg.analysis_max_width:
+        out.append(
+            f"Footage is {w}x{h}; analysed at {cfg.analysis_max_width}px wide to "
+            f"bound processing time. Raise analysis_max_width to use all of it.")
     if dur >= 30 * 60:
         mins = dur / 60.0
         touches = int(mins * 18)  # ball is touched ~18x/min across all 22 players
@@ -355,6 +364,15 @@ def run_to_montage(
     progress = progress or _noop
     t_total = time.perf_counter()
 
+    # Analyse at the source's own resolution (capped) rather than always
+    # downscaling to 640. Must happen before anything decodes a frame or reads a
+    # px threshold, since ``for_frame_width`` rescales both together — they are
+    # meaningless apart. A 640-wide source returns the identical config.
+    try:
+        cfg = cfg.for_frame_width(int(probe_video(video_path).get("width") or 0))
+    except Exception:  # noqa: BLE001 — a probe failure must not fail the run
+        pass
+
     # Upgrade ball + player detection to the soccer-specific model (COCO can't
     # see the ball). Downloads on first use; falls back to COCO if offline.
     progress(0.01, "Loading soccer detection model…")
@@ -502,6 +520,12 @@ def run_to_montage(
         # Which exit _build_pitch_mapper took — the answerable form of
         # "why was metric_coverage zero?".
         "calibration_status": out.get("calibration_status"),
+        # Where the ball was, in source time. Persisted because hotspots are
+        # rebuilt from scratch after every review decision, and without this the
+        # possession extension would silently revert to a fixed pad the moment
+        # the user confirmed a single touch.
+        "ball_track": [[round(t, 3), round(x, 1), round(y, 1)]
+                       for t, x, y in ball_track_from_trajectory(traj)],
         "calibration": calibration if isinstance(calibration, dict) else None,
         "n_candidates_raw": n_raw,
         "n_candidates": len(out["candidates"]),
@@ -524,6 +548,7 @@ def hotspots_from_decisions(
     cfg: PipelineV2Config | None = None,
     *,
     duration_sec: float | None = None,
+    ball_track: list | None = None,
 ) -> tuple[list[dict], list[dict]]:
     """Apply me/not-me decisions to montage items (by rank) and assemble
     hotspots from every 'me' touch. Returns (hotspot_dicts, updated_items)."""
@@ -541,7 +566,15 @@ def hotspots_from_decisions(
             it["decision"] = norm[it["rank"]]
 
     me_times = sorted(it["t_sec"] for it in montage_items if it.get("decision") == "me")
-    hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec)
+    track = None
+    if ball_track:
+        try:
+            track = sorted((float(t), float(x), float(y))
+                           for t, x, y in ball_track)
+        except (TypeError, ValueError):
+            track = None
+    hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec,
+                                 ball_track=track)
     return [h.to_dict() for h in hotspots], montage_items
 
 

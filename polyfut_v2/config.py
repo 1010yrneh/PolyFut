@@ -14,7 +14,23 @@ from pathlib import Path
 @dataclass
 class PipelineV2Config:
     # --- Stage 1: decode ---
+    # The width everything is analysed at, and the unit for every ``_px``
+    # threshold below. 640 is the reference the constants were tuned against.
     target_width: int = 640
+    # Let a higher-resolution upload actually be analysed at higher resolution.
+    #
+    # Without this the width is pinned to 640 and every upload is downscaled to
+    # it on decode, so uploading 720p or 1080p changes nothing but decode cost —
+    # while the low-resolution warning tells the user that higher resolution
+    # "gives dramatically better results". That advice was not deliverable by the
+    # code that printed it.
+    #
+    # On 640-wide source this is a strict no-op (min(640, cap) == 640), which is
+    # every clip currently on disk, so it cannot alter existing behaviour.
+    analysis_follow_source: bool = True
+    # Ceiling on that. Cost scales with area: 1280 is 4x the pixels of 640, and a
+    # 5-minute clip already takes ~55 min on this CPU. See ``for_frame_width``.
+    analysis_max_width: int = 1280
     # Ball is analysed on every sampled frame (Stage 3, the continuous cost — the
     # single biggest runtime term). 4 → ~7.5 analysed fps at 30 fps source: still
     # fine for Stage 4 kinematics, and keeps a full 94-min match to ~2.7h with the
@@ -432,6 +448,20 @@ class PipelineV2Config:
     hotspot_pad_after_sec: float = 2.0
     hotspot_gap_merge_sec: float = 5.0
     hotspot_min_zone_sec: float = 3.0
+    # Run a hotspot on until the ball is seen to leave, instead of stopping a
+    # fixed pad after the last *detected* touch. Touches are discrete; possession
+    # is continuous, and at 40% ball-detection the last seen touch is usually not
+    # the last touch. Measured on job fdc541cf493e: the final hotspot ended at
+    # 290.8s = 288.8 + pad_after, cutting the player's last pass.
+    hotspot_possession_enabled: bool = True
+    # How far the ball must travel from where it sat at the last touch before it
+    # counts as gone, in analysed-frame px. ~120px on a 640-wide frame is several
+    # metres near the camera and more at distance — deliberately generous, since
+    # over-running a clip by a second costs far less than truncating a goal.
+    hotspot_possession_leave_px: float = 120.0
+    # Cap on the extension. A ball never seen to leave is a tracking failure, not
+    # a long dribble, so the window must not follow it indefinitely.
+    hotspot_possession_max_extend_sec: float = 6.0
 
     # --- Reliability guardrail ---
     # A trajectory with almost no real detections means the ball model can't
@@ -442,6 +472,54 @@ class PipelineV2Config:
 
     # --- Output ---
     output_dir: Path = Path("output_v2")
+
+    # Every threshold whose unit is pixels of a ``target_width``-wide frame.
+    # Changing the analysis width without scaling these silently redefines all
+    # of them — an 80px "nearest player" gate means half as much pitch at 1280
+    # as at 640 — so the two must never move independently.
+    _PX_SCALED_FIELDS = (
+        "roi_half_px", "ball_max_jump_px", "ball_suspect_jump_px",
+        "ball_confirm_dist_px", "ball_pingpong_min_step_px",
+        "camera_motion_max_shift_px", "camera_motion_exclude_half_px",
+        "ball_surface_check_half_px", "contact_min_speed_px_s",
+        "player_min_height_px", "player_roi_half_px",
+        "contact_max_player_dist_px", "contact_metric_override_px",
+        "contact_ball_proxy_half_px", "crowd_radius_px", "orbital_base_px",
+        "orbital_growth_px_s", "montage_crop_half_px",
+        "hotspot_possession_leave_px",
+    )
+    # Deliberately NOT scaled despite the ``_px`` name: the calibration screen
+    # serves frames at the video's native resolution, so a landmark residual is
+    # in click-frame pixels and has no relationship to the analysis width.
+    _PX_NOT_FRAME_RELATIVE = ("calibration_max_median_px",)
+    # Areas, not lengths — these scale with the square of the width.
+    _PX_AREA_FIELDS = ("color_min_torso_px",)
+
+    def for_frame_width(self, source_width: int | None):
+        """This config re-expressed for the width a given source will run at.
+
+        Returns ``self`` unchanged whenever the width does not move, so the
+        common case (640-wide footage, which is every clip currently on disk)
+        is provably identical to not calling this at all.
+
+        Ratios, angles, fractions, seconds and counts are deliberately *not*
+        scaled: an aspect ratio or a 0.6 similarity means the same thing at any
+        resolution. Only lengths and areas measured in frame pixels move.
+        """
+        if not self.analysis_follow_source or not source_width:
+            return self
+        width = min(int(source_width), int(self.analysis_max_width))
+        if width <= 0 or width == self.target_width:
+            return self
+        s = width / float(self.target_width)
+        from dataclasses import replace
+        changes = {f: getattr(self, f) * s for f in self._PX_SCALED_FIELDS
+                   if hasattr(self, f)}
+        for f in self._PX_AREA_FIELDS:
+            if hasattr(self, f):
+                changes[f] = type(getattr(self, f))(getattr(self, f) * s * s)
+        changes["target_width"] = width
+        return replace(self, **changes)
 
     def v1_config(self):
         """Project shared knobs onto a v1 ``PipelineConfig`` for the reused

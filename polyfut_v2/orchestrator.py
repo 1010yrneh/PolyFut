@@ -24,7 +24,10 @@ from polyfut_v2.config import PipelineV2Config
 from polyfut_v2.main import compute_trajectory, trajectory_warnings
 from polyfut_v2.pipeline.contacts import cap_candidates, contacts_doc, detect_contacts
 from polyfut_v2.pipeline.frame_provider import VideoFrameProvider
-from polyfut_v2.pipeline.hotspots import assemble_hotspots
+from polyfut_v2.pipeline.hotspots import (
+    assemble_hotspots,
+    ball_track_from_trajectory,
+)
 from polyfut_v2.pipeline.montage import (
     apply_decisions,
     build_montage,
@@ -135,7 +138,8 @@ def assemble_touches(
         apply_decisions(montage, decisions)
 
     me_times = confirmed_me_times(montage)
-    hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec)
+    hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec,
+                                 ball_track=ball_track_from_trajectory(traj))
     timings["montage"] = time.perf_counter() - t0
 
     return {
