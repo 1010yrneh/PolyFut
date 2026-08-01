@@ -14,6 +14,7 @@ License: derived from the Roboflow football-players-detection dataset (CC BY 4.0
 
 from __future__ import annotations
 
+import threading
 import urllib.request
 from pathlib import Path
 
@@ -27,7 +28,9 @@ SOCCER_MODEL_IMGSZ = 640  # OpenVINO export is a fixed input size
 
 # Class ids within the soccer model.
 SOCCER_BALL_CLASS = 0
+SOCCER_GOALKEEPER_CLASS = 1
 SOCCER_PLAYER_CLASS = 2
+SOCCER_REFEREE_CLASS = 3
 
 # COCO fallback (general yolov8) when the soccer model can't be obtained.
 COCO_WEIGHTS = "yolov8s.pt"
@@ -55,6 +58,9 @@ def ensure_soccer_model(download: bool = True) -> Path | None:
         return None
 
 
+_OV_EXPORT_LOCK = threading.Lock()
+
+
 def _ov_ready() -> bool:
     return SOCCER_MODEL_OV_DIR.is_dir() and any(SOCCER_MODEL_OV_DIR.glob("*.xml"))
 
@@ -71,9 +77,15 @@ def ensure_soccer_model_openvino(download: bool = True) -> Path | None:
     pt = ensure_soccer_model(download=download)
     if pt is None:
         return None
-    try:
-        from ultralytics import YOLO
-        YOLO(str(pt)).export(format="openvino", imgsz=SOCCER_MODEL_IMGSZ, half=False)
-        return SOCCER_MODEL_OV_DIR if _ov_ready() else None
-    except Exception:
-        return None
+    # The async model warm and the seed-clip prefetch can both land here on a
+    # fresh install; two concurrent exports to the same directory would corrupt
+    # it. First one exports, the second sees _ov_ready() and returns.
+    with _OV_EXPORT_LOCK:
+        if _ov_ready():
+            return SOCCER_MODEL_OV_DIR
+        try:
+            from ultralytics import YOLO
+            YOLO(str(pt)).export(format="openvino", imgsz=SOCCER_MODEL_IMGSZ, half=False)
+            return SOCCER_MODEL_OV_DIR if _ov_ready() else None
+        except Exception:
+            return None

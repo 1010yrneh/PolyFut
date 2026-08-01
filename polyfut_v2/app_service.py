@@ -13,14 +13,20 @@ from __future__ import annotations
 
 import math
 import os
+import threading
+import time
 from pathlib import Path
 from typing import Callable
+
+import numpy as np
 
 from polyfut_video.pipeline.decode import probe_video
 
 from polyfut_v2.config import PipelineV2Config
 from polyfut_v2.main import compute_trajectory, trajectory_warnings
 from polyfut_v2.orchestrator import assemble_touches
+from polyfut_v2.pipeline import play_ranges as pr
+from polyfut_v2.pipeline.color import hex_to_hsv, hexes_to_hsv, hsv_distance_multi
 from polyfut_v2.pipeline.frame_provider import VideoFrameProvider
 from polyfut_v2.pipeline.hotspots import assemble_hotspots
 from polyfut_v2.pipeline.player_detector import YoloPlayerDetector
@@ -110,6 +116,8 @@ def _apply_soccer_model(cfg: PipelineV2Config) -> str | None:
         cfg.ball_class_id = bm.SOCCER_BALL_CLASS
         cfg.player_weights = str(model)
         cfg.player_class_id = bm.SOCCER_PLAYER_CLASS
+        cfg.goalkeeper_class_id = bm.SOCCER_GOALKEEPER_CLASS
+        cfg.referee_class_id = bm.SOCCER_REFEREE_CLASS
         # OpenVINO export is fixed at this size; keep all passes consistent.
         cfg.ball_imgsz = cfg.ball_full_imgsz = bm.SOCCER_MODEL_IMGSZ
         cfg.player_imgsz = bm.SOCCER_MODEL_IMGSZ
@@ -136,6 +144,7 @@ def build_seed_from_tap_specs(
     info = probe_video(video_path)
     fps = float(info.get("fps") or 25.0)
     samples: list = []
+    sample_times: list[float] = []
     with VideoFrameProvider(video_path, target_width=cfg.target_width) as prov:
         for tap in taps:
             try:
@@ -150,27 +159,41 @@ def build_seed_from_tap_specs(
             frame = win[0][1]
             h, w = frame.shape[:2]
             samples.append((frame, (nx * w, ny * h)))
+            sample_times.append(t)
     if not samples:
         return TargetSeed(kit_hsv=None, gallery=[], n_samples=0)
     return build_seed_from_taps(
         samples, player_detector,
         max_tap_dist_px=cfg.contact_max_player_dist_px,
         min_torso_px=cfg.color_min_torso_px,
+        sample_times_sec=sample_times,
     )
 
 
 _SEED_DETECTOR_CACHE: dict[str, object] = {}
+_SEED_DETECTOR_LOCK = threading.Lock()
 
 
 def _seed_player_detector(cfg: PipelineV2Config):
     """A player detector for the seed step, cached per-weights so the OpenVINO
-    model is compiled once and reused across seed-clip requests."""
+    model is compiled once and reused across seed-clip requests.
+
+    Creation is serialized (the async /api/v2/warm call and the server's seed
+    prefetch can race to be first) and finishes with a dummy inference: the
+    first OpenVINO inference after compile costs tens of seconds, and paying it
+    here — in the background warm path — keeps it off the first user-visible
+    clip build."""
     key = f"{cfg.player_weights}|{cfg.player_imgsz}|{cfg.device}"
-    det = _SEED_DETECTOR_CACHE.get(key)
-    if det is None:
-        det = YoloPlayerDetector(cfg)
-        _ = det.model  # force load/compile now
-        _SEED_DETECTOR_CACHE[key] = det
+    with _SEED_DETECTOR_LOCK:
+        det = _SEED_DETECTOR_CACHE.get(key)
+        if det is None:
+            det = YoloPlayerDetector(cfg)
+            _ = det.model  # force load/compile now
+            try:
+                det.detect(np.zeros((360, 640, 3), dtype=np.uint8), None)
+            except Exception:  # noqa: BLE001 — warmup is best-effort
+                pass
+            _SEED_DETECTOR_CACHE[key] = det
     return det
 
 
@@ -186,55 +209,30 @@ def build_review_track_for_item(
     crop = item.get("crop")
     if not crop or len(crop) != 4:
         return None
+    pb = item.get("player_bbox")
+    player_bbox = [float(v) for v in pb] if pb and len(pb) == 4 else None
+    # Only when there's no real contact box do we need a detector, so the tracker
+    # can re-check the *same* contact distance gate. Never invent a far-away
+    # body — that was boxing the wrong person on the review screen.
+    detector = None
+    if player_bbox is None:
+        _apply_soccer_model(cfg)
+        detector = _seed_player_detector(cfg)
+    frame_index = item.get("frame_index")
+    try:
+        fi = int(frame_index) if frame_index is not None else None
+    except (TypeError, ValueError):
+        fi = None
     try:
         return rt.build_review_track(
             video_path, [float(v) for v in crop],
             float(item["t_sec"]), float(item["clip_start_sec"]),
             float(item["clip_end_sec"]), target_width=cfg.target_width,
+            player_bbox=player_bbox, detector=detector, cfg=cfg,
+            frame_index=fi,
         )
     except (KeyError, TypeError, ValueError):
         return None
-
-
-def build_enhanced_review_clip(
-    video_path: str, item: dict, out_path: str, cfg: PipelineV2Config | None = None
-) -> dict | None:
-    """Build an upscaled + sharpened version of a review touch's clip window so
-    the user can look more closely. Reuses the seed-clip enhancer. Returns
-    ``{start_sec, duration, fps}`` (the clip is standalone, starting at 0)."""
-    import cv2
-
-    from polyfut_v2 import seed_clips as sc
-
-    try:
-        info = probe_video(video_path)
-    except Exception:  # noqa: BLE001
-        return None
-    fps = float(info.get("fps") or 25.0)
-    start = float(item.get("clip_start_sec") or 0.0)
-    end = float(item.get("clip_end_sec") or (start + 2.0))
-    start_frame = int(start * fps)
-    n = max(1, int(round((end - start) * fps)))
-
-    cap = cv2.VideoCapture(video_path)
-    if not cap.isOpened():
-        return None
-    cap.set(cv2.CAP_PROP_POS_FRAMES, start_frame)
-    frames = []
-    for _ in range(n):
-        ok, fr = cap.read()
-        if not ok or fr is None:
-            break
-        frames.append(sc.enhance_frame(fr))
-    cap.release()
-    if not frames:
-        return None
-
-    from pathlib import Path as _P
-    _P(out_path).parent.mkdir(parents=True, exist_ok=True)
-    sc.write_browser_clip(frames, out_path, fps)
-    return {"start_sec": round(start, 3), "duration": round(len(frames) / fps, 3),
-            "fps": fps}
 
 
 def warm_seed_detector(cfg: PipelineV2Config | None = None) -> None:
@@ -245,7 +243,8 @@ def warm_seed_detector(cfg: PipelineV2Config | None = None) -> None:
     _seed_player_detector(cfg)
 
 
-def build_seed_clips_index(video_path: str, reroll: int = 0) -> dict:
+def build_seed_clips_index(video_path: str, reroll: int = 0,
+                           play_ranges: list[tuple[float, float]] | None = None) -> dict:
     """Return just the moment timestamps for a reroll set (cheap — no detection),
     so the UI can list the clips before any are built."""
     from polyfut_v2 import seed_clips as sc
@@ -253,22 +252,25 @@ def build_seed_clips_index(video_path: str, reroll: int = 0) -> dict:
     info = probe_video(video_path)
     dur = float(info.get("duration_sec") or 0.0)
     return {"reroll": reroll, "duration_sec": dur,
-            "moments": sc.default_moments(dur, reroll)}
+            "play_ranges": [list(r) for r in (play_ranges or [])],
+            "moments": sc.default_moments(dur, reroll, play_ranges=play_ranges)}
 
 
 def build_one_seed_clip(
     video_path: str,
     index: int,
-    out_path: str,
     *,
     reroll: int = 0,
     cfg: PipelineV2Config | None = None,
+    my_kit_hex: str | None = None,
+    avoid_sec: tuple[float, ...] = (),
+    play_ranges: list[tuple[float, float]] | None = None,
 ) -> dict | None:
-    """Build a single enhanced seed clip with tracked player nodes.
+    """Build tracked player nodes for one seed moment (no separate video encode).
 
-    ``index`` selects which moment (0-3) of the ``reroll`` set. Writes the
-    enhanced clip to ``out_path`` and returns metadata + tracklets, or None if
-    the moment can't be read. Uses the soccer player model (cached).
+    ``index`` selects which moment (0-3) of the ``reroll`` set. The browser
+    plays the uploaded video directly at ``start_sec``; this only computes
+    tracklets for the tappable markers.
     """
     from polyfut_v2 import seed_clips as sc
 
@@ -276,14 +278,24 @@ def build_one_seed_clip(
     _apply_soccer_model(cfg)  # so nodes use the real soccer player model
     detector = _seed_player_detector(cfg)
 
-    idx_info = build_seed_clips_index(video_path, reroll)
+    idx_info = build_seed_clips_index(video_path, 0, play_ranges)
     moments = idx_info["moments"]
     if not moments:
         return None
-    index = max(0, min(index, len(moments) - 1))
-    t_center = moments[index]
+    dur = idx_info["duration_sec"]
+    n_moments = len(moments)
+    index = max(0, min(index, n_moments - 1))
+    # ``reroll`` is per-slot: it nudges only THIS clip's base moment, so a single
+    # clip can be reshuffled without disturbing the others. The base is then
+    # refined outward to the nearest well-populated, taggable moment — never
+    # outside the declared playing-time window.
+    base_t = sc.moment_for_index(dur, index, reroll, play_ranges)
+    t_center = sc.pick_best_moment_near(
+        video_path, base_t, detector, dur, my_kit_hex=my_kit_hex,
+        avoid_sec=tuple(avoid_sec or ()), play_ranges=play_ranges,
+    )
 
-    clip = sc.build_seed_clip(video_path, t_center, detector, out_path)
+    clip = sc.build_seed_clip(video_path, t_center, detector)
     if clip is None:
         return None
     # Precompute the seed taps for each node so the UI can build a gallery from a
@@ -292,7 +304,8 @@ def build_one_seed_clip(
     for tr in clip["tracklets"]:
         tr["taps"] = taps_from_tracklet(tr, start)
     clip.update(index=index, reroll=reroll, t_center=t_center,
-                moments=moments, n_moments=len(moments))
+                moments=moments, n_moments=n_moments,
+                play_ranges=[list(r) for r in (play_ranges or [])])
     return clip
 
 
@@ -318,20 +331,37 @@ def run_to_montage(
     ball_detector=None,
     progress: ProgressCb | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    opponent_hex: str | None = None,
+    opponent_hexes: list[str] | None = None,
+    my_team_hexes: list[str] | None = None,
+    play_ranges: list[tuple[float, float]] | None = None,
+    calibration: dict | None = None,
 ) -> dict:
     """Run Stages 0-8 and return a JSON-serializable montage document.
 
     Hotspots here come only from auto-accepted contacts; the user refines them
     via me/not-me review, applied later with ``hotspots_from_decisions``.
+
+    ``calibration`` is the optional pitch calibration produced by the UI. With
+    it, "who touched the ball" is judged in metres rather than pixels (Issue 14);
+    without it, or if it fails the quality screen, behaviour is unchanged.
+
+    ``play_ranges`` is the user's declared on-pitch window (video-time seconds).
+    Everything downstream is confined to it: the trajectory only exists inside
+    the padded ranges, so candidates, montage and hotspots follow automatically
+    — Stages 4-9 need no range awareness of their own.
     """
     cfg = cfg or PipelineV2Config()
     progress = progress or _noop
+    t_total = time.perf_counter()
 
     # Upgrade ball + player detection to the soccer-specific model (COCO can't
     # see the ball). Downloads on first use; falls back to COCO if offline.
     progress(0.01, "Loading soccer detection model…")
+    t0 = time.perf_counter()
     model_warning = _apply_soccer_model(cfg)
     player_detector = YoloPlayerDetector(cfg)
+    model_load_sec = time.perf_counter() - t0
 
     if ball_detector is None and _synthetic_ball_enabled():
         ball_detector = _SyntheticBall()
@@ -339,6 +369,7 @@ def run_to_montage(
     res = compute_trajectory(
         Path(video_path), cfg, detector=ball_detector,
         progress=progress, should_cancel=should_cancel,
+        play_ranges=play_ranges,
     )
     traj = res["trajectory"]
     duration = res["info"].get("duration_sec")
@@ -347,7 +378,42 @@ def run_to_montage(
     if model_warning:
         warnings.insert(0, model_warning)
 
+    # On-pitch seconds budget the candidate cap; full duration still bounds clip
+    # and hotspot ends, because timestamps never leave video time.
+    on_pitch_sec = pr.total_seconds(res.get("play_ranges_padded") or []) or None
+    if play_ranges and duration:
+        warnings.insert(0, (
+            f"Analysis limited to your playing time: "
+            f"{pr.total_seconds(play_ranges) / 60:.0f} of {float(duration) / 60:.0f} min. "
+            f"Touches outside the periods you marked were not looked for. Each "
+            f"period is padded by {cfg.playing_time_pad_sec:.0f}s on both sides "
+            f"so a slightly-off handle doesn't lose a real touch."
+        ))
+
+    t0 = time.perf_counter()
     seed = build_seed_from_tap_specs(video_path, seed_taps, cfg, player_detector)
+    # The other team's kit colours (from the team picker) let the per-contact
+    # team gate use both centroids to drop obvious wrong-team touches. A kit that
+    # isn't one flat colour contributes all of its colours; a touch matching any
+    # of them is that team's.
+    opp_all = hexes_to_hsv(opponent_hexes) if opponent_hexes else []
+    if not opp_all:
+        primary = hex_to_hsv(opponent_hex)
+        opp_all = [primary] if primary is not None else []
+    seed.opponent_kit_hsv = opp_all[0] if opp_all else None
+    seed.opponent_kit_hsv_alts = opp_all[1:]
+    # Colours the user confirmed on the team screen are added to the tap-derived
+    # kit rather than replacing it: the taps come from an actual player so they
+    # stay dominant, while an edited swatch can only ever add a colour that will
+    # be *matched*. Recall-safe — more colours can never drop a real touch.
+    for extra in hexes_to_hsv(my_team_hexes):
+        if seed.kit_hsv is None:
+            seed.kit_hsv = extra
+            continue
+        d = hsv_distance_multi(extra, seed.my_kits())
+        if d is None or d > cfg.team_color_max_dist:
+            seed.kit_hsv_alts.append(extra)
+    seed_sec = time.perf_counter() - t0
     if seed.n_samples == 0:
         warnings.append("no seed taps — appearance scoring is neutral")
     elif seed.is_weak():
@@ -356,20 +422,43 @@ def run_to_montage(
     with VideoFrameProvider(video_path, target_width=cfg.target_width) as provider:
         out = assemble_touches(
             traj, duration, cfg, seed, player_detector, provider, progress=progress,
+            budget_sec=on_pitch_sec, calibration=calibration,
         )
 
     n_raw = out.get("n_candidates_raw", len(out["candidates"]))
     if n_raw > len(out["candidates"]):
         warnings.append(
-            f"Stage 4 produced {n_raw} contact candidates; kept the "
-            f"{len(out['candidates'])} strongest to bound processing time. A "
-            f"soccer-specific ball model yields far fewer, cleaner candidates."
+            f"Stage 4 produced {n_raw} contact candidates; kept the strongest "
+            f"{len(out['candidates'])} (spread across the clip) to bound "
+            f"processing time. A soccer-specific ball model yields far fewer, "
+            f"cleaner candidates."
         )
+
+    # Stage 5b: say out loud when the pitch calibration did not end up being
+    # used. This used to be entirely silent — a run with a broken calibration
+    # looked exactly like one with none — so "attribution still looks wrong"
+    # had no answerable first question.
+    calib_status = out.get("calibration_status")
+    if calib_status and calib_status != "ok":
+        from polyfut_v2.orchestrator import CALIBRATION_FALLBACK_MESSAGES
+        msg = CALIBRATION_FALLBACK_MESSAGES.get(calib_status)
+        if msg:
+            warnings.append(msg.format(
+                limit=float(getattr(cfg, "calibration_max_median_px", 6.0))))
+    elif calib_status == "ok":
+        cov = float((out.get("attribution") or {}).get("metric_coverage") or 0.0)
+        if cov < 0.5:
+            warnings.append(
+                f"The pitch calibration was only usable for {cov:.0%} of "
+                f"touches — the rest fell back to pixel distances. Usually a "
+                f"camera cut or a stretch where the camera track broke.")
 
     items = [it.to_dict() for it in out["montage"]]
     # Adaptive review grouping: tag kit colour / other-team / same-kit look-alike
     # so the review UI can clear a whole team on one "Not me". Cheap (reuses the
-    # torso crops already captured); failures degrade to per-clip decisions.
+    # torso crops / Stage 7 descriptors already captured); failures degrade to
+    # per-clip decisions.
+    t0 = time.perf_counter()
     try:
         from polyfut_v2.pipeline.grouping import assign_player_groups
         groups = assign_player_groups(out["montage"], seed, cfg)
@@ -379,19 +468,53 @@ def run_to_montage(
                 d.update(g)
     except Exception:  # noqa: BLE001 — grouping is a UX aid, never fatal
         pass
+    grouping_sec = time.perf_counter() - t0
+
+    timings = dict(res.get("timings") or {})
+    timings["model_load"] = model_load_sec
+    timings["seed"] = seed_sec
+    timings.update(out.get("timings") or {})
+    timings["grouping"] = grouping_sec
+    timings["total"] = time.perf_counter() - t_total
+    stage_timings = {k: round(v, 2) for k, v in timings.items()}
+
     return {
         "pipeline_version": "v2",
         "duration_sec": duration,
+        # Audit trail: what the user declared, and what was actually analysed
+        # after padding — so a later "why is there nothing at 20 min?" is
+        # answerable from job_state.json alone.
+        "play_ranges": res.get("play_ranges") or [],
+        "play_ranges_padded": res.get("play_ranges_padded") or [],
+        "on_pitch_sec": round(on_pitch_sec, 2) if on_pitch_sec else None,
         "n_samples": len(traj),
         "detected_ratio": round(traj.detected_ratio(), 4),
+        "ball_detector_stats": res.get("ball_detector_stats"),
+        # Stage 3f: how much of the trajectory was blanked as a false lock. Part
+        # of the audit trail — a run with a high rejected_pingpong count is one
+        # where the tracker was oscillating, which explains sparse candidates.
+        "ball_sanity": res.get("ball_sanity"),
+        # Stage 5b coverage: how many contacts were judged in metres vs fell
+        # back to pixels. A low ratio means the calibration was unusable over
+        # most of the video (a cut, or a camera track that broke), which is the
+        # first thing to check if attribution still looks wrong.
+        "attribution": out.get("attribution"),
+        # Which exit _build_pitch_mapper took — the answerable form of
+        # "why was metric_coverage zero?".
+        "calibration_status": out.get("calibration_status"),
+        "calibration": calibration if isinstance(calibration, dict) else None,
+        "n_candidates_raw": n_raw,
         "n_candidates": len(out["candidates"]),
         "n_your_team": len(out["kept"]),
         "n_review": sum(1 for it in items if it["status"] == "review"),
+        "n_crowded": sum(1 for it in items if it.get("crowded")),
         "seed": {"n_samples": seed.n_samples, "has_color": seed.has_color(),
                  "gallery": len(seed.gallery)},
         "warnings": warnings,
         "montage": items,
         "hotspots": [h.to_dict() for h in out["hotspots"]],
+        "stage_timings_sec": stage_timings,
+        "timings_sec": timings,
     }
 
 
@@ -420,3 +543,58 @@ def hotspots_from_decisions(
     me_times = sorted(it["t_sec"] for it in montage_items if it.get("decision") == "me")
     hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec)
     return [h.to_dict() for h in hotspots], montage_items
+
+
+def calibration_from_clicks(
+    clicks: list[dict],
+    *,
+    frame_width: int,
+    frame_height: int,
+    pitch_length_m: float = 100.0,
+    pitch_width_m: float = 64.0,
+    seed_params: list | None = None,
+    free_pitch_size: bool = False,
+) -> dict | None:
+    """Fit a pitch calibration server-side from the landmarks the user clicked.
+
+    The browser already fits these same clicks (it draws the pitch live while
+    you click), but the pipeline must run on a fit produced by the code that
+    will *use* it — otherwise a browser/Python disagreement would show up as
+    mysteriously wrong attribution. The browser's answer comes along as
+    ``seed_params``: it turns a ~9s blind search into a sub-second polish, and
+    it is verified rather than trusted (a seed that refines poorly is discarded
+    and the blind search runs anyway).
+
+    Returns a JSON-serialisable dict, or None if the clicks can't be fitted.
+    """
+    from polyfut_v2.pipeline.pitch_calibration import fit as fit_calibration
+
+    parsed: list[tuple[int, tuple[float, float], str]] = []
+    for c in clicks or []:
+        try:
+            fi = int(c["frame_index"])
+            xy = (float(c["x"]), float(c["y"]))
+            key = str(c["landmark"])
+        except (KeyError, TypeError, ValueError):
+            continue
+        parsed.append((fi, xy, key))
+    if len(parsed) < 4:
+        return None
+
+    calib = fit_calibration(
+        parsed,
+        principal=(float(frame_width) / 2.0, float(frame_height) / 2.0),
+        pitch_length_m=float(pitch_length_m),
+        pitch_width_m=float(pitch_width_m),
+        free_pitch_size=bool(free_pitch_size),
+        seed_params=seed_params,
+    )
+    if calib is None:
+        return None
+    calib.frame_width = int(frame_width)
+    d = calib.to_dict()
+    d["clicks"] = [
+        {"frame_index": fi, "x": xy[0], "y": xy[1], "landmark": k}
+        for fi, xy, k in parsed
+    ]
+    return d

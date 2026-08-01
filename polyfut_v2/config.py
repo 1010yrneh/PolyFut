@@ -23,6 +23,16 @@ class PipelineV2Config:
     # Coarse stride for the cheap shot-filter pass.
     shot_filter_sample_every_n: int = 10
 
+    # --- Playing-time window ---
+    # The user declares the ranges they were actually on the pitch; the whole
+    # pipeline runs inside them. Each range is padded by this much on both
+    # sides before bounding decode / clipping live shots, because the handles
+    # are dragged by eye against a scrubbing preview and are only approximate —
+    # recall-safety, same rule as every other gate here. Seed-clip moments are
+    # NOT padded: a seed from a moment the user wasn't playing is precisely the
+    # contamination the window exists to prevent.
+    playing_time_pad_sec: float = 45.0
+
     # --- Stage 2: shot filter (heuristics, mirrors v1 defaults) ---
     cut_hist_threshold: float = 0.45
     green_ratio_min: float = 0.22
@@ -54,11 +64,96 @@ class PipelineV2Config:
     # stale position). Essential for fast-ball / small-pitch / zoom-changing
     # footage; near-free when the ROI usually hits (slow-ball wide shots).
     roi_fallback_full: bool = True
+    # Miss-storm backoff: after this many consecutive misses, the expensive
+    # full-frame re-acquire runs only every ``ball_miss_backoff_stride``-th
+    # call instead of every sampled frame. On low-recall footage (360p) miss
+    # runs dominate runtime — this cuts most of that cost for at most a
+    # (stride−1)-frame re-acquire delay. 0 disables the backoff.
+    ball_miss_backoff_after: int = 4
+    ball_miss_backoff_stride: int = 3
 
     # --- Stage 3c: temporal hold / interpolation across YOLO misses ---
     # Reuses polyfut_video.pipeline.ball_smooth (BallSmoother).
     ball_hold_frames: int = 10
     ball_max_jump_px: float = 500.0
+    # Confidence-aware teleport gate (see BallSmoothConfig). Rejects a ball
+    # detection that leaps far AND is low-confidence — the false-positive
+    # pattern that fabricates phantom touches at spots the ball never reached.
+    ball_suspect_jump_px: float = 120.0
+    ball_suspect_jump_conf: float = 0.30
+    # Two-frame confirmation for far jumps (Issue 6): a detection beyond
+    # ``ball_suspect_jump_px`` is only committed once a SECOND detection agrees
+    # with it — either landing near the same spot, or continuing along the same
+    # heading at a comparable speed (a genuinely fast ball). A lone flicker on a
+    # sock / line marking never gets that agreement, so it can no longer
+    # fabricate a phantom touch, while a real clearance costs one sampled frame.
+    ball_confirm_jumps: bool = True
+    ball_confirm_dist_px: float = 120.0     # "landed near the same place"
+    ball_confirm_angle_deg: float = 45.0    # "kept going the same way"
+    ball_confirm_speed_ratio: float = 1.6   # and not implausibly faster
+    # Replace frozen hold positions with linear interpolation between the two
+    # bracketing real detections. Held samples stay flagged interpolated (Stage 4
+    # still refuses them as velocity nodes); this only stops a 10-frame hold from
+    # reporting one repeated position where the ball was demonstrably moving.
+    # A trailing hold with no next detection keeps the frozen position.
+    ball_interpolate_holds: bool = True
+
+    # --- Stage 3f: physically-impossible excursion rejection ---
+    # The ROI search re-finds "the ball" within roi_half_px of the last position
+    # every frame, so once it locks onto a false positive (sock, line marking,
+    # bright patch on a shirt) the lock sustains itself and the path becomes an
+    # alternation between two points. Measured on two real 640x360 clips (3117
+    # links) the turn angle is bimodal: 22.6% of steps turn <=30 deg at a median
+    # 64 px/s (real ball), 45.0% turn 170-180 deg at a median 456 px/s (the lock).
+    # A ball cannot reverse and return on consecutive 0.13s samples, so the
+    # out-and-back population is dropped. Note ball_confirm_jumps below never
+    # fires on this footage: 1-frame displacements top out at ~112px, under its
+    # 120px trigger.
+    ball_pingpong_reject_enabled: bool = True
+    ball_pingpong_min_step_px: float = 40.0    # ignore small jitter
+    ball_pingpong_min_turn_deg: float = 165.0  # near-total reversal
+    ball_pingpong_return_frac: float = 0.35    # |p3-p1| <= this * |p2-p1| ⇒ came back
+    ball_pingpong_max_gap_sec: float = 0.6     # don't link across a blind stretch
+    # A SINGLE out-and-back is left alone: a real return pass reverses and travels
+    # back through where the ball already was, and no three-point test separates
+    # the two. Only a repeat — A→B→A→B on consecutive samples — is impossible, so
+    # this many consecutive suspicious links are required before acting.
+    ball_pingpong_min_alternations: int = 2
+
+    # --- Stage 3d: camera-motion (pan) compensation for the Stage 7 orbital ---
+    # Orbital distances are meaningless in raw pixels while the camera pans, so
+    # the motion prior — the strongest same-kit identity signal — is effectively
+    # off on panning footage. A cheap Lucas-Kanade median background shift per
+    # analysed frame accumulates into a pan-compensated space. Never invents
+    # motion: a low-confidence estimate contributes zero shift.
+    camera_motion_enabled: bool = True
+    camera_motion_every_n: int = 2       # of analysed frames (stride 4 → every 8 source)
+    camera_motion_width: int = 320       # downscale for flow (cost, not accuracy, driver)
+    camera_motion_min_points: int = 8    # fewer good points → not confident
+    camera_motion_max_shift_px: float = 200.0  # implausible per-step shift → ignored
+    camera_motion_exclude_half_px: float = 60.0  # mask around the ball (players/ball bias)
+
+    # --- Stage 3e: ball pitch/side-line gate ---
+    # Spare balls on the sideline can be correctly detected as the soccer ball,
+    # but they are outside the pitch and still pollute the ball trajectory.
+    # We reject those by requiring that a small region around the detected ball
+    # center is positively a NON-pitch surface (running track, painted
+    # concrete). Asking "is this grass?" instead required the turf to fall inside
+    # a narrow hue band, and on bright sun-bleached pitches (hue ~28 vs a band
+    # starting at 32) that rejected ~49% of real on-pitch ball positions. The
+    # test now only fires on positive evidence of another surface, so it carries
+    # no dependence on this pitch's exact turf colour.
+    ball_pitch_gate_enabled: bool = True
+    # Half-size of the square probe (in resized target_width px) around the ball.
+    ball_surface_check_half_px: float = 18.0
+    # Fraction of *saturated* probe pixels whose hue is outside any plausible
+    # pitch hue before the detection is rejected. High: a mixed sample (ball on
+    # a touchline, grass plus a red hoarding behind) must survive.
+    ball_foreign_surface_frac: float = 0.70
+    # The probe must be at least this saturated overall to get a vote at all.
+    # Greys, white lines, shadow and the ball itself carry no hue information, so
+    # a washed-out sample abstains (→ keep) rather than guessing.
+    ball_surface_min_colored_frac: float = 0.25
 
     # --- Stage 4: contact candidates (kinematics on the trajectory) ---
     # Speeds are in px/s on the resized (target_width) frame; thresholds are
@@ -76,6 +171,15 @@ class PipelineV2Config:
     # survivor costs a sparse player-detection pass (the dominant runtime term),
     # and no human reviews hundreds of clips anyway.
     max_candidates: int = 600
+    # Duration-scaled cap (min with max_candidates, floored at 60): all players
+    # combined touch the ball ~15-20×/min, so 40/min is >2× headroom for real
+    # touches plus ambiguity. A noisy 3-min clip goes 600 → 120 candidates,
+    # directly bounding Stage 5-6 runtime. 0 disables duration scaling.
+    max_candidates_per_min: int = 40
+    # Time-fair selection window: budget is spread round-robin across windows
+    # of this size so a noisy phase can't consume every slot (see
+    # contacts.cap_candidates).
+    candidate_fair_window_sec: float = 30.0
     # Centered position smoothing (samples). Real detector output jitters, and a
     # synthetic sweep showed window=3 lifts noisy-trajectory recall ~0.56→0.74 at
     # equal precision (5 over-smooths). Provisional — retune on real footage.
@@ -87,13 +191,127 @@ class PipelineV2Config:
 
     # --- Stage 5: sparse player detection (pluggable; default COCO person) ---
     player_weights: str = "yolov8s.pt"
-    player_class_id: int = 0     # COCO "person"
+    player_class_id: int = 0     # COCO "person"; soccer outfield player = 2
+    # Soccer model extras (None → COCO / single-class mode). When set, the
+    # detector requests keeper+player+ref; keepers are valid contact candidates,
+    # referees are never attributed as the touching player.
+    goalkeeper_class_id: int | None = None
+    referee_class_id: int | None = None
     player_conf_min: float = 0.25
     player_imgsz: int = 640
+    # NMS overlap threshold for player detection. Ultralytics defaults to 0.7,
+    # which is permissive enough that ONE player often survives as two or three
+    # overlapping boxes — which then become separate tracks and separate
+    # tappable markers a few pixels apart. Measured on real frames: 0.7 gave 14
+    # overlapping pairs across 9 frames, 0.45 gave 1 (76 -> 65 boxes).
+    player_nms_iou: float = 0.45
     # ROI around the ball for the sparse player pass (0 → full frame).
     player_roi_half_px: float = 160.0
     # Max ball-to-player distance (px) to count a player as the one in contact.
     contact_max_player_dist_px: float = 80.0
+
+    # --- Stage 5b: metric attribution (needs a pitch calibration) ---
+    # A pixel is not a fixed distance on the ground: ~11cm near the camera,
+    # ~62cm at the far touchline. So the 80px gate above allows 7.9m of pitch
+    # near the camera and 49.5m far away, and a player 50m from the ball can win
+    # "nearest player". Measured on a real export, 36% of attributed touches had
+    # the player >5m from the ball and 10% >10m. When the user has calibrated the
+    # pitch, judge that distance in metres instead. Issue 14.
+    #
+    # 8m is deliberately equal to what 80px already means NEAR the camera, where
+    # the pixel gate is sane. So this changes nothing in the near field and only
+    # tightens the far field: it removes impossible attributions rather than
+    # dropping close ones.
+    contact_max_player_dist_m: float = 8.0
+    crowd_radius_m: float = 9.0        # 90px near the camera is ~8.9m
+    # The pitch map is a GROUND-plane map, and the ball is often not on the
+    # ground. An airborne ball projects further from the camera than it really
+    # is, which can only inflate a distance — i.e. cause a rejection. A player
+    # this close to the ball *in the image* is plausibly the toucher whatever the
+    # metric says, so the metric gate never overrules image adjacency. Protects
+    # headers and close control.
+    contact_metric_override_px: float = 25.0
+    # A calibration whose typical landmark error exceeds this is not trusted and
+    # the pipeline silently falls back to the pixel gates. Reference: a good
+    # calibration on real footage scored ~1.7px median, a visibly broken one 3px+
+    # — but note that residuals alone cannot prove a calibration is right, so
+    # this only screens out the obviously bad.
+    calibration_max_median_px: float = 6.0
+    # The soccer model sometimes classifies the ball itself as "player" — a
+    # small, roughly-square box sitting almost exactly on the ball. Since a
+    # real "nearest player" search is centered on the ball, such a box has
+    # near-zero distance and would otherwise always win. Reject a "player" box
+    # as ball-shaped only when it's BOTH short AND not clearly taller-than-wide
+    # (real people, even small/distant ones, are reliably one or the other —
+    # empirically calibrated against real broadcast footage: every observed
+    # ball misclassification was under 13px tall with an aspect ratio under
+    # 1.8, while every genuine nearby player was either taller or more
+    # elongated than that).
+    player_min_height_px: float = 16.0
+    player_min_aspect: float = 1.8   # height / width — used by the soft ball OR
+    # Positive human-proportion gate (stricter than the ball soft-reject alone).
+    # A tagged body must be tall enough AND taller-than-wide within a person-like
+    # aspect band. Spare balls, pitch-side cameras, and graphics are typically
+    # near-square (aspect ≈ 1) or tiny — they clear the old AND-ball check when
+    # slightly over ``player_min_height_px``, then win nearest-player. These
+    # bounds keep ordinary standing / slightly crouched players and drop the
+    # junk. Recall-safe: disabled when min_aspect ≤ 0.
+    player_human_min_aspect: float = 1.30   # h/w floor — cameras/balls ~1.0
+    player_human_max_aspect: float = 5.50   # poles / goal-post fragments
+    # Soft ball-vs-player reject: when a "player" box overlaps this proxy ball
+    # bbox (square half-size around the contact point), reject if it fails
+    # EITHER height OR aspect (overlap is the extra evidence). Without overlap,
+    # the strict BOTH check still applies.
+    contact_ball_proxy_half_px: float = 8.0
+    contact_ball_iou_soft: float = 0.25
+    # Sideline / bench / coach reject: a "player" whose feet sit on dirt, track,
+    # or concrete rather than pitch grass is not contesting the ball — drop them
+    # before attribution. Recall-safe: only fires when the feet sample is
+    # readable AND clearly non-grass; unmeasurable → keep.
+    sideline_reject_enabled: bool = True
+    sideline_min_feet_grass: float = 0.18
+    # Soft official-kit fallback for referees the model mislabels as ``player``.
+    # Typical ref kits (black / neon yellow) that match NEITHER team centroid are
+    # labelled official and dropped. Never overrides a clear your-team match.
+    official_kit_reject_enabled: bool = True
+
+    # --- Crowded contacts (corner kicks, goalmouth scrambles) ---
+    # When several players are packed around the ball, "nearest player" and
+    # torso colour are both unreliable — the box we attribute the touch to may
+    # simply be the wrong body, and its kit may be the wrong team's. Rather than
+    # guess (and silently drop your real touch), flag the contact as crowded and
+    # route it to the human: crowded touches are never auto-hidden and never
+    # dropped by the colour gate, and they always appear in the review queue.
+    crowd_detect_enabled: bool = True
+    # Players within this distance of the ball count as contesting it. ~90px on
+    # a 640-wide frame is roughly the width of a corner-kick cluster; must stay
+    # under ``player_roi_half_px`` or the ROI itself bounds the count.
+    crowd_radius_px: float = 90.0
+    # This many contesting players ⇒ attribution is unreliable. 4 keeps ordinary
+    # 1v1 and 2v2 duels on the normal path; corners/scrambles trip it.
+    crowd_min_players: int = 4
+    # Force crowded contacts into the review queue regardless of confidence, and
+    # keep them out of the ``max_review`` cap so a long queue can't bury them.
+    crowd_force_review: bool = True
+    # Never drop a crowded contact as "other team" — in a pack the colour read
+    # belongs to whichever body won the nearest-player race, not necessarily the
+    # toucher.
+    crowd_keep_other_team: bool = True
+    # Own review budget for crowded touches (0 → unlimited). Bounds the worst
+    # case on scrappy footage while still guaranteeing them a slot.
+    crowd_max_review: int = 40
+    # A count of nearby bodies answers the wrong question. Measured on a real
+    # 5-minute run, 31 of 73 review clips were crowd-forced, 12 of them sitting
+    # exactly on the count of 4 — while the box heights showed the 90px radius
+    # was really only ~6m at that depth. Bodies being present is not the same as
+    # attribution being contested: require that the runner-up is actually close
+    # behind the winner before calling a contact crowded.
+    crowd_require_ambiguity: bool = True
+    # How far back the runner-up must be for the winner to count as clear, in
+    # multiples of the winning box's own height (~1.75m of person). Expressed in
+    # box heights rather than pixels so it means the same thing near and far
+    # from the camera, which a fixed pixel gap does not.
+    crowd_ambiguous_gap_heights: float = 0.8
 
     # --- Stage 6: per-contact team colour filter ---
     # 1 → 3 frames per contact (centre ±1). Each frame is a player-detection call,
@@ -109,6 +327,15 @@ class PipelineV2Config:
     # dropped, never a same-team touch that merely reads noisy. Set high because
     # the seed player's own touches ranged up to ~95 on real footage.
     contact_other_team_dist: float = 115.0
+    # Opponent-aware tie-break for the ambiguous colour band. When the opponent's
+    # kit colour is known (from the team picker) AND the two kits are actually
+    # distinguishable, a touch in the undecided band whose colour is closer to
+    # the opponent centroid than to yours by at least this margin is dropped as
+    # the other team. Uses BOTH team centroids instead of only "far from mine",
+    # so obvious wrong-team touches in the 60-115 band stop reaching review.
+    # Only ever acts inside the already-undecided band — never overrides a clear
+    # "your team", so it can't cost you a real touch.
+    contact_opponent_margin: float = 20.0
     # Min torso crop area (px) to trust a jersey colour. On wide footage tiny
     # crops are grass-contaminated; below this the contact is left undecided
     # (kept) rather than mislabelled. Real-frame debug: 10-30px-tall players give
@@ -120,7 +347,13 @@ class PipelineV2Config:
     # its own seed), so filtering risks silently dropping real touches — and
     # sampling jersey colour across frames triples the Stage 5-6 detection cost.
     # Enable only for clean, broadcast-quality footage with distinct kits.
+    # Issue 2's two-centroid gate on the single contact frame is the default path.
     team_filter_enabled: bool = False
+    # Batch size for sparse player inference across nearby contact candidates
+    # (Issue 7). 1 → one model call per contact (old behaviour). Larger batches
+    # share a single Ultralytics/OpenVINO predict when the colour-window is off
+    # (the default). Cap keeps memory bounded on 90-minute files.
+    player_batch_size: int = 8
 
     # --- Stage 7: target scoring (appearance x orbital, sequential) ---
     # Appearance
@@ -133,10 +366,45 @@ class PipelineV2Config:
     orbital_floor: float = 0.5         # min prior — boost/tie-break only, never reject
     orbital_falloff: float = 0.5       # penalty slope outside the orbital
     # Tracklets
-    tracklet_max_gap_sec: float = 3.0  # contacts within this window can share a tracklet
+    tracklet_max_gap_sec: float = 3.0  # contacts within this window always share a tracklet
+    # Colour-locked continuity (Issue 4): keep the same tracklet / orbital chain
+    # across gaps up to this limit when the contact stays inside the orbital AND
+    # kit colour is compatible with the anchor — same pattern as seed-clip
+    # rejoin. Defaults to orbital_max_gap_sec so motion can carry identity past
+    # the hard 3s cut without inventing links across half the match.
+    continuity_max_gap_sec: float = 8.0
+    continuity_color_max_dist: float = 60.0  # kit lock for chain rejoin
+    # When a contact sits firmly inside the orbital on an active chain, weak /
+    # ambiguous appearance must not drag confidence below this floor × prior.
+    # Inverts "appearance leads, motion nudges" for well-anchored same-kit
+    # sequences. Still well below autoaccept; never a hard reject path.
+    motion_carry_floor: float = 0.70
     # Auto accept/hide thresholds (consumed by the Step 5 montage)
     autoaccept_conf: float = 0.85
     autohide_conf: float = 0.15
+    # Auto-accept only when Stage 7 marks the contact as identity-linked to the
+    # seeded player (orbital / motion continuity). High appearance on a random
+    # same-kit body after a long gap must reach human review — otherwise it
+    # becomes a false hotspot and merges into a long "you" zone.
+    autoaccept_require_identity: bool = True
+    # --- EXPERIMENT (branch: no-fallback-experiment) ---
+    # How accurate can this be without leaning on the review queue? Measured on
+    # a real 5-minute run: 73 of 88 contacts went to review and 0 were ever
+    # auto-hidden, because confidence cannot fall below
+    # appearance_default(0.5) x orbital_floor(0.5) = 0.25 while autohide_conf is
+    # 0.15 — the auto-hide path is arithmetically unreachable. The pipeline can
+    # say "definitely you" or "I don't know", never "definitely not you".
+    #
+    # Rather than lower the threshold (which would hide *unmeasurable* touches —
+    # the one thing recall-safety forbids) a contact is hidden only on positive,
+    # measured evidence: see scoring.negative_evidence_for. Set False to restore
+    # the old behaviour exactly.
+    autohide_on_evidence: bool = True
+    # Appearance similarity below which a *successful* read counts as a positive
+    # mismatch. Only applies when appearance was actually measurable; None/
+    # unreadable never qualifies. Well under orbital_anchor_min (0.6) so it means
+    # "clearly wrong", not "not clearly right".
+    appearance_reject_max: float = 0.35
     # Hard cap on the review queue: only the top-N highest-confidence "review"
     # clips are shown; the rest are auto-hidden. Bounds the human review burden
     # even when appearance can't discriminate (low-res footage → most touches
@@ -153,9 +421,9 @@ class PipelineV2Config:
     # appearance group, so "Not me" on the other team clears them all, and same-
     # kit decisions propagate softly. Cheap: reuses the contact torso crops.
     # Kit distance from your seed beyond this ⇒ confidently the *other team*
-    # (hard-removable). Deliberately looser than team_color_max_dist (60) so we
-    # only ever hard-remove clearly-different kits, never risk your own.
-    grouping_other_team_dist: float = 105.0
+    # (hard-removable). Aligned with ``contact_other_team_dist`` so review UI
+    # flags and the detection gate agree on what counts as opponent.
+    grouping_other_team_dist: float = 115.0
     grouping_kit_cluster_dist: float = 55.0    # colour-clustering radius
     grouping_appearance_min_sim: float = 0.62  # same-kit appearance grouping (soft)
 

@@ -4,6 +4,10 @@ The big v2 speed win: full-frame player detection no longer runs every frame,
 only in a crop around the ball at the few hundred contact moments. Same
 pluggable pattern as the ball detector — swap ``player_weights`` /
 ``player_class_id`` for a soccer player/keeper/ref model and it drops in.
+
+When ``goalkeeper_class_id`` / ``referee_class_id`` are set (soccer model), the
+detector requests all three classes; keepers are valid contact candidates and
+referees are returned with their class id so callers can exclude them.
 """
 
 from __future__ import annotations
@@ -20,6 +24,7 @@ from polyfut_v2.pipeline.ball_detector import _get_model, map_bbox_to_full, roi_
 class PlayerDetection:
     bbox: list[float]  # [x1, y1, x2, y2] full-frame coords
     conf: float
+    class_id: int = 0
 
     @property
     def center(self) -> tuple[float, float]:
@@ -35,21 +40,50 @@ class PlayerDetectorProtocol(Protocol):
     ) -> list[PlayerDetection]: ...
 
 
+def player_request_classes(cfg) -> list[int]:
+    """Class ids passed to the model ``classes=`` filter."""
+    ids = [int(cfg.player_class_id)]
+    gk = getattr(cfg, "goalkeeper_class_id", None)
+    ref = getattr(cfg, "referee_class_id", None)
+    if gk is not None:
+        ids.append(int(gk))
+    if ref is not None:
+        ids.append(int(ref))
+    # Preserve order, drop dupes.
+    out: list[int] = []
+    for i in ids:
+        if i not in out:
+            out.append(i)
+    return out
+
+
+def player_contact_class_ids(cfg) -> set[int]:
+    """Class ids eligible as the contacting player (outfield + keeper)."""
+    ids = {int(cfg.player_class_id)}
+    gk = getattr(cfg, "goalkeeper_class_id", None)
+    if gk is not None:
+        ids.add(int(gk))
+    return ids
+
+
 def _parse_players(
     xyxy: np.ndarray,
     conf: np.ndarray,
     cls: np.ndarray,
     *,
-    player_class_id: int,
+    allowed_class_ids: set[int],
     conf_min: float,
 ) -> list[PlayerDetection]:
     out: list[PlayerDetection] = []
     for box, c, k in zip(xyxy, conf, cls):
-        if int(k) != player_class_id:
+        kid = int(k)
+        if kid not in allowed_class_ids:
             continue
         if float(c) < conf_min:
             continue
-        out.append(PlayerDetection(bbox=[float(v) for v in box], conf=float(c)))
+        out.append(PlayerDetection(
+            bbox=[float(v) for v in box], conf=float(c), class_id=kid,
+        ))
     return out
 
 
@@ -72,7 +106,11 @@ class YoloPlayerDetector:
             image,
             imgsz=self.cfg.player_imgsz,
             conf=self.cfg.player_conf_min,
-            classes=[self.cfg.player_class_id],
+            classes=player_request_classes(self.cfg),
+            # Tighter than Ultralytics' 0.7 default: at 0.7 a single player
+            # routinely survives NMS as several overlapping boxes, which become
+            # duplicate tracks / duplicate markers downstream.
+            iou=getattr(self.cfg, "player_nms_iou", 0.45),
             verbose=False,
         )
         if not results:
@@ -102,12 +140,77 @@ class YoloPlayerDetector:
         if parsed is None:
             return []
         xyxy, conf, cls = parsed
+        # Keep every requested class (incl. referee) so callers can exclude by id.
+        allowed = set(player_request_classes(self.cfg))
         dets = _parse_players(
             xyxy, conf, cls,
-            player_class_id=self.cfg.player_class_id,
+            allowed_class_ids=allowed,
             conf_min=self.cfg.player_conf_min,
         )
         if offset != (0, 0):
             for d in dets:
                 d.bbox = map_bbox_to_full(d.bbox, offset)
         return dets
+
+    def detect_many(
+        self,
+        items: list[tuple[np.ndarray, tuple[float, float] | None]],
+    ) -> list[list[PlayerDetection]]:
+        """Batched detect for several (frame, near) pairs in one model call.
+
+        Falls back to per-item ``detect`` when the batch is empty/size-1 or the
+        model cannot take a list. ROI crops may differ in size; Ultralytics
+        letterboxes them. Time order of ``items`` is preserved in the result.
+        """
+        if not items:
+            return []
+        if len(items) == 1:
+            frame, near = items[0]
+            return [self.detect(frame, near)]
+
+        images: list[np.ndarray] = []
+        offsets: list[tuple[int, int]] = []
+        for frame, near in items:
+            offset = (0, 0)
+            image = frame
+            if near is not None and self.cfg.player_roi_half_px > 0:
+                image, offset = roi_crop(frame, near, self.cfg.player_roi_half_px)
+                if image.size == 0:
+                    image, offset = frame, (0, 0)
+            images.append(image)
+            offsets.append(offset)
+
+        try:
+            results = self.model.predict(
+                images,
+                imgsz=self.cfg.player_imgsz,
+                conf=self.cfg.player_conf_min,
+                classes=player_request_classes(self.cfg),
+                iou=getattr(self.cfg, "player_nms_iou", 0.45),
+                verbose=False,
+            )
+        except Exception:
+            # Injected fakes / older backends may not accept a list — degrade.
+            return [self.detect(frame, near) for frame, near in items]
+
+        if not results or len(results) != len(items):
+            return [self.detect(frame, near) for frame, near in items]
+
+        allowed = set(player_request_classes(self.cfg))
+        out: list[list[PlayerDetection]] = []
+        for res, offset in zip(results, offsets):
+            if res.boxes is None or len(res.boxes) == 0:
+                out.append([])
+                continue
+            dets = _parse_players(
+                res.boxes.xyxy.cpu().numpy(),
+                res.boxes.conf.cpu().numpy(),
+                res.boxes.cls.cpu().numpy(),
+                allowed_class_ids=allowed,
+                conf_min=self.cfg.player_conf_min,
+            )
+            if offset != (0, 0):
+                for d in dets:
+                    d.bbox = map_bbox_to_full(d.bbox, offset)
+            out.append(dets)
+        return out

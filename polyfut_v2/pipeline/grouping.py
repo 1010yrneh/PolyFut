@@ -81,10 +81,16 @@ def assign_player_groups(items, seed, cfg: PipelineV2Config | None = None) -> di
         kf = _kit_hsv(it)
         if kf is not None:
             kit_by_rank[it.rank] = kf
-        crop = it.scored.contact.torso_crop
-        d = app.descriptor(crop) if crop is not None else None
-        if d is not None:
-            desc_by_rank[it.rank] = d
+        # Prefer the Stage 7 cached descriptor (Issue 7) — avoid re-running the
+        # histogram on the same torso crop.
+        cached = getattr(it.scored.contact, "appearance_descriptor", None)
+        if cached is not None:
+            desc_by_rank[it.rank] = cached
+        else:
+            crop = it.scored.contact.torso_crop
+            d = app.descriptor(crop) if crop is not None else None
+            if d is not None:
+                desc_by_rank[it.rank] = d
 
     # Colour clusters over all measurable kits.
     kit_assign = _greedy_cluster(
@@ -92,13 +98,16 @@ def assign_player_groups(items, seed, cfg: PipelineV2Config | None = None) -> di
     for rank, g in kit_assign.items():
         out[rank]["kit_group"] = int(g)
 
-    # "Other team" only when we know your kit and this shirt is clearly far from
-    # it — never from clustering alone (which can over-split your own team).
+    # "Other team" only when we know your kit and this shirt is clearly the
+    # opponent — same rule as the Stage 6 detection gate (incl. two-centroid
+    # when the opponent kit is known). Never from clustering alone.
     have_seed_kit = seed is not None and getattr(seed, "kit_hsv", None) is not None
     if have_seed_kit:
+        from polyfut_v2.pipeline.player_contacts import TEAM_OPPONENT, classify_team
+
         for rank, kf in kit_by_rank.items():
-            dd = hsv_distance(kf, seed.kit_hsv)
-            out[rank]["is_other_team"] = dd is not None and dd > cfg.grouping_other_team_dist
+            _is_mine, label, _dist = classify_team(kf, seed, cfg)
+            out[rank]["is_other_team"] = label == TEAM_OPPONENT
 
     # Appearance clusters within your team (soft same-kit propagation).
     same_kit = [(r, desc_by_rank[r]) for r in out

@@ -3,7 +3,7 @@
 import numpy as np
 
 from polyfut_v2.pipeline.color import (
-    hsv_distance, jersey_hsv, median_hsv, torso_hsv,
+    hex_to_hsv, hsv_distance, jersey_hsv, median_hsv, torso_hsv,
 )
 from polyfut_v2.pipeline.player_detector import PlayerDetection
 from polyfut_v2.pipeline.seed import build_seed_from_taps, build_seed_from_torso_crops
@@ -63,6 +63,19 @@ def test_hsv_distance_same_is_zero_and_circular():
     a = np.array([1.0, 200.0, 200.0], dtype=np.float32)
     b = np.array([179.0, 200.0, 200.0], dtype=np.float32)
     assert hsv_distance(a, b) < hsv_distance(a, np.array([90.0, 200.0, 200.0], np.float32))
+
+
+def test_hex_to_hsv_recovers_red():
+    hsv = hex_to_hsv("#e23b3b")   # the app's default red swatch
+    assert hsv is not None
+    assert hsv[0] < 10 or hsv[0] > 170   # red sits near hue 0
+
+
+def test_hex_to_hsv_invalid_returns_none():
+    assert hex_to_hsv(None) is None
+    assert hex_to_hsv("") is None
+    assert hex_to_hsv("not-a-colour") is None
+    assert hex_to_hsv("#fff") is None   # only 6-digit hex supported
 
 
 def test_hsv_distance_none_inputs():

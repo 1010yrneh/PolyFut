@@ -16,11 +16,16 @@ from polyfut_v2.pipeline.scoring import ScoredContact
 CFG = PipelineV2Config()  # autoaccept 0.85, autohide 0.15
 
 
-def _scored(t, conf, x=100, y=100):
+def _scored(t, conf, x=100, y=100, *, identity_linked=None):
     cand = ContactCandidate(int(t * 10), t, t, x, y, ["kick"], 0.8)
     pc = PlayerContact(cand, [x - 5, y - 5, x + 5, y + 5], 0.0, None, None, None, 0)
+    # High-confidence contacts expected to auto-accept need an identity link;
+    # mid/low stay unlinked (review / hide) unless the caller sets it.
+    if identity_linked is None:
+        identity_linked = conf >= CFG.autoaccept_conf
     return ScoredContact(pc, appearance_score=conf, orbital_prior=1.0,
-                         confidence=conf, tracklet_id=0, anchored=False)
+                         confidence=conf, tracklet_id=0, anchored=False,
+                         identity_linked=identity_linked)
 
 
 def test_ranked_by_confidence_desc():
@@ -37,6 +42,14 @@ def test_status_thresholds_and_default_decisions():
     assert (by_conf[0.05].status, by_conf[0.05].decision) == ("auto_hide", "not_me")
 
 
+def test_high_conf_without_identity_link_stays_review():
+    """Same-kit lookalike far from the orbital must not auto-hotspot."""
+    m = build_montage([_scored(1, 0.95, identity_linked=False)], CFG)
+    assert m[0].status == "review"
+    assert m[0].decision is None
+    assert m[0].to_dict()["identity_linked"] is False
+
+
 def test_clip_window_and_crop():
     m = build_montage([_scored(10.0, 0.5, x=200, y=150)], CFG, duration_sec=100.0)
     it = m[0]
@@ -44,6 +57,12 @@ def test_clip_window_and_crop():
     assert it.clip_end_sec == 10.0 + CFG.montage_clip_pad_sec
     h = CFG.montage_crop_half_px
     assert it.crop == [200 - h, 150 - h, 200 + h, 150 + h]
+
+
+def test_montage_item_carries_frame_index_and_player_bbox():
+    d = build_montage([_scored(10.0, 0.5, x=200, y=150)], CFG)[0].to_dict()
+    assert d["frame_index"] == 100          # _scored uses int(t * 10)
+    assert d["player_bbox"] == [195.0, 145.0, 205.0, 155.0]
 
 
 def test_clip_window_clamped():

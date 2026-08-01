@@ -18,6 +18,8 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from polyfut_v2.pipeline.color import is_bbox_on_foreign_surface
+
 _MODEL_CACHE: dict[str, Any] = {}
 
 
@@ -121,17 +123,42 @@ class YoloBallDetector:
 
     ``model`` may be injected (tests / custom weights); otherwise it is loaded
     lazily from ``cfg.ball_weights``.
+
+    Miss-storm backoff: on low-recall footage the dominant runtime cost is the
+    full-frame re-acquire firing on *every* sampled frame of a long miss run
+    (often 2 inferences/frame: ROI miss + full fallback). After
+    ``ball_miss_backoff_after`` consecutive misses the full-frame scan runs only
+    every ``ball_miss_backoff_stride``-th call; any detection (or ``reset()`` at
+    a shot boundary) restores per-frame scanning. During a long miss the model
+    demonstrably can't see the ball, so skipped scans cost little recall —
+    worst case, re-acquire is delayed by (stride−1) sampled frames.
     """
 
     def __init__(self, cfg, model: Any | None = None):
         self.cfg = cfg
         self._model = model
+        self._consec_misses = 0
+        self.stats = {
+            "roi_hits": 0, "roi_misses": 0,
+            "full_scans": 0, "skipped_full_scans": 0,
+        }
+
+    def reset(self) -> None:
+        """Shot boundary: fresh scene, scan immediately."""
+        self._consec_misses = 0
 
     @property
     def model(self):
         if self._model is None:
             self._model = _get_model(self.cfg.ball_weights, self.cfg.device)
         return self._model
+
+    def _should_full_scan(self) -> bool:
+        after = int(getattr(self.cfg, "ball_miss_backoff_after", 0) or 0)
+        if after <= 0 or self._consec_misses < after:
+            return True
+        stride = max(1, int(getattr(self.cfg, "ball_miss_backoff_stride", 3) or 1))
+        return (self._consec_misses - after) % stride == 0
 
     def _infer(self, image: np.ndarray, imgsz: int) -> BallDetection | None:
         results = self.model.predict(
@@ -161,21 +188,49 @@ class YoloBallDetector:
         last_center: tuple[float, float] | None = None,
     ) -> BallDetection | None:
         # Warm path: search a small ROI around the last known position.
+        det: BallDetection | None = None
+
         if self.cfg.roi_enabled and last_center is not None:
             crop, offset = roi_crop(frame, last_center, self.cfg.roi_half_px)
             if crop.size > 0:
                 det = self._infer(crop, self.cfg.ball_imgsz)
                 if det is not None:
-                    return BallDetection(
+                    det = BallDetection(
                         bbox=map_bbox_to_full(det.bbox, offset),
                         conf=det.conf,
                     )
+            self.stats["roi_hits" if det is not None else "roi_misses"] += 1
             # ROI miss → re-scan the whole frame this same step. On a small pitch
             # or a camera zoom/angle change the ball can leave the ROI between
             # samples; without this the tracker would coast on a stale position
             # for several frames and recall collapses (fast-ball footage).
             if not self.cfg.roi_fallback_full:
-                return None
+                det = None
 
-        # Cold path (or ROI-miss fallback): full-frame re-acquire.
-        return self._infer(frame, self.cfg.ball_full_imgsz)
+        # Cold path (or ROI-miss fallback): full-frame re-acquire, throttled
+        # during a miss storm (see class docstring).
+        if det is None:
+            if self._should_full_scan():
+                det = self._infer(frame, self.cfg.ball_full_imgsz)
+                self.stats["full_scans"] += 1
+            else:
+                self.stats["skipped_full_scans"] += 1
+
+        # Spare balls on the sideline can be detected as the ball and then
+        # corrupt Stage 4 contact candidates. Reject only when the surroundings
+        # are positively a non-pitch surface (running track, painted concrete).
+        # The old test demanded positive proof of *grass*, which threw away real
+        # on-pitch balls on any turf outside a narrow hue band — measured at 49%
+        # of on-pitch positions on bright sun-bleached footage.
+        if det is not None and getattr(self.cfg, "ball_pitch_gate_enabled", False):
+            if is_bbox_on_foreign_surface(
+                frame,
+                det.bbox,
+                check_half_px=getattr(self.cfg, "ball_surface_check_half_px", 18.0),
+                min_foreign_frac=getattr(self.cfg, "ball_foreign_surface_frac", 0.70),
+                min_colored_frac=getattr(self.cfg, "ball_surface_min_colored_frac", 0.25),
+            ):
+                det = None
+
+        self._consec_misses = 0 if det is not None else self._consec_misses + 1
+        return det

@@ -65,11 +65,71 @@ def test_tracker_basic_flow_and_gap_skip():
 
     by_idx = {s.frame_index: s for s in traj.samples}
     assert by_idx[0].detected and by_idx[0].x == 100
-    # Misses are held from the last detection (idx 1, x=105).
+    # Misses are bracketed by real detections (idx 1 x=105, idx 4 x=120), so the
+    # held run is filled in along the straight line between them rather than
+    # repeating one frozen position (Issue 6).
     assert by_idx[2].interpolated and not by_idx[2].detected
-    assert by_idx[2].x == 105 and by_idx[2].has_position()
-    assert by_idx[3].interpolated and by_idx[3].x == 105
+    assert by_idx[2].has_position()
+    assert by_idx[2].x == pytest.approx(110.0)
+    assert by_idx[3].interpolated and by_idx[3].x == pytest.approx(115.0)
     assert by_idx[4].detected and by_idx[4].x == 120
+
+
+def test_holds_stay_frozen_without_interpolation():
+    """``ball_interpolate_holds=False`` keeps the raw online hold behaviour."""
+    frames = [(0, 0.0), (1, 0.2), (2, 0.4), (3, 0.6), (4, 0.8)]
+    script = {0: _det(100, 100), 1: _det(105, 100), 2: None, 3: None, 4: _det(120, 100)}
+    cfg = PipelineV2Config(ball_hold_frames=2, ball_interpolate_holds=False,
+                           camera_motion_enabled=False)
+    traj = track_ball(_stream(frames), [{"start_sec": 0.0, "end_sec": 1.0}],
+                      FakeDetector(script), cfg)
+    by_idx = {s.frame_index: s for s in traj.samples}
+    assert by_idx[2].x == 105 and by_idx[3].x == 105
+
+
+def test_trailing_hold_keeps_frozen_position():
+    """With no next detection there is no forward anchor to interpolate toward,
+    so the frozen position stands — we never extrapolate a guess."""
+    frames = [(0, 0.0), (1, 0.2), (2, 0.4)]
+    script = {0: _det(100, 100), 1: _det(105, 100), 2: None}
+    cfg = PipelineV2Config(ball_hold_frames=2, camera_motion_enabled=False)
+    traj = track_ball(_stream(frames), [{"start_sec": 0.0, "end_sec": 1.0}],
+                      FakeDetector(script), cfg)
+    by_idx = {s.frame_index: s for s in traj.samples}
+    assert by_idx[2].interpolated and by_idx[2].x == 105
+
+
+def test_interpolation_never_spans_a_shot_cut():
+    """A held frame at the end of one shot must not be dragged toward a
+    detection in the *next* shot — different camera, unrelated positions."""
+    frames = [(0, 0.0), (1, 0.2), (2, 0.4), (3, 2.0), (4, 2.2)]
+    script = {0: _det(100, 100), 1: _det(105, 100), 2: None,
+              3: _det(500, 300), 4: _det(505, 300)}
+    cfg = PipelineV2Config(ball_hold_frames=2, camera_motion_enabled=False)
+    live_shots = [
+        {"start_sec": 0.0, "end_sec": 1.0},
+        {"start_sec": 2.0, "end_sec": 3.0},
+    ]
+    traj = track_ball(_stream(frames), live_shots, FakeDetector(script), cfg)
+    by_idx = {s.frame_index: s for s in traj.samples}
+    assert by_idx[2].x == 105  # frozen, not pulled toward the next shot
+
+
+def test_interpolated_samples_are_still_excluded_from_kinematics():
+    """Interpolated positions must never become Stage 4 velocity nodes, or a
+    straight-line fill could manufacture a contact that never happened."""
+    from polyfut_v2.pipeline.contacts import _raw_candidates
+
+    frames = [(i, i * 0.2) for i in range(6)]
+    script = {0: _det(100, 100), 1: _det(105, 100), 2: None, 3: None,
+              4: _det(120, 100), 5: _det(125, 100)}
+    cfg = PipelineV2Config(ball_hold_frames=3, camera_motion_enabled=False)
+    traj = track_ball(_stream(frames), [{"start_sec": 0.0, "end_sec": 2.0}],
+                      FakeDetector(script), cfg)
+    nodes = [s for s in traj.samples if s.detected]
+    assert len(nodes) == 4  # the two filled samples are not nodes
+    # Straight-line motion → no kinematic signature at all.
+    assert _raw_candidates(list(traj.samples), cfg) == []
 
 
 def test_processed_sec_collapses_gap_and_is_monotonic():

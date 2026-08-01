@@ -22,7 +22,7 @@ from typing import Callable
 
 from polyfut_v2.config import PipelineV2Config
 from polyfut_v2.main import compute_trajectory, trajectory_warnings
-from polyfut_v2.pipeline.contacts import contacts_doc, detect_contacts
+from polyfut_v2.pipeline.contacts import cap_candidates, contacts_doc, detect_contacts
 from polyfut_v2.pipeline.frame_provider import VideoFrameProvider
 from polyfut_v2.pipeline.hotspots import assemble_hotspots
 from polyfut_v2.pipeline.montage import (
@@ -32,6 +32,8 @@ from polyfut_v2.pipeline.montage import (
     review_queue,
 )
 from polyfut_v2.pipeline.player_contacts import (
+    TEAM_OFFICIAL,
+    TEAM_SIDELINE,
     contact_crops,
     enrich_contacts,
     filter_my_team,
@@ -57,50 +59,102 @@ def assemble_touches(
     *,
     decisions: dict[int, str] | None = None,
     progress: ProgressCb | None = None,
+    budget_sec: float | None = None,
+    calibration=None,
 ) -> dict:
     """Stages 4-9 over a finished trajectory: candidates → player+colour →
     scoring → montage → hotspots. Provider/detector are injected so this is
-    testable without a real video or model. Returns the intermediate objects."""
+    testable without a real video or model. Returns the intermediate objects
+    plus per-stage ``timings`` (seconds).
+
+    ``budget_sec`` scales the candidate cap and defaults to ``duration_sec``.
+    With a playing-time window it is the *on-pitch* seconds instead: the cap is
+    a "how many touches could plausibly be in this footage" budget, so 20
+    minutes of declared playing time inside a 111-minute video should get a
+    20-minute budget. ``duration_sec`` itself stays full video duration —
+    montage clip ends and hotspot ends clamp against it and timestamps never
+    leave video time."""
     progress = progress or _noop
+    timings: dict[str, float] = {}
 
     progress(0.84, "Stage 4: contact candidates…")
+    t0 = time.perf_counter()
     candidates = detect_contacts(traj, cfg)
     n_candidates_raw = len(candidates)
-    if cfg.max_candidates and n_candidates_raw > cfg.max_candidates:
-        # Keep the strongest kinematic signals; each survivor costs a player pass.
-        candidates = sorted(candidates, key=lambda c: c.strength, reverse=True)[:cfg.max_candidates]
-        candidates.sort(key=lambda c: c.processed_sec)  # restore time order
+    # Duration-scaled, time-fair budget: each survivor costs a player pass.
+    candidates = cap_candidates(
+        candidates, cfg,
+        duration_sec=(budget_sec if budget_sec is not None else duration_sec),
+    )
+    timings["contacts"] = time.perf_counter() - t0
+
+    # Stage 5b: when the user calibrated the pitch, judge "who touched it" in
+    # metres rather than pixels. Silently absent otherwise — see Issue 14.
+    mapper, calibration_status = _build_pitch_mapper(traj, cfg, calibration)
 
     progress(0.88, f"Stages 5-6: player + colour over {len(candidates)} candidate(s)…")
-    enriched = enrich_contacts(candidates, provider, player_detector, seed, cfg)
-    # Always drop contacts whose kit is CLEARLY the other team (conservative,
-    # grass-masked colour) — this removes the "wrong team touched the ball" clips
-    # without the aggressive same-team filter. Colour-undecided contacts survive.
+    t0 = time.perf_counter()
+    enriched = enrich_contacts(candidates, provider, player_detector, seed, cfg,
+                               mapper=mapper)
+    # Always drop contacts whose kit is CLEARLY the other team, or who were
+    # attributed to an official / sideline coach — removes "wrong team / ref /
+    # coach touched the ball" clips without the aggressive same-team filter.
+    # Colour-undecided (unknown) contacts survive for recall.
+    # A crowded contact (corner kick / scramble) is exempt: with several bodies
+    # on the ball the kit we read may not be the toucher's, so dropping it would
+    # risk losing a real touch. Officials and sideline staff still go.
+    keep_crowded = bool(getattr(cfg, "crowd_keep_other_team", False))
     n_before = len(enriched)
-    enriched = [c for c in enriched if c.is_my_team is not False]
+    enriched = [
+        c for c in enriched
+        if c.is_my_team is not False
+        or (keep_crowded and c.crowded
+            and c.team_label not in (TEAM_OFFICIAL, TEAM_SIDELINE))
+    ]
     n_other_dropped = n_before - len(enriched)
-    kept = filter_my_team(enriched, enabled=cfg.team_filter_enabled)
+    kept = filter_my_team(
+        enriched, keep_crowded=keep_crowded, enabled=cfg.team_filter_enabled,
+    )
+    n_crowded = sum(1 for c in kept if c.crowded)
+    timings["player_enrich"] = time.perf_counter() - t0
 
     progress(0.93, "Stage 7: appearance × orbital scoring…")
+    t0 = time.perf_counter()
     crops = contact_crops(kept)  # captured during enrichment — no extra decode pass
-    scored = score_contacts(kept, crops, seed, cfg)
+    # Compare positions in pan-stabilised space when Stage 3 measured the camera
+    # (Issue 5); without it the orbital prior reads a pan as a teleport.
+    camera = getattr(traj, "camera", None)
+    transform = camera.transform() if camera is not None else None
+    scored = score_contacts(kept, crops, seed, cfg, transform=transform)
+    timings["scoring"] = time.perf_counter() - t0
 
     progress(0.97, "Stage 8: building review montage…")
+    t0 = time.perf_counter()
     montage = build_montage(scored, cfg, duration_sec=duration_sec)
     if decisions:
         apply_decisions(montage, decisions)
 
     me_times = confirmed_me_times(montage)
     hotspots = assemble_hotspots(me_times, cfg, duration_sec=duration_sec)
+    timings["montage"] = time.perf_counter() - t0
 
     return {
         "candidates": candidates,
         "n_candidates_raw": n_candidates_raw,
+        "attribution": (mapper.stats() if mapper is not None
+                        else {"contacts_metric": 0,
+                              "contacts_pixel_fallback": len(candidates),
+                              "metric_coverage": 0.0}),
+        # Which of _build_pitch_mapper's exits fired. "ok" means the map was
+        # built; anything else explains a metric_coverage of 0.
+        "calibration_status": calibration_status,
         "n_other_team_dropped": n_other_dropped,
+        "n_crowded": n_crowded,
         "kept": kept,
         "scored": scored,
         "montage": montage,
         "hotspots": hotspots,
+        "timings": timings,
     }
 
 
@@ -139,6 +193,7 @@ def run_v2(
     warnings = trajectory_warnings(traj, cfg)
 
     # --- Stage 0: seed ---
+    t0 = time.perf_counter()
     if seed is None:
         if seed_taps:
             seed = build_seed_from_taps(
@@ -151,6 +206,7 @@ def run_v2(
             warnings.append("no seed provided — appearance scoring degrades to neutral")
     if seed.is_weak():
         warnings.append("weak seed (≤1 sample) — expect a larger review montage")
+    seed_sec = time.perf_counter() - t0
 
     # --- Stages 4-9 (need frame access) ---
     with VideoFrameProvider(str(video_path), target_width=cfg.target_width) as provider:
@@ -164,7 +220,10 @@ def run_v2(
     me_times = confirmed_me_times(montage)
 
     timings = dict(traj_res["timings"])
+    timings["seed"] = seed_sec
+    timings.update(res.get("timings") or {})
     timings["total"] = time.perf_counter() - t_total
+    stage_timings = {k: round(v, 2) for k, v in timings.items()}
 
     # --- Write outputs ---
     montage_doc = {
@@ -174,9 +233,11 @@ def run_v2(
         "n_candidates": len(candidates),
         "n_your_team": len(kept),
         "n_review": len(review_queue(montage)),
+        "n_crowded": res.get("n_crowded", 0),
         "seed": {"n_samples": seed.n_samples, "has_color": seed.has_color(),
                  "gallery": len(seed.gallery)},
         "warnings": warnings,
+        "stage_timings_sec": stage_timings,
         "items": [it.to_dict() for it in montage],
     }
     (out_dir / "montage.json").write_text(json.dumps(montage_doc, indent=2), encoding="utf-8")
@@ -201,11 +262,16 @@ def run_v2(
         "n_samples": len(traj),
         "detected_ratio": round(traj.detected_ratio(), 4),
         "n_candidates": len(candidates),
+        "n_candidates_raw": res.get("n_candidates_raw", len(candidates)),
         "n_your_team": len(kept),
         "n_review": len(review_queue(montage)),
+        "n_crowded": res.get("n_crowded", 0),
         "n_hotspots": len(hotspots),
+        "ball_detector_stats": traj_res.get("ball_detector_stats"),
+        "ball_sanity": traj_res.get("ball_sanity"),
         "warnings": warnings,
         "timings_sec": timings,
+        "stage_timings_sec": stage_timings,
         "out_dir": str(out_dir),
     }
 
@@ -236,3 +302,58 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+
+def _build_pitch_mapper(traj, cfg, calibration):
+    """PitchMapper for this run, or None to keep today's pixel behaviour.
+
+    Refuses rather than guesses at every step: no calibration, a calibration the
+    quality screen rejects, or no camera track all yield None. A wrong pitch map
+    silently moves players to the wrong place, which is worse than not having
+    one, so every uncertainty resolves to "fall back".
+
+    Returns ``(mapper, reason)``. The reason exists because the fallback used to
+    be *entirely* silent: a real run was measured at ``metric_coverage: 0.0``
+    with every one of its 179 contacts on the pixel gate, and nothing recorded
+    which of the five exits below had fired — a skipped screen, a rejected fit
+    and a broken camera track all produced byte-identical output. Falling back
+    quietly is still right; being unable to say why afterwards is not.
+    """
+    if calibration is None:
+        return None, "not_supplied"
+    try:
+        from polyfut_v2.pipeline.pitch_calibration import (
+            PitchCalibration,
+            PitchMapper,
+        )
+        calib = (calibration if isinstance(calibration, PitchCalibration)
+                 else PitchCalibration.from_dict(calibration))
+    except Exception:
+        return None, "unreadable"
+    limit = float(getattr(cfg, "calibration_max_median_px", 6.0))
+    if limit > 0 and calib.median_px > limit:
+        return None, "quality_rejected"
+    camera = getattr(traj, "camera", None)
+    if camera is None:
+        return None, "no_camera_track"
+    try:
+        return PitchMapper(calib, camera, frame_width=int(cfg.target_width)), "ok"
+    except Exception:
+        return None, "mapper_failed"
+
+
+# Human-readable form of the reasons above, for the run warnings. Only the
+# genuine failures appear here: "not_supplied" is a user choice, not a fault.
+CALIBRATION_FALLBACK_MESSAGES = {
+    "unreadable": ("The pitch calibration could not be read, so touches were "
+                   "attributed in pixels instead of metres."),
+    "quality_rejected": ("The pitch calibration was rejected as too imprecise "
+                         "(typical landmark error above "
+                         "{limit:.0f}px), so touches were attributed in pixels "
+                         "instead of metres."),
+    "no_camera_track": ("No camera-motion track was available, so the pitch "
+                        "calibration could not be carried across the video and "
+                        "touches were attributed in pixels."),
+    "mapper_failed": ("The pitch map could not be built from the calibration, "
+                      "so touches were attributed in pixels."),
+}

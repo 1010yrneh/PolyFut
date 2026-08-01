@@ -66,6 +66,10 @@ class BallTrajectory:
     """Ordered collection of :class:`BallSample` plus small summary helpers."""
 
     samples: list[BallSample] = field(default_factory=list)
+    # Optional camera-motion track (Stage 3d) measured during the same pass, used
+    # by Stage 7 to compare positions in pan-stabilised space. Not serialized —
+    # it is a scoring aid, not part of the trajectory contract.
+    camera: object | None = field(default=None, repr=False, compare=False)
 
     def __len__(self) -> int:
         return len(self.samples)

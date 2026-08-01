@@ -24,6 +24,8 @@ def iter_frames(
     video_path: str,
     target_width: int = 640,
     sample_every_n: int = 1,
+    start_sec: float | None = None,
+    end_sec: float | None = None,
 ) -> Iterator[tuple[int, float, np.ndarray]]:
     """
     Yields (frame_index, timestamp_sec, frame) tuples.
@@ -31,6 +33,14 @@ def iter_frames(
     Uses grab() to advance the stream and only calls retrieve() on frames
     that will actually be processed (every Nth frame per sample_every_n).
     Downsamples to target_width, preserving aspect ratio, before returning.
+
+    ``start_sec`` / ``end_sec`` bound the pass to a time window (the playing-time
+    envelope): one seek up front, then stop once past the end. Frame indices and
+    timestamps stay **absolute video time** — the window changes what is read,
+    never the clock — so shots, trajectories and touches remain directly
+    comparable with an unbounded run. Sampling phase is also absolute
+    (``frame_idx % sample_every_n``), so a bounded pass yields exactly the
+    frames an unbounded pass would have yielded in that span.
     """
     cap = cv2.VideoCapture(str(video_path))
     if not cap.isOpened():
@@ -40,8 +50,18 @@ def iter_frames(
     frame_idx = 0
     yielded = 0
 
+    if start_sec is not None and start_sec > 0 and fps > 0:
+        want = int(start_sec * fps)
+        cap.set(cv2.CAP_PROP_POS_FRAMES, want)
+        # Seeking a non-keyframe can land the decoder somewhere other than the
+        # requested frame; trust where it actually is so timestamps stay true.
+        pos = int(cap.get(cv2.CAP_PROP_POS_FRAMES) or 0)
+        frame_idx = pos if pos > 0 else want
+
     try:
         while True:
+            if end_sec is not None and fps > 0 and (frame_idx / fps) > end_sec:
+                break
             if not cap.grab():
                 break
             if frame_idx % max(1, sample_every_n) != 0:

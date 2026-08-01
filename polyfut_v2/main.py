@@ -17,7 +17,9 @@ from polyfut_video.pipeline.decode import iter_frames, probe_video
 from polyfut_video.pipeline.shot_filter import PIPELINE_VERSION, segment_and_classify_shots
 
 from polyfut_v2.config import PipelineV2Config
+from polyfut_v2.pipeline import play_ranges as pr
 from polyfut_v2.pipeline.ball_detector import YoloBallDetector
+from polyfut_v2.pipeline.ball_sanity import reject_pingpong
 from polyfut_v2.pipeline.ball_tracker import track_ball
 from polyfut_v2.pipeline.trajectory import BallTrajectory
 
@@ -64,12 +66,20 @@ def compute_trajectory(
     detector=None,
     progress: ProgressCb | None = None,
     should_cancel: Callable[[], bool] | None = None,
+    play_ranges: list[tuple[float, float]] | None = None,
 ) -> dict:
     """Stages 1-3: decode → shot filter → deadtime → continuous ball trajectory.
 
     Shared by the Step-1 CLI and the full orchestrator. Returns a dict with
     ``info``, ``live_shots``, ``removed``, ``trajectory`` and ``timings``.
     ``detector`` defaults to :class:`YoloBallDetector` on ``cfg.ball_weights``.
+
+    ``play_ranges`` confines all three decode passes to the user's declared
+    on-pitch time (padded by ``cfg.playing_time_pad_sec``): decoding is bounded
+    to the ranges' envelope, and shots are clipped to the padded ranges so the
+    interior gaps between periods cost only cheap ``grab()`` calls rather than
+    detection work. Timestamps stay in video time throughout. Passing None (the
+    default) analyses the whole video exactly as before.
     """
     progress = progress or _noop_progress
     cancel = should_cancel or (lambda: False)
@@ -78,6 +88,17 @@ def compute_trajectory(
     info = probe_video(str(video_path))
     v1cfg = cfg.v1_config()
 
+    # Pad the declared window before it bounds anything: the handles are dragged
+    # by eye, so a touch just outside a guessed substitution time must still be
+    # analysed (recall-safety). ``padded`` empty == unrestricted.
+    duration = float(info.get("duration_sec") or 0.0)
+    padded = pr.pad_ranges(play_ranges, cfg.playing_time_pad_sec, duration) if play_ranges else []
+    env = pr.envelope(padded)
+    start_sec, end_sec = (env if env else (None, None))
+    if padded:
+        progress(0.01, f"Playing-time window: {pr.total_seconds(padded) / 60:.1f} min "
+                       f"of {duration / 60:.1f} min analysed…")
+
     # --- Stages 1-2: decode + shot filter ---
     progress(0.02, f"Stage 1-2: decode + shot filter (v{PIPELINE_VERSION})…")
     t0 = time.perf_counter()
@@ -85,8 +106,17 @@ def compute_trajectory(
         str(video_path),
         target_width=cfg.target_width,
         sample_every_n=max(1, cfg.shot_filter_sample_every_n),
+        start_sec=start_sec,
+        end_sec=end_sec,
     )
     shots = segment_and_classify_shots(frame_iter, v1cfg)
+    # Trim to the padded ranges: the envelope bound above already excluded
+    # everything before/after, this splits out the interior gaps between
+    # periods. Done here rather than after deadtime so the deadtime pass — which
+    # falls back to its own seek-and-read when the iterator gives it no motion
+    # for a shot — never touches out-of-window video either.
+    if padded:
+        shots = pr.intersect_shots(shots, padded)
     n_main = sum(1 for s in shots if s.get("label") == "main_camera")
     timings["shot_filter"] = time.perf_counter() - t0
     progress(0.06, f"Stage 1-2: {len(shots)} shot(s), {n_main} main_camera…")
@@ -100,6 +130,8 @@ def compute_trajectory(
         str(video_path),
         target_width=cfg.target_width,
         sample_every_n=max(1, cfg.shot_filter_sample_every_n * 8),
+        start_sec=start_sec,
+        end_sec=end_sec,
     )
     live_shots, removed = filter_deadtime(
         shots,
@@ -114,6 +146,8 @@ def compute_trajectory(
         raise RuntimeError("cancelled")
 
     # --- Stage 3b-c: continuous ball trajectory ---
+    if padded:
+        live_shots = pr.intersect_shots(live_shots, padded)
     total_live = _live_seconds(live_shots)
     progress(0.12, f"Stage 3: ball trajectory over {len(live_shots)} live shot(s)…")
     t0 = time.perf_counter()
@@ -122,6 +156,8 @@ def compute_trajectory(
         str(video_path),
         target_width=cfg.target_width,
         sample_every_n=max(1, cfg.ball_sample_every_n),
+        start_sec=start_sec,
+        end_sec=end_sec,
     )
     traj: BallTrajectory = track_ball(
         decode_stream,
@@ -133,12 +169,28 @@ def compute_trajectory(
         total_live_sec=total_live,
     )
     timings["ball_tracking"] = time.perf_counter() - t0
+
+    # --- Stage 3f: drop physically impossible out-and-back excursions ---
+    # Needs the whole trajectory (the test looks at the sample *after* the
+    # suspect one), so it cannot live in the online smoother.
+    t0 = time.perf_counter()
+    traj, sanity = reject_pingpong(traj, cfg)
+    timings["ball_sanity"] = time.perf_counter() - t0
+
     return {
         "info": info,
         "live_shots": live_shots,
         "removed": removed,
         "trajectory": traj,
+        "ball_sanity": sanity.to_dict(),
         "timings": timings,
+        # Audit trail: the declared window and the padded one actually analysed.
+        "play_ranges": [list(r) for r in (play_ranges or [])],
+        "play_ranges_padded": [list(r) for r in padded],
+        # ROI hit/miss + full-scan/skip counters (None for detectors without
+        # stats) — makes "where did ball tracking time go" answerable from
+        # job_state.json instead of a profiler.
+        "ball_detector_stats": getattr(detector, "stats", None),
     }
 
 

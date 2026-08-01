@@ -251,6 +251,58 @@ def _merge_candidates(
     return merged
 
 
+def cap_candidates(
+    cands: list[ContactCandidate],
+    cfg: PipelineV2Config,
+    duration_sec: float | None = None,
+) -> list[ContactCandidate]:
+    """Bound the candidate count (each survivor costs a Stage 5-6 player pass).
+
+    The budget is the smaller of ``cfg.max_candidates`` and a duration-scaled
+    cap (``max_candidates_per_min`` × minutes, floored at 60 so short clips are
+    never starved). Selection is *time-fair*: candidates are bucketed into
+    ``candidate_fair_window_sec`` windows and the strongest are taken
+    round-robin across windows, so one noisy phase of the trajectory can't eat
+    the whole budget and silence real touches elsewhere in the clip.
+    """
+    caps = []
+    if cfg.max_candidates:
+        caps.append(int(cfg.max_candidates))
+    per_min = int(getattr(cfg, "max_candidates_per_min", 0) or 0)
+    if per_min and duration_sec:
+        caps.append(max(60, int(per_min * float(duration_sec) / 60.0)))
+    if not caps:
+        return cands
+    k = min(caps)
+    if len(cands) <= k:
+        return cands
+
+    window = float(getattr(cfg, "candidate_fair_window_sec", 30.0) or 30.0)
+    buckets: dict[int, list[ContactCandidate]] = {}
+    for c in cands:
+        buckets.setdefault(int(c.processed_sec // window), []).append(c)
+    for b in buckets.values():
+        b.sort(key=lambda c: c.strength, reverse=True)
+
+    picked: list[ContactCandidate] = []
+    keys = sorted(buckets)
+    rank = 0
+    while len(picked) < k:
+        took_any = False
+        for key in keys:
+            b = buckets[key]
+            if rank < len(b):
+                picked.append(b[rank])
+                took_any = True
+                if len(picked) >= k:
+                    break
+        if not took_any:
+            break
+        rank += 1
+    picked.sort(key=lambda c: c.processed_sec)
+    return picked
+
+
 def detect_contacts(
     traj: BallTrajectory, cfg: PipelineV2Config | None = None
 ) -> list[ContactCandidate]:
