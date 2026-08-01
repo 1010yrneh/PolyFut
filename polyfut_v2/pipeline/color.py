@@ -232,17 +232,156 @@ def looks_like_official_kit(
     return True
 
 
-def _non_grass_pixels(
-    crop: np.ndarray | None, *, min_keep_frac: float = 0.12
+# --- measuring the surface instead of assuming it -------------------------- #
+#
+# The band above is a guess about what turf looks like, and it is wrong often
+# enough to break everything downstream. Measured across the uploads on disk, one
+# venue's pitch sits at hue 28 while others sit at 42-43; the band starts at 32,
+# so it masked 1.2% of the first pitch. Every torso crop there stayed full of
+# grass and `jersey_hsv` returned the GROUND for every player — measured on
+# f1fcfbb84a0d, all 14 tracked players read hue 17-26 with a spread of 8.5.
+# Every colour-driven decision downstream was then operating on turf brightness.
+#
+# The fix is not a wider band, and not a per-clip band either (that was tried and
+# reverted: widening one interval to cover sun and shade makes it swallow kits).
+# It is to stop assuming and start measuring, with two ideas doing the work:
+#
+#   1. LOCAL. The surface is sampled from a ring around this player's own box,
+#      so it is the ground they are actually standing on. That adapts to shadow,
+#      wear and floodlight across a single frame, which no global value can.
+#   2. CHROMA, NOT BRIGHTNESS. Illumination changes how bright a surface is;
+#      material changes its colour. Sunlit and shaded turf differ hugely in
+#      value but barely in hue, so matching on hue+saturation and ignoring value
+#      covers the whole lighting range from one sample — and simultaneously
+#      keeps a navy shirt (different hue) and a white shirt (near-zero
+#      saturation, where turf is strongly saturated) out of the mask.
+#
+# Nothing here is tuned to a particular pitch: the reference is whatever the
+# ground under this player happens to look like.
+
+_SURFACE_H_TOL = 9.0      # OpenCV hue units (0-179); turf spans a narrow hue
+_SURFACE_MIN_PX = 24      # too small a ring to characterise → don't trust it
+_SURFACE_MAX_SPREAD = 22.0  # ring this varied isn't one clean surface
+# Saturation slack is MEASURED per player, not fixed, because how much a pitch
+# varies is itself a property of the pitch. Deviation of turf saturation from
+# its own local median, p90, across the uploads on disk: 41, 39, 58, 48, 50, 79
+# — a single constant is the same mistake as the hue band, one level down. Too
+# tight and worn or shaded turf leaks through as a kit; too loose and a yellow
+# shirt on a bleached olive pitch (hue 25 against hue 28 — olive *is* a dark
+# yellow) is erased as ground, which is exactly the kit in this footage.
+# The clamp keeps a freak ring from disabling the mask or swallowing everything.
+_SURFACE_S_TOL_MIN = 25.0
+_SURFACE_S_TOL_MAX = 70.0
+
+
+def local_surface_hsv(
+    frame: np.ndarray, bbox: list[float], *, pad: float = 1.6,
 ) -> np.ndarray | None:
-    """The (N,3) HSV pixels of a torso crop with pitch grass removed, or None
-    when the crop is empty or too nearly all grass to trust."""
+    """Median HSV of the ground immediately around a player box.
+
+    Sampled from a ring: the padded box minus the box itself, so the player's
+    own pixels never define the surface they are standing on. Returns None when
+    the ring is too small, or too varied to be a single surface (a player against
+    a crowd, a hoarding, or the sideline) — in which case the caller keeps the
+    old fixed-band behaviour rather than subtracting something that isn't ground.
+    """
+    if frame is None or frame.size == 0 or len(bbox) != 4:
+        return None
+    fh, fw = frame.shape[:2]
+    x1, y1, x2, y2 = (float(v) for v in bbox)
+    bw, bh = max(x2 - x1, 1.0), max(y2 - y1, 1.0)
+    cx, cy = (x1 + x2) / 2.0, (y1 + y2) / 2.0
+    px1 = int(max(0, cx - bw * pad / 2.0))
+    px2 = int(min(fw, cx + bw * pad / 2.0))
+    py1 = int(max(0, cy - bh * pad / 2.0))
+    py2 = int(min(fh, cy + bh * pad / 2.0))
+    if px2 - px1 < 3 or py2 - py1 < 3:
+        return None
+    region = frame[py1:py2, px1:px2]
+    hsv = cv2.cvtColor(region, cv2.COLOR_BGR2HSV).reshape(-1, 3).astype(np.float32)
+    # mask out the player's own box within the region
+    mask = np.ones(region.shape[:2], dtype=bool)
+    bx1, by1 = int(max(px1, x1)) - px1, int(max(py1, y1)) - py1
+    bx2, by2 = int(min(px2, x2)) - px1, int(min(py2, y2)) - py1
+    if bx2 > bx1 and by2 > by1:
+        mask[by1:by2, bx1:bx2] = False
+    ring = hsv[mask.reshape(-1)]
+    if ring.shape[0] < _SURFACE_MIN_PX:
+        return None
+    # Circular median for hue; plain median for S and V.
+    ang = ring[:, 0] * 2.0 * np.pi / 180.0
+    mean_ang = math.atan2(float(np.sin(ang).mean()), float(np.cos(ang).mean()))
+    centre = (math.degrees(mean_ang) / 2.0) % 180.0
+    unwrapped = (ring[:, 0] - centre + 90.0) % 180.0
+    hue = float((np.median(unwrapped) + centre - 90.0) % 180.0)
+    # A clean surface is chromatically tight. Spread is measured on hue only —
+    # brightness variation across sun and shade is expected and is exactly what
+    # this design tolerates.
+    if float(np.percentile(np.abs(unwrapped - np.median(unwrapped)), 75)) > _SURFACE_MAX_SPREAD:
+        return None
+    # How much this particular ground varies in saturation becomes the tolerance
+    # used against it — measured only over the ring pixels that share its hue, so
+    # a stray shirt or line marking in the ring cannot inflate it.
+    dh_ring = np.abs(ring[:, 0] - hue)
+    dh_ring = np.minimum(dh_ring, 180.0 - dh_ring)
+    same_hue = ring[dh_ring <= _SURFACE_H_TOL]
+    s_med = float(np.median(ring[:, 1]))
+    if same_hue.shape[0] >= 12:
+        s_tol = float(np.percentile(np.abs(same_hue[:, 1] - s_med), 90))
+    else:
+        s_tol = _SURFACE_S_TOL_MIN
+    s_tol = float(np.clip(s_tol, _SURFACE_S_TOL_MIN, _SURFACE_S_TOL_MAX))
+    return np.array([hue, s_med, float(np.median(ring[:, 2])), s_tol],
+                    dtype=np.float32)
+
+
+def _surface_mask(hsv: np.ndarray, surface: np.ndarray) -> np.ndarray:
+    """Which pixels of ``hsv`` are the same material as ``surface``.
+
+    Value is deliberately not compared: it is what illumination changes, so
+    including it would split one surface into "sunlit" and "shaded" and let half
+    of it through as if it were a kit.
+
+    ``surface`` may carry a measured saturation tolerance as a 4th element (see
+    :func:`local_surface_hsv`); a plain 3-vector falls back to the conservative
+    floor.
+    """
+    h, s = hsv[..., 0], hsv[..., 1]
+    dh = np.abs(h - float(surface[0]))
+    dh = np.minimum(dh, 180.0 - dh)
+    ds = np.abs(s - float(surface[1]))
+    s_tol = (float(surface[3]) if np.asarray(surface).shape[0] >= 4
+             else _SURFACE_S_TOL_MIN)
+    return (dh <= _SURFACE_H_TOL) & (ds <= s_tol)
+
+
+def _non_grass_pixels(
+    crop: np.ndarray | None, *, min_keep_frac: float = 0.12,
+    surface: np.ndarray | None = None,
+) -> np.ndarray | None:
+    """The (N,3) HSV pixels of a torso crop with the pitch removed, or None when
+    the crop is empty or too nearly all pitch to trust.
+
+    ``surface`` is the measured local ground colour (see
+    :func:`local_surface_hsv`) and is strongly preferred. Without it the fixed
+    hue band is used, which works on a typical green pitch and does almost
+    nothing on a bleached one.
+    """
     if crop is None or crop.size == 0:
         return None
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
     h, s, v = hsv[..., 0], hsv[..., 1], hsv[..., 2]
     grass = ((h >= _GRASS_H_LO) & (h <= _GRASS_H_HI)
              & (s >= _GRASS_S_MIN) & (v >= _GRASS_V_MIN))
+    if surface is not None:
+        # UNION, not replacement. The band spans 63 hue units and the measured
+        # surface only ~18, so on ordinary green turf the band removes strictly
+        # more — swapping one for the other regressed two green-pitch clips
+        # (reads landing on the pitch hue went 0%->10% and 5%->14%). The band is
+        # a decent prior for typical turf; it is simply blind to turf outside
+        # it. Keeping both means this can never mask less ground than before,
+        # and adds cover exactly where the band fails.
+        grass = grass | _surface_mask(hsv, surface)
     keep = ~grass
     if int(keep.sum()) < max(8, int(min_keep_frac * keep.size)):
         return None                       # mostly grass → don't trust it
@@ -250,7 +389,8 @@ def _non_grass_pixels(
 
 
 def jersey_hsv_from_crop(
-    crop: np.ndarray | None, *, min_keep_frac: float = 0.12
+    crop: np.ndarray | None, *, min_keep_frac: float = 0.12,
+    surface: np.ndarray | None = None,
 ) -> np.ndarray | None:
     """One representative HSV for a torso crop, with pitch-grass pixels removed.
 
@@ -269,7 +409,15 @@ def jersey_hsv_from_crop(
     of their colours the camera saw most of, which the multi-colour kit sets on
     the other side of the comparison are built to match.
     """
-    px = _non_grass_pixels(crop, min_keep_frac=min_keep_frac)
+    px = _non_grass_pixels(crop, min_keep_frac=min_keep_frac, surface=surface)
+    if px is None and surface is not None:
+        # Subtracting the measured ground left nothing — either this player is
+        # genuinely the same colour as the pitch, or the ring was contaminated
+        # by them. Either way the measurement taught us nothing, so fall back to
+        # what the band alone says rather than turning a previously-readable
+        # contact into an unreadable one. This keeps the change strictly
+        # additive: never a worse answer than before, only sometimes a better.
+        px = _non_grass_pixels(crop, min_keep_frac=min_keep_frac)
     if px is None:
         return None
     colors = split_hsv_pixels(px)
@@ -283,15 +431,21 @@ def jersey_hsv(
     min_area: int = 0,
     min_keep_frac: float = 0.12,
 ) -> np.ndarray | None:
-    """Median torso HSV with pitch-grass pixels removed, so a distant player's
-    kit colour isn't drowned out by the grass in the crop. Returns None if the
-    crop is too small or almost entirely grass (colour unmeasurable)."""
+    """Median torso HSV with the pitch removed, so a distant player's kit colour
+    isn't drowned out by the ground in the crop. Returns None if the crop is too
+    small or almost entirely pitch (colour unmeasurable).
+
+    The pitch is measured from a ring around this player rather than assumed
+    from a hue band, so it works on turf of any colour. Falls back to the band
+    when the surroundings can't be characterised.
+    """
     crop = torso_crop(frame, bbox)
     if crop is None or crop.size == 0:
         return None
     if min_area > 0 and (crop.shape[0] * crop.shape[1]) < min_area:
         return None
-    return jersey_hsv_from_crop(crop, min_keep_frac=min_keep_frac)
+    return jersey_hsv_from_crop(crop, min_keep_frac=min_keep_frac,
+                                surface=local_surface_hsv(frame, bbox))
 
 
 # --------------------------------------------------------------------------- #
