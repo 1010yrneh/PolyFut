@@ -19,6 +19,9 @@ let clipWindowStart = null;
 let clipWindowEnd = null;
 let __rafClampId = null;
 let cvJobId = null;
+// Optional pitch calibration for THIS video (not stored between uploads).
+// null = the user skipped it, and the run behaves exactly as it did before.
+let cvPitchCalibration = null;
 let cvPollTimer = null;
 let cvSegmentsAreDemo = false;
 const CV_SERVER_PORTS = [5000, 5050, 8080];
@@ -69,6 +72,28 @@ function pfStopAlert() {
     }
 }
 if (typeof window !== 'undefined') window.addEventListener('focus', pfStopAlert);
+
+// Surface pipeline-produced warnings (e.g. "footage is low-resolution, ball
+// detection recall will be poor") that the backend already computes but was
+// previously dropped on the floor after being read into __v2Montage.warnings.
+// A fixed top banner (not nested in a screen's card) survives screen swaps —
+// the montage card's innerHTML gets wiped and rebuilt on repeat runs.
+function pfShowPipelineWarnings(warnings) {
+    const list = (warnings || []).filter(Boolean);
+    const existing = document.getElementById('pf-pipeline-warnings');
+    if (existing) existing.remove();
+    if (!list.length) return;
+    const wrap = document.createElement('div');
+    wrap.id = 'pf-pipeline-warnings';
+    wrap.className = 'pf-pipeline-warnings';
+    wrap.innerHTML =
+        '<div class="pf-pipeline-warnings-body">' +
+        list.map(function (w) { return '<p>⚠ ' + w + '</p>'; }).join('') +
+        '</div>' +
+        '<button type="button" class="pf-pipeline-warnings-close" aria-label="Dismiss">×</button>';
+    document.body.appendChild(wrap);
+    wrap.querySelector('.pf-pipeline-warnings-close').onclick = function () { wrap.remove(); };
+}
 
 // One-time, remembered opt-in — a small styled prompt (never a native dialog).
 function pfMaybeAskAlerts() {
@@ -627,6 +652,10 @@ function tryResumeCvSession() {
         cvJobId = s.job_id;
         cvToken = s.token;
         cvMyTeamId = s.my_team;
+        // A resumed run keeps its playing-time window: the server's stored copy
+        // is authoritative, but restoring it here keeps the client's fallback
+        // copy (sent on /api/v2/process) from silently widening to whole match.
+        cvPlayRanges = (j.play_ranges || s.play_ranges || []);
         if (cvToken) cvVideoURL = cvVideoUrlForToken(cvToken);
         restoreMatchMetadataFromSession(s);
         if (j.state === 'running') {
@@ -1331,6 +1360,7 @@ function formatClock(seconds) {
 function checkStartReady() {
     const fileInput = document.getElementById('video-input');
     const startBtn = document.getElementById('start-btn');
+    const manualBtn = document.getElementById('manual-start-btn');
     if (!fileInput || !startBtn) return;
     const hasVideo = fileInput.files.length > 0;
     if (hasVideo) {
@@ -1342,6 +1372,11 @@ function checkStartReady() {
         startBtn.disabled = true;
         startBtn.style.opacity = "0.5";
         startBtn.style.cursor = "not-allowed";
+    }
+    if (manualBtn) {
+        manualBtn.disabled = !hasVideo;
+        manualBtn.style.opacity = hasVideo ? "1" : "0.5";
+        manualBtn.style.cursor = hasVideo ? "pointer" : "not-allowed";
     }
 }
 
@@ -1584,7 +1619,385 @@ function initApp() {
     const setupScreen = document.getElementById('setup-screen');
     if (setupScreen) setupScreen.classList.add('hidden');
 
+    // Ask when they were on the pitch FIRST. The upload + kit detection below
+    // run in parallel and take a minute or two anyway, so this step costs no
+    // extra wall-clock time — and it means the seed prefetch, which the server
+    // now starts from /api/v2/playing_time, never builds a clip for a moment
+    // the user wasn't playing.
+    showPlayingTimeScreen(cvVideoURL);
     startTeamDetection();
+}
+
+// --- Manual bypass: skip the whole CV pipeline (playing-time, team colors,
+// seed clips, detection, montage review) and open the tagging screen directly
+// on the full raw video. logStat() already supports free-play tagging with no
+// hotspots (it only checks bench exclusions, not clipSegmentsLibrary/cvToken),
+// so this is the same tagging screen as the AI path — just with an empty
+// hotspot library, meaning free scrubbing of the whole video from the start.
+// Nothing is uploaded to the server: no token, no job, purely client-side.
+function initAppManual() {
+    const fileInput = document.getElementById('video-input');
+    if (!fileInput.files || !fileInput.files[0]) return;
+
+    const oppName = document.getElementById('opponent-name').value || 'Opponent';
+    const scoreUs = parseInt(document.getElementById('score-us').value, 10) || 0;
+    const scoreThem = parseInt(document.getElementById('score-them').value, 10) || 0;
+    currentScore = { us: scoreUs, them: scoreThem };
+    const matchDateVal = document.getElementById('match-date').value;
+    const matchDateDisplay = matchDateVal ? ' · ' + matchDateVal : '';
+    document.getElementById('display-match-name').innerText = 'VS ' + oppName.toUpperCase() + matchDateDisplay;
+    document.getElementById('display-score').innerText = currentScore.us + ' - ' + currentScore.them;
+
+    cvVideoFile = fileInput.files[0];
+    cvVideoURL = URL.createObjectURL(cvVideoFile);
+    clearReviewSession();
+    captureSetupMetadataToSession();
+
+    const setupScreen = document.getElementById('setup-screen');
+    if (setupScreen) setupScreen.classList.add('hidden');
+
+    // No job_id/token exist for this session — finishCvAnalysis is told not to
+    // add a catalogue card, since Open/Remove both require a job_id and would
+    // silently no-op on one, leaving a dead entry in Saved Matches.
+    finishCvAnalysis([], 'manual-skip', { skipCatalogue: true });
+}
+
+// --- 4a0. PLAYING-TIME WINDOW: when were you actually on the pitch? ---
+// Motivation (job e7efd5ac4bc3): on a 111-min video where the user came on at
+// 63', the seed clips landed at 11/39/66/94 min and the shuffle roamed to 12
+// and 51 min. Tapping "yourself" there seeded the appearance gallery with a
+// DIFFERENT player, and every auto-accepted touch was wrong. Declaring the
+// on-pitch ranges up front confines the seed clips and the whole pipeline, and
+// cuts runtime roughly in proportion to how much of the match was played.
+//
+// Ranges are [[startSec, endSec], ...] in video time, kept sorted and merged.
+// An empty array means "whole match" — the default, and identical to the old
+// behaviour end to end.
+let cvPlayRanges = [];
+let __pfPlayTimeDecided = false;   // has the user finished (or skipped) the step?
+let __pfPlayTimeSubmitted = false; // has the decision reached the server?
+let __pfPlayTimeDuration = 0;
+let __pfPlayTimeDrag = null;       // {rangeIndex, edge} while a handle is held
+
+function pfFmtClock(sec) {
+    var t = Math.max(0, Math.round(sec || 0));
+    var m = Math.floor(t / 60), s = t % 60;
+    return m + ':' + (s < 10 ? '0' : '') + s;
+}
+
+function showPlayingTimeScreen(videoURL) {
+    var screen = document.getElementById('cv-playtime-screen');
+    if (!screen) return;
+    cvPlayRanges = [];
+    __pfPlayTimeDecided = false;
+    __pfPlayTimeSubmitted = false;
+    screen.classList.remove('hidden');
+
+    var vid = document.getElementById('cv-playtime-video');
+    if (vid && videoURL) {
+        vid.src = videoURL;
+        // Duration is only known once metadata lands; until then the track has
+        // nothing to scale to, so the widget builds itself from this handler.
+        var onMeta = function () {
+            __pfPlayTimeDuration = (isFinite(vid.duration) && vid.duration > 0) ? vid.duration : 0;
+            cvPlayRanges = [[0, __pfPlayTimeDuration]];
+            pfRenderPlayingTime();
+            pfSeekPlaytimePreview(0);
+        };
+        if (isFinite(vid.duration) && vid.duration > 0) onMeta();
+        else vid.addEventListener('loadedmetadata', onMeta, { once: true });
+    }
+    pfWirePlayingTimeControls();
+    pfAlertInputNeeded();   // this step needs the user before anything can run
+}
+
+let __pfPlayTimeWired = false;
+
+function pfWirePlayingTimeControls() {
+    if (__pfPlayTimeWired) return;
+    __pfPlayTimeWired = true;
+
+    var presets = document.getElementById('cv-playtime-presets');
+    if (presets) {
+        presets.addEventListener('click', function (ev) {
+            var btn = ev.target.closest('[data-preset]');
+            if (!btn) return;
+            var d = __pfPlayTimeDuration;
+            if (btn.dataset.preset === 'whole') cvPlayRanges = [[0, d]];
+            else if (btn.dataset.preset === 'first') cvPlayRanges = [[0, d / 2]];
+            else cvPlayRanges = [[d / 2, d]];
+            pfRenderPlayingTime();
+            pfSeekPlaytimePreview(cvPlayRanges[0][0]);
+        });
+    }
+
+    var add = document.getElementById('cv-playtime-add');
+    if (add) add.addEventListener('click', pfAddPlayingPeriod);
+
+    var whole = document.getElementById('cv-playtime-whole');
+    if (whole) whole.addEventListener('click', function () {
+        cvPlayRanges = [];              // [] == unrestricted, server-side too
+        pfFinishPlayingTime();
+    });
+
+    var next = document.getElementById('cv-playtime-next');
+    if (next) next.addEventListener('click', function () {
+        cvPlayRanges = pfMergeRanges(cvPlayRanges);
+        pfFinishPlayingTime();
+    });
+
+    // Dragging is delegated from the track so handles can be re-rendered freely.
+    var track = document.getElementById('cv-playtime-track');
+    if (track) {
+        track.addEventListener('pointerdown', function (ev) {
+            var handle = ev.target.closest('.cv-playtime-handle');
+            if (!handle) return;
+            __pfPlayTimeDrag = {
+                rangeIndex: parseInt(handle.dataset.range, 10),
+                edge: handle.dataset.edge
+            };
+            // Capture keeps the drag alive if the pointer leaves the track; it
+            // throws for a pointer that isn't active, which must not kill the drag.
+            try { handle.setPointerCapture(ev.pointerId); } catch (e) {}
+            ev.preventDefault();
+        });
+        track.addEventListener('pointermove', function (ev) {
+            if (!__pfPlayTimeDrag) return;
+            pfDragPlayingHandle(ev);
+        });
+        var end = function () {
+            if (!__pfPlayTimeDrag) return;
+            __pfPlayTimeDrag = null;
+            // Merge only on release: merging mid-drag would delete the range
+            // under the user's finger the moment two periods touched.
+            cvPlayRanges = pfMergeRanges(cvPlayRanges);
+            pfRenderPlayingTime();
+        };
+        track.addEventListener('pointerup', end);
+        track.addEventListener('pointercancel', end);
+    }
+}
+
+function pfDragPlayingHandle(ev) {
+    var track = document.getElementById('cv-playtime-track');
+    var d = __pfPlayTimeDuration;
+    if (!track || !d) return;
+    var rect = track.getBoundingClientRect();
+    var frac = Math.min(1, Math.max(0, (ev.clientX - rect.left) / Math.max(1, rect.width)));
+    var t = frac * d;
+    var r = cvPlayRanges[__pfPlayTimeDrag.rangeIndex];
+    if (!r) return;
+    // Keep a period at least 10s wide so a handle can't be dragged through its
+    // partner and invert the range.
+    if (__pfPlayTimeDrag.edge === 'start') r[0] = Math.min(t, r[1] - 10);
+    else r[1] = Math.max(t, r[0] + 10);
+    r[0] = Math.max(0, r[0]);
+    r[1] = Math.min(d, r[1]);
+    pfRenderPlayingTime();
+    pfSeekPlaytimePreview(t);
+}
+
+function pfSeekPlaytimePreview(t) {
+    var vid = document.getElementById('cv-playtime-video');
+    var label = document.getElementById('cv-playtime-preview-time');
+    if (label) label.textContent = pfFmtClock(t);
+    if (!vid || !isFinite(t)) return;
+    try { vid.currentTime = Math.max(0, Math.min(t, __pfPlayTimeDuration || t)); } catch (e) {}
+}
+
+// Sort, clamp and merge touching/overlapping periods — mirrors the server's
+// play_ranges.normalize_ranges so what the user sees is what gets analysed.
+function pfMergeRanges(ranges) {
+    var d = __pfPlayTimeDuration;
+    var clean = (ranges || []).map(function (r) {
+        return [Math.max(0, Math.min(r[0], r[1])), Math.min(d || r[1], Math.max(r[0], r[1]))];
+    }).filter(function (r) { return r[1] - r[0] > 0.5; });
+    clean.sort(function (a, b) { return a[0] - b[0]; });
+    var out = [];
+    clean.forEach(function (r) {
+        var last = out[out.length - 1];
+        if (last && r[0] <= last[1] + 0.5) last[1] = Math.max(last[1], r[1]);
+        else out.push([r[0], r[1]]);
+    });
+    return out;
+}
+
+// Drop a new period into the widest gap between existing ones (or after the
+// last), so "Add another period" always produces something visible and grabbable.
+function pfAddPlayingPeriod() {
+    var d = __pfPlayTimeDuration;
+    if (!d) return;
+    var sorted = pfMergeRanges(cvPlayRanges);
+    var gaps = [];
+    var cursor = 0;
+    sorted.forEach(function (r) {
+        if (r[0] - cursor > 20) gaps.push([cursor, r[0]]);
+        cursor = Math.max(cursor, r[1]);
+    });
+    if (d - cursor > 20) gaps.push([cursor, d]);
+    if (!gaps.length) return;
+    gaps.sort(function (a, b) { return (b[1] - b[0]) - (a[1] - a[0]); });
+    var g = gaps[0];
+    var gapLen = g[1] - g[0];
+    // Never fill the gap edge to edge: a new period that touches its neighbour
+    // is merged away on the next normalise, so "Add another period" would
+    // silently collapse back to one range instead of adding anything.
+    var span = Math.min(gapLen * 0.6, Math.max(60, gapLen * 0.4));
+    var mid = (g[0] + g[1]) / 2;
+    sorted.push([Math.max(g[0], mid - span / 2), Math.min(g[1], mid + span / 2)]);
+    cvPlayRanges = pfMergeRanges(sorted);
+    pfRenderPlayingTime();
+}
+
+function pfRemovePlayingPeriod(i) {
+    if (cvPlayRanges.length <= 1) return;   // never leave the user with nothing
+    cvPlayRanges.splice(i, 1);
+    pfRenderPlayingTime();
+}
+
+function pfRenderPlayingTime() {
+    var track = document.getElementById('cv-playtime-track');
+    var periods = document.getElementById('cv-playtime-periods');
+    var total = document.getElementById('cv-playtime-total');
+    var d = __pfPlayTimeDuration;
+    if (!track || !d) return;
+
+    // Rebuild the bars, keeping the (static) tick strip.
+    Array.prototype.slice.call(track.querySelectorAll('.cv-playtime-range'))
+        .forEach(function (el) { el.remove(); });
+    pfRenderPlaytimeTicks(d);
+
+    cvPlayRanges.forEach(function (r, i) {
+        var bar = document.createElement('div');
+        bar.className = 'cv-playtime-range';
+        bar.style.left = (r[0] / d * 100) + '%';
+        bar.style.width = ((r[1] - r[0]) / d * 100) + '%';
+
+        var label = document.createElement('span');
+        label.className = 'cv-playtime-range-label';
+        label.textContent = pfFmtClock(r[0]) + ' – ' + pfFmtClock(r[1]);
+        bar.appendChild(label);
+
+        ['start', 'end'].forEach(function (edge) {
+            var h = document.createElement('button');
+            h.type = 'button';
+            h.className = 'cv-playtime-handle';
+            h.dataset.range = String(i);
+            h.dataset.edge = edge;
+            h.style.left = edge === 'start' ? '0%' : '100%';
+            h.setAttribute('aria-label',
+                (edge === 'start' ? 'Start' : 'End') + ' of period ' + (i + 1) +
+                ', ' + pfFmtClock(edge === 'start' ? r[0] : r[1]));
+            bar.appendChild(h);
+        });
+        track.appendChild(bar);
+    });
+
+    if (periods) {
+        periods.innerHTML = '';
+        cvPlayRanges.forEach(function (r, i) {
+            var row = document.createElement('div');
+            row.className = 'cv-playtime-period';
+            var name = document.createElement('span');
+            name.className = 'cv-playtime-period-name';
+            name.textContent = 'Period ' + (i + 1);
+            var time = document.createElement('span');
+            time.textContent = pfFmtClock(r[0]) + ' → ' + pfFmtClock(r[1]) +
+                '  (' + Math.round((r[1] - r[0]) / 60) + ' min)';
+            row.appendChild(name);
+            row.appendChild(time);
+            if (cvPlayRanges.length > 1) {
+                var rm = document.createElement('button');
+                rm.type = 'button';
+                rm.className = 'cv-btn-link';
+                rm.textContent = 'Remove';
+                rm.onclick = function () { pfRemovePlayingPeriod(i); };
+                row.appendChild(rm);
+            }
+            periods.appendChild(row);
+        });
+    }
+
+    if (total) {
+        var played = cvPlayRanges.reduce(function (a, r) { return a + (r[1] - r[0]); }, 0);
+        total.textContent = 'Analysing ' + Math.round(played / 60) + ' of ' +
+            Math.round(d / 60) + ' min';
+    }
+
+    // Highlight a preset chip only when the window matches it exactly.
+    var chips = document.querySelectorAll('#cv-playtime-presets .cv-chip');
+    Array.prototype.forEach.call(chips, function (c) {
+        var match = false;
+        if (cvPlayRanges.length === 1) {
+            var r = cvPlayRanges[0];
+            if (c.dataset.preset === 'whole') match = r[0] < 1 && r[1] > d - 1;
+            else if (c.dataset.preset === 'first') match = r[0] < 1 && Math.abs(r[1] - d / 2) < 1;
+            else match = Math.abs(r[0] - d / 2) < 1 && r[1] > d - 1;
+        }
+        c.classList.toggle('cv-chip-active', match);
+    });
+}
+
+function pfRenderPlaytimeTicks(d) {
+    var ticks = document.getElementById('cv-playtime-ticks');
+    if (!ticks || ticks.dataset.forDuration === String(Math.round(d))) return;
+    ticks.dataset.forDuration = String(Math.round(d));
+    ticks.innerHTML = '';
+    // ~8 labelled marks, rounded to a whole number of minutes.
+    var stepMin = Math.max(5, Math.round(d / 60 / 8 / 5) * 5);
+    for (var m = stepMin; m * 60 < d; m += stepMin) {
+        var el = document.createElement('div');
+        el.className = 'cv-playtime-tick';
+        el.style.left = (m * 60 / d * 100) + '%';
+        var lab = document.createElement('span');
+        lab.textContent = m + "'";
+        el.appendChild(lab);
+        ticks.appendChild(el);
+    }
+}
+
+function pfFinishPlayingTime() {
+    __pfPlayTimeDecided = true;
+    var screen = document.getElementById('cv-playtime-screen');
+    if (screen) screen.classList.add('hidden');
+    var vid = document.getElementById('cv-playtime-video');
+    if (vid) { try { vid.pause(); vid.removeAttribute('src'); vid.load(); } catch (e) {} }
+    saveCvSession({ play_ranges: cvPlayRanges });
+    pfSubmitPlayingTime();
+    pfShowTeamScreenWhenReady();
+}
+
+// Post the window to the server. Needs both a decision and a token, and the two
+// arrive in either order (upload runs concurrently with the step), so this is
+// called from both sides and no-ops until it can actually send.
+function pfSubmitPlayingTime() {
+    if (!__pfPlayTimeDecided || !cvToken || __pfPlayTimeSubmitted) return;
+    __pfPlayTimeSubmitted = true;
+    fetch(cvApiUrl('/api/v2/playing_time'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            token: cvToken,
+            ranges: cvPlayRanges,
+            my_team_hex: (cvMyTeam && cvMyTeam.hex) || null
+        })
+    }).then(function (r) { return r.json(); }).then(function (j) {
+        // The server normalises (clamps, merges, collapses whole-match to []);
+        // adopt its answer so the client and the analysis agree exactly.
+        if (j && j.ok && Array.isArray(j.ranges)) {
+            cvPlayRanges = j.ranges;
+            saveCvSession({ play_ranges: cvPlayRanges });
+        }
+    }).catch(function () {
+        // Offline / server down: the ranges still ride along on /api/v2/process.
+        __pfPlayTimeSubmitted = false;
+    });
+}
+
+function pfShowTeamScreenWhenReady() {
+    if (!__pfPlayTimeDecided) return;
+    var team = document.getElementById('cv-team-screen');
+    if (team) team.classList.remove('hidden');
 }
 
 // --- 4a. TEAM COLOUR DETECTION + PICKER ---
@@ -1594,7 +2007,6 @@ let cvMyTeam = null;
 let cvMyTeamId = 'team_a';
 
 function startTeamDetection() {
-    const screen = document.getElementById('cv-team-screen');
     const sub = document.getElementById('cv-team-sub');
     const opts = document.getElementById('cv-team-options');
     cvTrackerStartedAt = Date.now();
@@ -1605,7 +2017,9 @@ function startTeamDetection() {
         progress: 0,
         status: 'Uploading video for kit detection…'
     });
-    screen.classList.remove('hidden');
+    // The team screen stays hidden until the playing-time step is done — the two
+    // run concurrently, and showing both at once would stack overlays.
+    pfShowTeamScreenWhenReady();
     if (sub) sub.innerText = 'Detecting the two kit colours from your video...';
     if (opts) opts.innerHTML = '<div class="cv-team-spinner"></div>';
 
@@ -1673,6 +2087,9 @@ function startTeamDetection() {
                 cvTeams = data.teams || [];
                 cvSegmentsAreDemo = !!data.demo;
                 saveCvSession({ token: cvToken, teams: cvTeams });
+                // The window may already be decided (upload is slower than the
+                // step); this posts it now that there's a token to attach it to.
+                pfSubmitPlayingTime();
                 // v2: start compiling the soccer model now so the first seed clip
                 // is fast by the time the user finishes picking their team.
                 if (cvToken) {
@@ -1747,7 +2164,8 @@ function renderTeamOptions(warningText) {
         } else if (cvSegmentsAreDemo) {
             sub.innerText = 'Demo mode: pick which side you played for.';
         } else {
-            sub.innerText = 'We detected these kit colours from your video. Tap the one your team wears.';
+            sub.innerText = 'We read these kit colours from your video. Pick your team — '
+                + 'and if a kit has more than one colour, tap a circle to change it or + to add one.';
         }
     }
     opts.innerHTML = '';
@@ -1760,22 +2178,115 @@ function renderTeamOptions(warningText) {
     });
     // endregion
     cvTeams.forEach(function (team, i) {
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'cv-team-swatch';
-        const sw = document.createElement('span');
-        sw.className = 'cv-team-chip';
-        sw.style.backgroundColor = team.hex || '#888';
-        const label = document.createElement('span');
-        label.className = 'cv-team-label';
-        label.innerText = team.label || (team.id === 'team_b' ? 'Team B' : 'Team A');
-        btn.appendChild(sw);
-        btn.appendChild(label);
-        btn.onclick = function () { pickTeam(i); };
-        opts.appendChild(btn);
+        opts.appendChild(__cvBuildTeamCard(team, i));
     });
     if (!cvTeams.length && sub) sub.innerText = 'No players detected to read colours from. Try another clip.';
     pfAlertInputNeeded();   // team picker is ready — needs the user to choose
+}
+
+// A kit's colour list. `hexes` is the multi-colour field; fall back to the
+// single `hex` for saved sessions and older server responses.
+function __cvTeamHexes(team) {
+    if (!team) return [];
+    if (Array.isArray(team.hexes) && team.hexes.length) return team.hexes.slice();
+    return team.hex ? [team.hex] : [];
+}
+
+function __cvSetTeamHexes(team, hexes) {
+    team.hexes = hexes.slice();
+    team.hex = hexes[0] || team.hex;    // dominant colour stays `hex`
+}
+
+// One team card: its colour chips (each tappable to re-pick, each removable),
+// an "add colour" button, and the row that selects this team. Kits that aren't
+// one flat colour need every colour listed — averaging red and blue gives a
+// purple the kit doesn't contain, and nothing then matches it.
+function __cvBuildTeamCard(team, i) {
+    const card = document.createElement('div');
+    card.className = 'cv-team-card';
+
+    const chips = document.createElement('div');
+    chips.className = 'cv-team-chips';
+    const hexes = __cvTeamHexes(team);
+
+    hexes.forEach(function (hx, ci) {
+        const wrap = document.createElement('span');
+        wrap.className = 'cv-team-chip-wrap';
+
+        const picker = document.createElement('input');
+        picker.type = 'color';
+        picker.className = 'cv-team-chip-input';
+        picker.value = hx;
+        picker.title = 'Change this colour';
+        picker.setAttribute('aria-label',
+            (team.label || 'Team') + ' colour ' + (ci + 1));
+        picker.oninput = function () {
+            const next = __cvTeamHexes(team);
+            next[ci] = picker.value;
+            __cvSetTeamHexes(team, next);
+            wrap.style.setProperty('--chip', picker.value);
+        };
+        wrap.style.setProperty('--chip', hx);
+        wrap.appendChild(picker);
+
+        if (hexes.length > 1) {
+            const del = document.createElement('button');
+            del.type = 'button';
+            del.className = 'cv-team-chip-del';
+            del.innerHTML = '&times;';
+            del.title = 'Remove this colour';
+            del.setAttribute('aria-label', 'Remove colour ' + (ci + 1));
+            del.onclick = function (e) {
+                e.stopPropagation();
+                const next = __cvTeamHexes(team);
+                next.splice(ci, 1);
+                __cvSetTeamHexes(team, next);
+                renderTeamOptions();
+            };
+            wrap.appendChild(del);
+        }
+        chips.appendChild(wrap);
+    });
+
+    if (hexes.length < 3) {
+        const add = document.createElement('button');
+        add.type = 'button';
+        add.className = 'cv-team-chip-add';
+        add.innerHTML = '+';
+        add.title = 'Add another kit colour';
+        add.setAttribute('aria-label',
+            'Add a colour to ' + (team.label || 'this team'));
+        add.onclick = function (e) {
+            e.stopPropagation();
+            const next = __cvTeamHexes(team);
+            next.push(next[next.length - 1] || '#888888');
+            __cvSetTeamHexes(team, next);
+            renderTeamOptions();
+            // Open the picker on the chip we just added.
+            const inputs = document.querySelectorAll(
+                '.cv-team-card:nth-of-type(' + (i + 1) + ') .cv-team-chip-input');
+            const last = inputs[inputs.length - 1];
+            if (last && last.click) last.click();
+        };
+        chips.appendChild(add);
+    }
+
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cv-team-swatch';
+    const label = document.createElement('span');
+    label.className = 'cv-team-label';
+    label.innerText = team.label || (team.id === 'team_b' ? 'Team B' : 'Team A');
+    btn.appendChild(label);
+    const pick = document.createElement('span');
+    pick.className = 'cv-team-pick';
+    pick.innerText = 'This is my team';
+    btn.appendChild(pick);
+    btn.onclick = function () { pickTeam(i); };
+
+    card.appendChild(chips);
+    card.appendChild(btn);
+    return card;
 }
 
 function pickTeam(i) {
@@ -1796,14 +2307,19 @@ function pickTeam(i) {
         runBrowserDemo();
         return;
     }
-    // v2: identify YOU (not just the team) via a few tapped frames.
-    var seedVid = document.getElementById('cv-seed-video');
-    var dur = (seedVid && isFinite(seedVid.duration) && seedVid.duration > 0)
-        ? seedVid.duration : 0;
-    showV2SeedScreen(cvVideoURL, dur);
+    // Optional: mark out the pitch, so "who touched the ball" can be judged in
+    // metres rather than pixels. Skipping leaves everything exactly as before.
+    showPitchCalibScreen(cvToken, cvPlayRanges, function (calibration) {
+        cvPitchCalibration = calibration || null;
+        // v2: identify YOU (not just the team) via a few tapped frames.
+        var seedVid = document.getElementById('cv-seed-video');
+        var dur = (seedVid && isFinite(seedVid.duration) && seedVid.duration > 0)
+            ? seedVid.duration : 0;
+        showV2SeedScreen(cvVideoURL, dur);
+    });
 }
 
-// --- 4a. v2 SEED SCREEN: tap yourself on a tracked node in a 3s enhanced clip ---
+// --- 4a. v2 SEED SCREEN: tap yourself on a tracked node in a 3s clip ---
 // Each detected player gets a marker that follows them; tapping one turns that
 // player's whole-clip track into seed taps [{t_sec, nx, ny}] for /api/v2/process.
 let __v2Seed = null;
@@ -1901,8 +2417,12 @@ function __v2SeedTeamHiddenFlags(tracklets) {
 function showV2SeedScreen(url, duration) {
     __pfSeedReadyAlerted = false;   // arm the one-shot "seed ready" alert
     __v2Seed = {
-        reroll: 0, index: 0, moments: [], nMoments: 4,
-        clip: null, cache: {},           // cache key `${reroll}_${index}` -> clip
+        // Per-clip reroll: shuffling reshuffles only the current slot, so a
+        // good clip you've already marked isn't disturbed by fixing a bad one.
+        slotReroll: [0, 0, 0, 0], index: 0, moments: [], nMoments: 4,
+        clip: null, cache: {},           // cache key `${slotReroll[i]}_${index}` -> clip
+        chosen: {},                      // index -> chosen t_center, so clips avoid each other
+        shownMoments: {},                // index -> [t_centers shown], so shuffle never repeats
         // Mark yourself in as many clips as you appear in — every clip's taps
         // are combined into a stronger appearance seed. key -> {trackId, taps}.
         selections: {},
@@ -1958,14 +2478,46 @@ function __v2SeedUpdateFinishBtn() {
 
 function __v2SeedApi(path) { return cvApiUrl(path); }
 
+// Moments a newly-built clip should steer clear of: the OTHER clips' current
+// moments (so two clips never share a passage of play) PLUS this slot's own
+// shuffle history (so shuffling gives a genuinely new clip, never a repeat).
+function __v2SeedAvoidFor(index) {
+    const s = __v2Seed;
+    if (!s) return [];
+    const out = [];
+    Object.keys(s.chosen || {}).forEach(function (k) {
+        if (+k !== index && typeof s.chosen[k] === 'number') out.push(s.chosen[k]);
+    });
+    ((s.shownMoments || {})[index] || []).forEach(function (m) {
+        if (typeof m === 'number') out.push(m);
+    });
+    return out;
+}
+
+// Record a freshly-built clip's moment in the slot's history so future shuffles
+// avoid it. If the backend returned a moment we've already shown (it couldn't
+// find a new qualifying one — the well is dry), recycle quietly: restart this
+// slot's history so shuffling keeps working from the best moments again.
+function __v2SeedRecordMoment(index, t) {
+    const s = __v2Seed;
+    if (!s || typeof t !== 'number') return;
+    if (!s.shownMoments) s.shownMoments = {};
+    var hist = s.shownMoments[index] || [];
+    var repeat = hist.some(function (m) { return Math.abs(m - t) < 8; });
+    s.shownMoments[index] = repeat ? [t] : hist.concat([t]).slice(-20);
+}
+
 function __v2SeedLoadIndex(then) {
     const s = __v2Seed;
     if (!s || !cvToken) { if (then) then(); return; }
     fetch(__v2SeedApi('/api/v2/seed_clips_index'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: cvToken, reroll: s.reroll }),
+        body: JSON.stringify({ token: cvToken, reroll: 0, play_ranges: cvPlayRanges || [] }),
     }).then(function (r) { return r.json(); }).then(function (data) {
-        if (data && data.moments) { s.moments = data.moments; s.nMoments = data.moments.length; }
+        if (data && data.moments) {
+            s.moments = data.moments; s.nMoments = data.moments.length;
+            while (s.slotReroll.length < s.nMoments) s.slotReroll.push(0);
+        }
         if (then) then();
     }).catch(function () { if (then) then(); });
 }
@@ -1979,7 +2531,7 @@ function __v2SeedRenderClipNav() {
         const dot = document.createElement('button');
         dot.type = 'button';
         dot.className = 'cv-seed-clip-dot' + (i === s.index ? ' active' : '') +
-            (s.selections[s.reroll + '_' + i] ? ' picked' : '');
+            (s.selections[(s.slotReroll[i] || 0) + '_' + i] ? ' picked' : '');
         dot.title = 'Clip ' + (i + 1);
         dot.onclick = (function (idx) { return function () { __v2SeedLoadClip(idx); }; })(i);
         el.appendChild(dot);
@@ -2017,7 +2569,7 @@ function __v2SeedStartLoadTicker(index) {
     const started = Date.now();
     function render() {
         const secs = Math.floor((Date.now() - started) / 1000);
-        let html = 'Enhancing clip ' + (index + 1) + '… <span style="opacity:.7">' +
+        let html = 'Loading clip ' + (index + 1) + '… <span style="opacity:.7">' +
             secs + 's</span>';
         if (first) {
             html += '<br><span style="opacity:.75;font-size:.82em">' +
@@ -2044,7 +2596,7 @@ function __v2SeedLoadClip(index) {
     __v2SeedStopAnim();
     document.getElementById('cv-seed-nodes').innerHTML = '';
 
-    const key = s.reroll + '_' + index;
+    const key = (s.slotReroll[index] || 0) + '_' + index;
     const hint = document.getElementById('cv-seed-hint');
     const cached = s.cache[key];
     if (cached) { __v2SeedShowClip(cached, key); __v2SeedPrefetchNext(); return; }
@@ -2052,20 +2604,27 @@ function __v2SeedLoadClip(index) {
     __v2SeedStartLoadTicker(index);
     if (hint) {
         hint.innerText = __v2SeedBuilt
-            ? 'Preparing an enhanced clip and tracking the players…'
+            ? 'Tracking players in this clip…'
             : 'Getting your first clip ready — this one takes a little longer.';
     }
     fetch(__v2SeedApi('/api/v2/seed_clip'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: cvToken, index: index, reroll: s.reroll }),
+        body: JSON.stringify({
+            token: cvToken, index: index, reroll: (s.slotReroll[index] || 0),
+            my_team_hex: (cvMyTeam && cvMyTeam.hex) || null,
+            avoid: __v2SeedAvoidFor(index),
+            play_ranges: cvPlayRanges || [],
+        }),
     }).then(function (r) { return r.json(); }).then(function (data) {
-        if (!data || data.error || !data.clip_url) {
+        if (!data || data.error || (!data.video_url && !data.clip_url)) {
             throw new Error((data && data.error) || 'clip failed');
         }
         __v2SeedBuilt = true;
         s.cache[key] = data;
+        if (typeof data.t_center === 'number') s.chosen[index] = data.t_center;
+        __v2SeedRecordMoment(index, data.t_center);   // remember it so shuffle won't repeat
         // Only render if the user hasn't navigated away while we loaded.
-        if (s.reroll + '_' + s.index === key) { __v2SeedShowClip(data, key); }
+        if ((s.slotReroll[s.index] || 0) + '_' + s.index === key) { __v2SeedShowClip(data, key); }
         __v2SeedPrefetchNext();
     }).catch(function () {
         __v2SeedSetLoading(false);
@@ -2078,19 +2637,30 @@ function __v2SeedPrefetchNext() {
     if (!s) return;
     const nxt = s.index + 1;
     if (nxt >= s.nMoments) return;
-    const key = s.reroll + '_' + nxt;
+    const key = (s.slotReroll[nxt] || 0) + '_' + nxt;
     if (s.cache[key]) return;
     fetch(__v2SeedApi('/api/v2/seed_clip'), {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ token: cvToken, index: nxt, reroll: s.reroll }),
+        body: JSON.stringify({
+            token: cvToken, index: nxt, reroll: (s.slotReroll[nxt] || 0),
+            my_team_hex: (cvMyTeam && cvMyTeam.hex) || null,
+            avoid: __v2SeedAvoidFor(nxt),
+            play_ranges: cvPlayRanges || [],
+        }),
     }).then(function (r) { return r.json(); }).then(function (data) {
-        if (data && data.clip_url) { __v2SeedBuilt = true; s.cache[s.reroll + '_' + nxt] = data; }
+        if (data && (data.video_url || data.clip_url)) {
+            __v2SeedBuilt = true;
+            s.cache[(s.slotReroll[nxt] || 0) + '_' + nxt] = data;
+            if (typeof data.t_center === 'number') s.chosen[nxt] = data.t_center;
+            __v2SeedRecordMoment(nxt, data.t_center);
+        }
     }).catch(function () {});
 }
 
 function __v2SeedShowClip(clip, key) {
     const s = __v2Seed;
     s.clip = clip;
+    if (clip && typeof clip.t_center === 'number') s.chosen[s.index] = clip.t_center;
     const vid = document.getElementById('cv-seed-video');
     const hint = document.getElementById('cv-seed-hint');
     __v2SeedSetLoading(false);
@@ -2150,11 +2720,42 @@ function __v2SeedShowClip(clip, key) {
     }
     __v2SeedUpdateFinishBtn();
     __v2SeedShowPlayPause(false);   // starts playing → hide indicator
-    vid.src = cvApiUrl(clip.clip_url);
-    vid.currentTime = 0;
-    const p = vid.play();
-    if (p && p.catch) p.catch(function () {});
+    __v2SeedAttachVideo(vid, clip);
     __v2SeedStartAnim();
+}
+
+// Play a seed moment from the uploaded video (no separate encoded clip).
+function __v2SeedAttachVideo(vid, clip) {
+    if (!vid || !clip) return;
+    var url = cvVideoURL || cvVideoUrlForToken(cvToken);
+    var start = clip.start_sec || 0;
+    var end = start + (clip.duration_sec || 3);
+    function seekStart() {
+        try { vid.currentTime = start; } catch (e) {}
+        var p = vid.play();
+        if (p && p.catch) p.catch(function () {});
+    }
+    if (vid.getAttribute('data-seed-src') !== url) {
+        vid.setAttribute('data-seed-src', url);
+        vid.src = url;
+        vid.load();
+        vid.addEventListener('loadeddata', function ol() {
+            vid.removeEventListener('loadeddata', ol);
+            seekStart();
+        });
+    } else if (vid.readyState >= 1) {
+        seekStart();
+    }
+    vid.ontimeupdate = function () {
+        if (vid.currentTime >= end || vid.currentTime < start - 0.05) {
+            try { vid.currentTime = start; } catch (e) {}
+        }
+    };
+}
+
+// Clip-local playback time (tracklet points are 0 … duration_sec).
+function __v2SeedLocalT(vid, clip) {
+    return Math.max(0, (vid && vid.currentTime || 0) - ((clip && clip.start_sec) || 0));
 }
 
 // Node anchor: markers sit this far down from the top of the clip.
@@ -2184,7 +2785,7 @@ function __v2SeedStartAnim() {
         const s = __v2Seed;
         if (!s || !s.clip) return;
         // currentTime is constant while paused, so the markers freeze in place.
-        const t = vid.currentTime || 0;
+        const t = __v2SeedLocalT(vid, s.clip);
         const els = s.nodeEls || [];
         const tracks = s.clip.tracklets || [];
         for (let i = 0; i < tracks.length && i < els.length; i++) {
@@ -2291,7 +2892,7 @@ function __v2SeedPickNode(tr, key) {
     const s = __v2Seed;
     if (!s) return;
     const vid = document.getElementById('cv-seed-video');
-    const tapT = (vid && vid.currentTime) || 0;
+    const tapT = __v2SeedLocalT(vid, s.clip);
     const cur = s.selections[key];
     const deselect = cur && String(cur.trackId) === String(tr.id);  // tap again → clear
     if (deselect) {
@@ -2340,7 +2941,7 @@ function __v2SeedSetFlag(show, switched) {
 function __v2SeedRejectClip() {
     const s = __v2Seed;
     if (!s) return;
-    const key = s.reroll + '_' + s.index;
+    const key = (s.slotReroll[s.index] || 0) + '_' + s.index;
     delete s.selections[key];
     (s.nodeEls || []).forEach(function (e) { e.group.classList.remove('selected'); });
     __v2SeedSetFlag(false, false);
@@ -2349,11 +2950,19 @@ function __v2SeedRejectClip() {
     __v2SeedNextClip();
 }
 
+// Shuffle THIS clip only — reshuffles the current slot to a fresh moment,
+// leaving the other clips (and anything you've already marked in them) intact.
 function __v2SeedReroll() {
     const s = __v2Seed;
     if (!s) return;
-    s.reroll += 1;   // selections persist — every marked clip still counts
-    __v2SeedLoadIndex(function () { __v2SeedLoadClip(0); });
+    const i = s.index;
+    // Drop this slot's current mark — it's about to be a different moment — but
+    // keep every other clip's selection so already-good clips still count.
+    delete s.selections[(s.slotReroll[i] || 0) + '_' + i];
+    delete s.chosen[i];    // this slot's old moment no longer constrains others
+    s.slotReroll[i] = (s.slotReroll[i] || 0) + 1;
+    __v2SeedUpdateFinishBtn();
+    __v2SeedLoadClip(i);   // rebuild only this slot, at its new reroll
 }
 
 function __v2SeedNextClip() {
@@ -2451,7 +3060,28 @@ function startCvV2Analysis(taps) {
     const fd = new FormData();
     fd.append('token', cvToken);
     fd.append('seed_taps', JSON.stringify(taps || []));
+    // Belt and braces: the server prefers its own stored playing_time.json, but
+    // sending it here covers the case where /api/v2/playing_time never landed
+    // (offline blip, server restart mid-flow).
+    fd.append('play_ranges', JSON.stringify(cvPlayRanges || []));
     if (cvMyTeamId) fd.append('my_team', cvMyTeamId);
+    // The OTHER detected kit colour (the team the user didn't pick) → lets the
+    // pipeline's team gate positively identify and drop wrong-team touches.
+    var oppTeam = (cvTeams || []).filter(function (t) {
+        return t && t.id !== cvMyTeamId;
+    })[0];
+    if (oppTeam && oppTeam.hex) fd.append('opponent_hex', oppTeam.hex);
+    // Full colour sets too: a kit that isn't one flat colour is matched on any
+    // of its colours, so all of them have to reach the team gate.
+    var oppHexes = __cvTeamHexes(oppTeam);
+    if (oppHexes.length) fd.append('opponent_hexes', JSON.stringify(oppHexes));
+    var mineHexes = __cvTeamHexes(cvMyTeam);
+    if (mineHexes.length) fd.append('my_team_hexes', JSON.stringify(mineHexes));
+    // Pitch calibration (optional). The server re-fits these clicks itself, so
+    // what rides along is the marks plus our fit as a starting hint.
+    if (cvPitchCalibration) {
+        fd.append('calibration', JSON.stringify(cvPitchCalibration));
+    }
     var meta = getSetupMetadataFields();
     fd.append('opponent', meta.opponent || '');
     fd.append('match_date', meta.match_date || '');
@@ -2501,6 +3131,7 @@ function showV2Montage(j) {
         autoHide: items.filter(function (it) { return it.status === 'auto_hide'; }).length,
         warnings: (j && j.warnings) || []
     };
+    pfShowPipelineWarnings(__v2Montage.warnings);
 
     var screen = document.getElementById('cv-montage-screen');
     var card = screen.querySelector('.cv-montage-card');
@@ -2518,15 +3149,13 @@ function showV2Montage(j) {
     var undoBtn = document.getElementById('cv-montage-undo-btn');
     if (undoBtn) undoBtn.onclick = function () { __v2MontageUndo(); };
 
-    // zoom / enhance controls (re-created on restore)
+    // zoom / pan controls (re-created on restore)
     var zin = document.getElementById('cv-montage-zoomin');
     var zout = document.getElementById('cv-montage-zoomout');
     var zreset = document.getElementById('cv-montage-zoomreset');
-    var enh = document.getElementById('cv-montage-enhance');
     if (zin) zin.onclick = function () { __v2MontageZoomStep(1.4); };
     if (zout) zout.onclick = function () { __v2MontageZoomStep(1 / 1.4); };
     if (zreset) zreset.onclick = function () { __v2MontageResetView(); };
-    if (enh) enh.onclick = function () { __v2MontageEnhance(); };
     __v2MontageWireCanvas();
 
     var vid = document.getElementById('cv-montage-video');
@@ -2581,23 +3210,28 @@ function __v2MontageRenderProgress() {
 }
 
 // Interpolate a review tracklet's normalized centre at absolute video time t.
+// Outside the tracked span → null (hide the box; do not hold last position).
 function __v2MontagePosAt(points, t) {
     if (!points || !points.length) return null;
-    if (t <= points[0].t_sec) return points[0];
-    var last = points[points.length - 1];
+    var first = points[0], last = points[points.length - 1];
+    var pad = 0.04;  // ~1 frame at 25fps
+    if (t < first.t_sec - pad || t > last.t_sec + pad) return null;
+    if (t <= first.t_sec) return first;
     if (t >= last.t_sec) return last;
     for (var i = 0; i < points.length - 1; i++) {
         var a = points[i], b = points[i + 1];
         if (t >= a.t_sec && t <= b.t_sec) {
+            // Gap in the track (lost lock, then later points) → hide in between
+            if ((b.t_sec - a.t_sec) > 0.2) return null;
             var f = (b.t_sec - a.t_sec) > 1e-6 ? (t - a.t_sec) / (b.t_sec - a.t_sec) : 0;
             return { nx: a.nx + (b.nx - a.nx) * f, ny: a.ny + (b.ny - a.ny) * f };
         }
     }
-    return last;
+    return null;
 }
 
 // Fetch (and cache on the item) the tracklet that makes the ring follow the
-// reviewed player. Falls back silently to the fixed crop on any failure.
+// reviewed player. Falls back silently to player_bbox / contact marker.
 function __v2MontageFetchTrack(it) {
     var m = __v2Montage;
     if (!m || !it || it.__track !== undefined) return;
@@ -2608,21 +3242,86 @@ function __v2MontageFetchTrack(it) {
         .catch(function () { it.__track = []; });
 }
 
+// Pipeline boxes live in target_width=640 space; map to the video's native px.
+function __v2MontageNativeScale(nW) {
+    return nW / 640;
+}
+
+// Body box for the attributed player, in native-frame pixels.
+// Only when identity_linked: box the continuity-linked player. Hide when the
+// track is lost or the contact is uncertain (user sorts those clips).
+function __v2MontagePlayerBox(it, absT, nW, nH) {
+    if (it.identity_linked === false) return null;
+    var sc = __v2MontageNativeScale(nW);
+    var pb = it.player_bbox;
+    var nearTouch = (typeof it.t_sec === 'number') && Math.abs(absT - it.t_sec) <= 0.2;
+    if (it.__track && it.__track.length) {
+        var pos = __v2MontagePosAt(it.__track, absT);
+        if (pos) {
+            var p0 = it.__track[0];
+            return {
+                cx: pos.nx * nW,
+                cy: pos.ny * nH,
+                w: ((p0 && p0.nw) ? p0.nw : 0.055) * nW,
+                h: ((p0 && p0.nh) ? p0.nh : 0.14) * nH
+            };
+        }
+        // Track exists but lost lock at this time → hide (do not freeze last box)
+        if (!nearTouch) return null;
+    }
+    if (pb && pb.length === 4 && nearTouch) {
+        return {
+            cx: ((pb[0] + pb[2]) / 2) * sc,
+            cy: ((pb[1] + pb[3]) / 2) * sc,
+            w: (pb[2] - pb[0]) * sc,
+            h: (pb[3] - pb[1]) * sc
+        };
+    }
+    if (pb && pb.length === 4 && !(it.__track && it.__track.length)) {
+        return {
+            cx: ((pb[0] + pb[2]) / 2) * sc,
+            cy: ((pb[1] + pb[3]) / 2) * sc,
+            w: (pb[2] - pb[0]) * sc,
+            h: (pb[3] - pb[1]) * sc
+        };
+    }
+    return null;
+}
+
+// Ball / touch point from the montage crop (always ball-centered).
+function __v2MontageBallPoint(it, nW) {
+    if (!it.crop || it.crop.length !== 4) return null;
+    var sc = __v2MontageNativeScale(nW);
+    return {
+        cx: ((it.crop[0] + it.crop[2]) / 2) * sc,
+        cy: ((it.crop[1] + it.crop[3]) / 2) * sc
+    };
+}
+
 function __v2MontageShow() {
     var m = __v2Montage; if (!m) return;
     var it = m.queue[0];
     if (!it) { __v2MontageFinalize(); return; }
     m.curItem = it;
     m.zoom = 1; m.panX = 0.5; m.panY = 0.5;        // reset view for each clip
-    m.enhanced = false; m.timeOffset = 0;
+    m.timeOffset = 0;
     __v2MontageUpdateZoomUI();
-    __v2MontageUpdateEnhanceUI(true, false);
     __v2MontageRenderProgress();
     var meta = document.getElementById('cv-montage-meta');
     if (meta) {
+        var crowdBadge = it.crowded
+            ? '<span class="cv-montage-crowded" title="' + (it.n_nearby_players || 0) +
+              ' players around the ball — we can\'t tell who touched it">Crowded</span>'
+            : '';
+        // Tell the user WHY there is (or isn't) a box: linked = we followed
+        // you here from a confirmed sighting; uncertain = look at the ball.
+        var idBadge = (it.identity_linked === false)
+            ? '<span class="cv-montage-unlinked" title="We lost track of you before this touch, so no box is drawn — judge from the play">Uncertain — no box</span>'
+            : '<span class="cv-montage-linked" title="Tracked from a confirmed sighting of you — the box follows that player">Tracked</span>';
         meta.innerHTML =
             '<span class="cv-montage-time">' + __v2FmtTime(it.t_sec) + '</span>' +
             '<span class="cv-montage-kinds">' + (it.kinds || []).join(' · ') + '</span>' +
+            crowdBadge + idBadge +
             '<span class="cv-montage-conf">match ' + Math.round((it.confidence || 0) * 100) + '%</span>';
     }
     __v2MontageFetchTrack(it);                     // ring-follow track for this touch
@@ -2632,21 +3331,14 @@ function __v2MontageShow() {
     __v2MontageStartDraw();
 }
 
-// Point the video at the right source for the current mode (original full video,
-// seeked to the clip window; or the standalone enhanced clip) without disturbing
-// the zoom/pan state — so the Enhance toggle keeps your current view.
+// Point the video at the source clip window without disturbing zoom/pan.
 function __v2MontageLoadSource() {
     var m = __v2Montage; if (!m || !m.curItem) return;
     var it = m.curItem;
     var vid = document.getElementById('cv-montage-video');
-    var srcUrl, start, end;
-    if (m.enhanced && it.__enh) {
-        srcUrl = cvApiUrl(it.__enh.clip_url); start = 0;
-        end = it.__enh.duration || 2; m.timeOffset = it.__enh.start_sec || 0;
-    } else {
-        srcUrl = cvApiUrl('/api/video/' + m.token);
-        start = it.clip_start_sec; end = it.clip_end_sec; m.timeOffset = 0;
-    }
+    var srcUrl = cvApiUrl('/api/video/' + m.token);
+    var start = it.clip_start_sec, end = it.clip_end_sec;
+    m.timeOffset = 0;
     m.playStart = start; m.playEnd = end;
     function seekStart() {
         try { vid.currentTime = start; } catch (e) {}
@@ -2693,31 +3385,14 @@ function __v2MontageStartDraw() {
             var sy = Math.max(0, Math.min(nH - sh, (mm.panY || 0.5) * nH - sh / 2));
             ctx.drawImage(vid, sx, sy, sw, sh, 0, 0, canvas.width, canvas.height);
 
-            // Rectangle outlining the player we believe made this touch. It
-            // follows the tracklet across the clip (absolute time handles the
-            // enhanced clip's own clock); size comes from the tracked body box.
+            // Green box = continuity-linked "you" only. Yellow dot = ball.
+            // Hide the box when identity is uncertain or the track is lost.
             var absT = (vid.currentTime || 0) + (mm.timeOffset || 0);
-            var pos = (it.__track && it.__track.length)
-                ? __v2MontagePosAt(it.__track, absT) : null;
-            var bcx, bcy, bboxW, bboxH;   // body-box centre + size, native frame px
-            if (pos) {
-                var p0 = it.__track[0];
-                var nwN = (p0 && p0.nw) ? p0.nw : 0.055;
-                var nhN = (p0 && p0.nh) ? p0.nh : 0.14;
-                bcx = pos.nx * nW; bcy = pos.ny * nH;
-                bboxW = nwN * nW; bboxH = nhN * nH;
-            } else if (it.crop) {
-                var scc = nW / Math.min(nW, 640);            // crop is in 640-space
-                bcx = ((it.crop[0] + it.crop[2]) / 2) * scc;
-                bcy = ((it.crop[1] + it.crop[3]) / 2) * scc;
-                bboxW = (it.crop[2] - it.crop[0]) * scc;
-                bboxH = (it.crop[3] - it.crop[1]) * scc;
-            }
-            if (bboxW) {
-                bboxW *= 1.06; bboxH *= 1.08;                // small pad around the body
-                // Map native-frame px through the current zoom/pan window.
-                var rx = (bcx - bboxW / 2 - sx) / sw * canvas.width;
-                var ry = (bcy - bboxH / 2 - sy) / sh * canvas.height;
+            var box = __v2MontagePlayerBox(it, absT, nW, nH);
+            if (box && box.w > 0 && box.h > 0) {
+                var bboxW = box.w * 1.06, bboxH = box.h * 1.08;
+                var rx = (box.cx - bboxW / 2 - sx) / sw * canvas.width;
+                var ry = (box.cy - bboxH / 2 - sy) / sh * canvas.height;
                 var rw = bboxW / sw * canvas.width;
                 var rh = bboxH / sh * canvas.height;
                 ctx.lineWidth = Math.max(2, canvas.width * 0.004);
@@ -2727,27 +3402,32 @@ function __v2MontageStartDraw() {
                 ctx.strokeRect(rx, ry, rw, rh);
                 ctx.shadowBlur = 0;
             }
+            var ball = __v2MontageBallPoint(it, nW);
+            if (ball) {
+                var bcx = (ball.cx - sx) / sw * canvas.width;
+                var bcy = (ball.cy - sy) / sh * canvas.height;
+                var br = Math.max(3, canvas.width * 0.006);
+                ctx.beginPath();
+                ctx.arc(bcx, bcy, br, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 220, 60, 0.95)';
+                ctx.strokeStyle = 'rgba(0,0,0,0.55)';
+                ctx.lineWidth = Math.max(1, canvas.width * 0.002);
+                ctx.fill();
+                ctx.stroke();
+            }
         }
         requestAnimationFrame(draw);
     }
     requestAnimationFrame(draw);
 }
 
-// --- zoom / pan / enhance controls ---
+// --- zoom / pan controls ---
 function __v2MontageUpdateZoomUI() {
     var m = __v2Montage; if (!m) return;
     var lvl = document.getElementById('cv-montage-zoomlevel');
     if (lvl) lvl.textContent = (m.zoom || 1).toFixed(1) + '×';
     var out = document.getElementById('cv-montage-zoomout');
     if (out) out.disabled = (m.zoom || 1) <= 1.001;
-}
-
-function __v2MontageUpdateEnhanceUI(enabled, on, label) {
-    var b = document.getElementById('cv-montage-enhance');
-    if (!b) return;
-    b.disabled = enabled === false;
-    b.textContent = label || (on ? 'Enhanced' : 'Enhance');
-    b.classList.toggle('on', !!on);
 }
 
 function __v2MontageClampPan() {
@@ -2788,40 +3468,14 @@ function __v2MontageResetView() {
     __v2MontageUpdateZoomUI();
 }
 
-function __v2MontageEnhance() {
-    var m = __v2Montage; if (!m || !m.curItem) return;
-    var it = m.curItem;
-    if (m.enhanced) {                                  // toggle back to original
-        m.enhanced = false;
-        __v2MontageUpdateEnhanceUI(true, false);
-        __v2MontageLoadSource();
-        return;
-    }
-    if (it.__enh) {                                    // already built → instant
-        m.enhanced = true;
-        __v2MontageUpdateEnhanceUI(true, true);
-        __v2MontageLoadSource();
-        return;
-    }
-    __v2MontageUpdateEnhanceUI(false, false, 'Enhancing…');
-    fetch(cvApiUrl('/api/v2/enhance_clip/' + m.jobId + '/' + it.rank))
-        .then(function (r) { return r.json(); })
-        .then(function (d) {
-            if (!d || d.error || !d.clip_url) throw new Error('enhance failed');
-            it.__enh = d;
-            if (m.curItem === it) {
-                m.enhanced = true;
-                __v2MontageUpdateEnhanceUI(true, true);
-                __v2MontageLoadSource();
-            }
-        })
-        .catch(function () { __v2MontageUpdateEnhanceUI(true, false, 'Enhance'); });
-}
-
 // Does deciding `it` as `dec` also settle queued touch `q`?
 //  • colour: "Not me" on the OTHER team clears every other same-kit opponent.
 //  • appearance: within your kit, a look-alike group settles both ways (soft).
+//  • crowded touches (corner kicks / scrambles) never auto-settle either way —
+//    the kit/look-alike grouping behind propagation comes from an attribution
+//    we don't trust in a pack, so the user judges each one.
 function __v2MontageMatches(it, q, dec) {
+    if (it.crowded || q.crowded) return null;
     if (dec === 'not_me' && it.is_other_team && q.is_other_team &&
         q.kit_group >= 0 && q.kit_group === it.kit_group) {
         return 'hard';
@@ -3119,13 +3773,15 @@ function cancelCvAnalysis() {
 function finishFromStatus(j) {
     if (j && j.pipeline_version === 'v2') {
         if (j.state === 'review') { enterV2Review(j); return; }
+        pfShowPipelineWarnings(j.warnings || []);   // review was skipped/empty — still surface these
         finishCvAnalysis(v2HotspotsToSegments(j.hotspots || []), 'v2');
         return;
     }
     finishCvAnalysis((j && j.segments) || [], j && j.note);
 }
 
-function finishCvAnalysis(segments, note) {
+function finishCvAnalysis(segments, note, opts) {
+    opts = opts || {};
     clearReviewSession();
     clipSegmentsLibrary = Array.isArray(segments) ? segments : [];
     if (note === 'browser-demo' || (note && note.indexOf('demo') !== -1)) cvSegmentsAreDemo = true;
@@ -3152,20 +3808,24 @@ function finishCvAnalysis(segments, note) {
     setTimeout(hideProcessTracker, 2500);
     saveCvSession({ state: 'done', job_id: cvJobId, token: cvToken });
     var meta = getSetupMetadataFields();
-    var catEntry = {
-        job_id: cvJobId,
-        token: cvToken,
-        my_team: cvMyTeamId,
-        opponent: meta.opponent,
-        match_date: meta.match_date,
-        score_us: meta.score_us,
-        score_them: meta.score_them,
-        position: meta.position,
-        n_hotspots: clipSegmentsLibrary.length,
-        analysed_at: Date.now() / 1000,
-        video_available: true
-    };
-    pushMatchCatalogueEntry(catEntry);
+    if (!opts.skipCatalogue) {
+        var catEntry = {
+            job_id: cvJobId,
+            token: cvToken,
+            my_team: cvMyTeamId,
+            opponent: meta.opponent,
+            match_date: meta.match_date,
+            score_us: meta.score_us,
+            score_them: meta.score_them,
+            position: meta.position,
+            n_hotspots: clipSegmentsLibrary.length,
+            analysed_at: Date.now() / 1000,
+            // Only a server-uploaded token can be replayed later — a manual
+            // session's video is a local blob URL that dies with the tab.
+            video_available: !!cvToken
+        };
+        pushMatchCatalogueEntry(catEntry);
+    }
     sendMatchMetadataToServer(cvJobId, meta);
     var videoSrc = cvVideoURL || cvVideoUrlForToken(cvToken);
     enterMainAppWithVideo(videoSrc);
@@ -3492,6 +4152,16 @@ function goBack() {
 // --- 11. FINISH MATCH ---
 let currentHybridResults = null;
 
+// Colors a stat span by sign: green if it worked out for the player this
+// match, red if it didn't. Used for Impact/Risk, which are net totals that can
+// land on either side of zero (unlike Goals/Assists, which only ever add up).
+function setSignedStat(elId, value) {
+    const el = document.getElementById(elId);
+    if (!el) return;
+    el.innerText = value;
+    el.style.color = parseFloat(value) >= 0 ? 'var(--fifa-green)' : 'var(--fifa-red)';
+}
+
 function finishMatch() {
     const videoPlayer = document.getElementById('main-player');
     videoPlayer.pause();
@@ -3512,12 +4182,17 @@ function finishMatch() {
         document.getElementById('res-goals').innerText = totalGoals;
         document.getElementById('res-assists').innerText = totalAssists;
         document.getElementById('res-overall').innerText = currentHybridResults.netScore;
-        document.getElementById('res-off-markov').innerText = currentHybridResults.offMarkov;
-        document.getElementById('res-off-ridge').innerText = currentHybridResults.offRidge;
-        document.getElementById('res-def-markov').innerText = currentHybridResults.defMarkov;
-        document.getElementById('res-def-ridge').innerText = currentHybridResults.defRidge;
         const oaVal = parseFloat(currentHybridResults.netScore);
         document.getElementById('res-overall').style.color = oaVal >= 0 ? '#4caf50' : '#f44336';
+
+        // Impact and Risk are both net figures that can land either side of zero
+        // (e.g. a dispossession drags Impact negative; a risk that didn't pay
+        // off drags Risk negative) — color by sign so "did this help or hurt"
+        // reads at a glance instead of hiding inside a plain number.
+        setSignedStat('res-off-markov', currentHybridResults.offMarkov);
+        setSignedStat('res-off-ridge', currentHybridResults.offRidge);
+        setSignedStat('res-def-markov', currentHybridResults.defMarkov);
+        setSignedStat('res-def-ridge', currentHybridResults.defRidge);
         renderWPAChart(currentHybridResults.chartData, duration, excludedRanges);
         saveMatchSession(cvJobId);
     } else {
@@ -3567,10 +4242,131 @@ function renderWPAChart(data, maxDuration, excludedRanges) {
 }
 
 // --- 13. AI SCOUT REPORT (GROQ) ---
+const PF_GROQ_KEY = 'futfidget_groq_key';
+const PF_ONBOARDING_DONE_KEY = 'polyfut_onboarding_done';
+
+// --- AI transport: hosted proxy first, user's own key as the fallback -------
+// Reports used to require every user to make a Groq account and paste a key.
+// The key now lives in a Modal secret behind a proxy we host (see ai_backend/),
+// so the normal path needs nothing from the user. A locally-saved key still
+// works and is used automatically if the proxy is unconfigured or unreachable —
+// so a Modal outage or an exhausted daily quota degrades to the old behaviour
+// instead of removing the feature.
+let pfAiProxy = null;          // {proxy_url, app_token} once /api/ai_config answers
+let pfAiProxyChecked = false;
+
+function pfLoadAiConfig() {
+    return fetch(cvApiUrl('/api/ai_config'))
+        .then(function (r) { return r.json(); })
+        .then(function (cfg) {
+            pfAiProxy = (cfg && cfg.enabled && cfg.proxy_url) ? cfg : null;
+            return pfAiProxy;
+        })
+        .catch(function () { pfAiProxy = null; return null; })
+        .then(function (out) { pfAiProxyChecked = true; return out; });
+}
+
+function pfAiReady() {
+    // Either transport counts: the hosted proxy, or a key the user saved.
+    try { return !!pfAiProxy || !!localStorage.getItem(PF_GROQ_KEY); } catch (e) { return !!pfAiProxy; }
+}
+
+function pfSavedGroqKey() {
+    try {
+        return localStorage.getItem(PF_GROQ_KEY) ||
+            (document.getElementById('api-key-input') || {}).value || '';
+    } catch (e) { return ''; }
+}
+
+/**
+ * Send a chat history and get the assistant's reply text.
+ *
+ * One helper for both the initial report and the follow-up Q&A, because both
+ * are the same call with a different message list — the proxy takes the whole
+ * history so multi-turn conversation survives the move off direct Groq calls.
+ * Throws an Error whose message is safe to show the user.
+ */
+async function pfAiChat(messages, opts) {
+    opts = opts || {};
+    if (!pfAiProxyChecked) await pfLoadAiConfig();
+
+    if (pfAiProxy) {
+        let data, response;
+        try {
+            response = await fetch(pfAiProxy.proxy_url, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    app_token: pfAiProxy.app_token,
+                    messages: messages,
+                    temperature: opts.temperature != null ? opts.temperature : 0.6,
+                    response_format: opts.response_format
+                })
+            });
+            data = await response.json();
+        } catch (e) {
+            // Network-level failure only — fall through to the user's own key if
+            // they have one, otherwise report it.
+            if (!pfSavedGroqKey()) {
+                throw new Error('Could not reach the AI service. Check your internet connection.');
+            }
+            return pfAiChatDirect(messages, opts);
+        }
+        if (response.ok && data && data.report) return data.report;
+        // A 4xx/5xx from the proxy is a real, explained failure (bad token, rate
+        // limit, upstream error) — surface it rather than silently retrying,
+        // unless the user has their own key to fall back on.
+        var msg = (data && data.error) || ('AI service error (HTTP ' + response.status + ')');
+        if (pfSavedGroqKey() && response.status !== 429) return pfAiChatDirect(messages, opts);
+        throw new Error(msg);
+    }
+
+    return pfAiChatDirect(messages, opts);
+}
+
+// Legacy path: call Groq directly with a key the user pasted in themselves.
+async function pfAiChatDirect(messages, opts) {
+    const apiKey = pfSavedGroqKey();
+    if (!apiKey) {
+        throw new Error('AI reports are unavailable right now. Please try again later.');
+    }
+    const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + apiKey },
+        body: JSON.stringify({
+            model: 'llama-3.3-70b-versatile',
+            messages: messages,
+            temperature: (opts && opts.temperature != null) ? opts.temperature : 0.6,
+            response_format: opts && opts.response_format
+        })
+    });
+    const data = await response.json();
+    if (data.error) throw new Error(data.error.message);
+    if (!data.choices || !data.choices.length) throw new Error('The AI returned an empty response.');
+    return data.choices[0].message.content;
+}
+
 document.addEventListener('DOMContentLoaded', () => {
-    const savedKey = localStorage.getItem('futfidget_groq_key');
+    const savedKey = localStorage.getItem(PF_GROQ_KEY);
     if (savedKey) toggleKeyUI(true);
+    // The key UI and the "paste a key" onboarding are only worth showing when
+    // there's no proxy — otherwise we'd be asking for something we don't need.
+    pfLoadAiConfig().then(function () {
+        if (pfAiProxy) pfHideKeyUiForProxy();
+        pfMaybeShowOnboarding();
+    });
 });
+
+// Hide the bring-your-own-key surfaces when the hosted proxy is available. The
+// code paths stay live — a saved key is still honoured as a fallback — this
+// only stops us asking users for a key they don't need.
+function pfHideKeyUiForProxy() {
+    ['api-key-container', 'api-key-saved'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) { el.classList.add('hidden'); el.style.display = 'none'; }
+    });
+    pfMarkOnboardingDone();   // never prompt for a key on first launch
+}
 
 function toggleKeyUI(isSaved) {
     const inputContainer = document.getElementById('api-key-container');
@@ -3584,35 +4380,162 @@ function toggleKeyUI(isSaved) {
     }
 }
 
+function saveGroqApiKey(rawKey, { quiet } = {}) {
+    const key = String(rawKey || '').trim();
+    if (!key.startsWith('gsk_')) {
+        return { ok: false, error: "Invalid key. Groq API keys usually start with 'gsk_'." };
+    }
+    try {
+        localStorage.setItem(PF_GROQ_KEY, key);
+    } catch (e) {
+        return { ok: false, error: 'Could not save the key on this device.' };
+    }
+    toggleKeyUI(true);
+    const resultsInput = document.getElementById('api-key-input');
+    if (resultsInput) resultsInput.value = '';
+    if (!quiet) alert('Key saved securely to your browser!');
+    return { ok: true };
+}
+
 function saveApiKey() {
     const input = document.getElementById('api-key-input');
-    const key = input.value.trim();
-    if (key.startsWith('gsk_')) {
-        localStorage.setItem('futfidget_groq_key', key);
-        toggleKeyUI(true);
-        alert("Key saved securely to your browser!");
-    } else {
-        alert("Invalid Key. Groq API keys usually start with 'gsk_'");
-    }
+    const result = saveGroqApiKey(input ? input.value : '');
+    if (!result.ok) alert(result.error);
 }
 
 function clearApiKey() {
-    localStorage.removeItem('futfidget_groq_key');
-    document.getElementById('api-key-input').value = '';
+    localStorage.removeItem(PF_GROQ_KEY);
+    const input = document.getElementById('api-key-input');
+    if (input) input.value = '';
     toggleKeyUI(false);
 }
 
+function pfOnboardingDone() {
+    try { return localStorage.getItem(PF_ONBOARDING_DONE_KEY) === '1'; } catch (e) { return false; }
+}
+
+function pfMarkOnboardingDone() {
+    try { localStorage.setItem(PF_ONBOARDING_DONE_KEY, '1'); } catch (e) {}
+}
+
+function pfCloseOnboarding() {
+    const screen = document.getElementById('pf-onboarding-screen');
+    if (screen) screen.classList.add('hidden');
+    pfMarkOnboardingDone();
+}
+
+function pfMaybeShowOnboarding() {
+    // Already finished/skipped, or a key is already saved → never block setup.
+    try {
+        if (pfOnboardingDone()) return;
+        if (localStorage.getItem(PF_GROQ_KEY)) {
+            pfMarkOnboardingDone();
+            return;
+        }
+    } catch (e) { return; }
+
+    const screen = document.getElementById('pf-onboarding-screen');
+    if (!screen) return;
+    screen.classList.remove('hidden');
+
+    const err = document.getElementById('pf-onboarding-error');
+    const input = document.getElementById('pf-onboarding-key');
+    const saveBtn = document.getElementById('pf-onboarding-save');
+    const skipBtn = document.getElementById('pf-onboarding-skip');
+
+    function showErr(msg) {
+        if (!err) return;
+        if (msg) {
+            err.textContent = msg;
+            err.classList.remove('hidden');
+        } else {
+            err.textContent = '';
+            err.classList.add('hidden');
+        }
+    }
+
+    if (saveBtn && !saveBtn._pfBound) {
+        saveBtn._pfBound = true;
+        saveBtn.addEventListener('click', function () {
+            const result = saveGroqApiKey(input ? input.value : '', { quiet: true });
+            if (!result.ok) { showErr(result.error); return; }
+            showErr('');
+            pfCloseOnboarding();
+        });
+    }
+    if (skipBtn && !skipBtn._pfBound) {
+        skipBtn._pfBound = true;
+        skipBtn.addEventListener('click', function () {
+            showErr('');
+            pfCloseOnboarding();
+        });
+    }
+    if (input && !input._pfBound) {
+        input._pfBound = true;
+        input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') saveBtn && saveBtn.click();
+        });
+    }
+}
+
+// The 8 body sections the report is split into (everything but the closing
+// verdict, which renders as its own banner instead of a card).
+const SCOUT_SECTIONS = [
+    { key: 'tactical_role', label: 'Tactical role' },
+    { key: 'key_strengths', label: 'Key strengths' },
+    { key: 'areas_to_improve', label: 'Areas to improve' },
+    { key: 'risks', label: 'Risks in play style' },
+    { key: 'drills', label: 'Drills' },
+    { key: 'mentality', label: 'Mentality shift' },
+    { key: 'temporal', label: 'Temporal read' },
+    { key: 'other_insights', label: 'Other insights' },
+];
+
+function escapeHtml(str) {
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+}
+
+// Renders the parsed {tactical_role, key_strengths, ..., summary} object as
+// the card-grid document (Layout B). Missing/blank keys are skipped rather
+// than shown empty, since a real model response occasionally drops one.
+function renderScoutReport(data, position, netScore) {
+    const cards = SCOUT_SECTIONS
+        .filter(s => data[s.key] && String(data[s.key]).trim())
+        .map(s => `<div class="scout-card"><h4>${escapeHtml(s.label)}</h4><p>${escapeHtml(data[s.key])}</p></div>`)
+        .join('');
+    const verdict = data.summary && String(data.summary).trim()
+        ? `<div class="scout-verdict"><p class="scout-verdict-lbl">Verdict</p><p>${escapeHtml(data.summary)}</p></div>`
+        : '';
+    return `
+        <div class="scout-top">
+            <div><span class="scout-score">${escapeHtml(String(netScore))}</span><div class="scout-score-lbl">Net TP</div></div>
+            <p>${escapeHtml(position)} — full scouting breakdown below.</p>
+        </div>
+        <div class="scout-grid">${cards}</div>
+        ${verdict}
+        <div class="scout-thread" id="scout-thread"></div>
+    `;
+}
+
+// Fallback for when the model doesn't return valid JSON (rare, but response_format
+// is a request, not a guarantee) — show the raw text rather than losing the report.
+function renderScoutReportFallback(rawText) {
+    return `
+        <div class="scout-card"><p style="white-space: pre-wrap;">${escapeHtml(rawText)}</p></div>
+        <div class="scout-thread" id="scout-thread"></div>
+    `;
+}
+
 async function generateScoutReport() {
-    let apiKey = localStorage.getItem('futfidget_groq_key');
-    if (!apiKey) apiKey = document.getElementById('api-key-input').value;
     const outputBox = document.getElementById('ai-output');
     const btn = document.getElementById('gen-report-btn');
-    if (!apiKey) { alert("Please paste or save your Groq API Key first."); return; }
-    if (matchStats.length === 0 || !currentHybridResults) { outputBox.innerText = "No stats collected yet. Play a match first!"; return; }
+    if (!pfAiProxyChecked) await pfLoadAiConfig();
+    if (!pfAiReady()) { alert("AI reports aren't available right now. Please try again later."); return; }
+    if (matchStats.length === 0 || !currentHybridResults) { outputBox.innerHTML = "<p class='scout-placeholder'>No stats collected yet. Play a match first!</p>"; return; }
 
     btn.disabled = true;
     btn.innerText = "SCOUTING...";
-    outputBox.innerHTML = "<span style='color:#f2c94c'>Analyzing gameplay patterns & calculating hybrid matrices...</span>";
+    outputBox.innerHTML = "<p class='scout-placeholder' style='color:#f2c94c'>Analyzing gameplay patterns & calculating hybrid matrices...</p>";
 
     const statSummary = matchStats.reduce((acc, curr) => { acc[curr.action] = (acc[curr.action] || 0) + 1; return acc; }, {});
     const timelineString = matchStats.map(s => `[${s.timeStr}] ${s.action}`).join(', ');
@@ -3638,18 +4561,19 @@ async function generateScoutReport() {
 
     Here is the chronological timeline of their actions: ${timelineString}.
 
-    Provide a brief, bulleted report:
-    1. Tactical Role (Based on actions)
-    2. Key Strengths (High counts)
-    3. Areas to Improve (Missing actions for this position)
-    4. Possible risks of their play style (Is so much of this action actually necessary?)
-    5. Possible Drills to use to Improve upon Weaknesses
-    6. Mentality Changes that the Player can have in order to improve
-    7. Evaluate the temporal aspect of things (did the player perform well in the first half but not the second half, did they spend a lot of time on the bench? Why might they have been subbed off?)
-    8. Other Key Insights
-    9. A 1-sentence summary rating.
+    Respond with ONLY a single valid JSON object (no markdown fences, no commentary) with exactly these string keys:
+    - tactical_role: their role based on actions
+    - key_strengths: strengths shown by high-count actions
+    - areas_to_improve: missing actions expected for this position
+    - risks: whether their action volume creates unnecessary risk
+    - drills: drills to address the weaknesses above
+    - mentality: a mentality change that would help them improve
+    - temporal: how their performance changed over the match (first half vs second half, time on the bench, why they may have been subbed)
+    - other_insights: anything else notable
+    - summary: a single-sentence overall rating
 
-    Keep it under 500 words. Use a professional, critical tone. (IMPORTANT DIRECTIVE: Only use this struct 9 point format for the first initial report, any subsequent questions should be directly addressed to their specific question)
+    Each value should be 1-3 sentences, professional and critical in tone, under 500 words total across all fields combined.
+    (IMPORTANT DIRECTIVE: this strict JSON format is for this first report only — any follow-up question after this one should be answered directly, in plain prose, not as JSON.)
     Additionally, if the player asks anything that isn't related to football and their improvement, please respond that you can't answer because you are an AI strictly used to coach football.`;
 
     try {
@@ -3657,31 +4581,35 @@ async function generateScoutReport() {
             { role: "system", content: "You are a highly analytical football data scientist and scout." },
             { role: "user", content: systemPrompt }
         ];
-        const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-            method: "POST",
-            headers: { "Content-Type": "application/json", "Authorization": `Bearer ${apiKey}` },
-            body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: aiChatHistory, temperature: 0.6 })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        const report = data.choices[0].message.content;
-        outputBox.innerText = report;
+        const report = await pfAiChat(aiChatHistory, { temperature: 0.6, response_format: { type: 'json_object' } });
         aiChatHistory.push({ role: "assistant", content: report });
+
+        let parsed = null;
+        try { parsed = JSON.parse(report); } catch (e) { /* handled below */ }
+        if (parsed && typeof parsed === 'object') {
+            outputBox.innerHTML = renderScoutReport(parsed, position, netScore);
+        } else {
+            console.warn('Scout report was not valid JSON, showing raw text instead.');
+            outputBox.innerHTML = renderScoutReportFallback(report);
+        }
+
         document.getElementById('followup-container').classList.remove('hidden');
         btn.innerText = "REPORT GENERATED";
         btn.style.background = "#2e7d32";
         setTimeout(() => { btn.disabled = false; btn.innerText = "GENERATE AGAIN"; btn.style.background = "linear-gradient(135deg, #7000ff 0%, #3d0096 100%)"; }, 3000);
     } catch (error) {
         console.error(error);
-        outputBox.innerText = "Error: " + error.message;
+        outputBox.innerHTML = `<p class="scout-placeholder" style="color:#ff2e4d">Error: ${escapeHtml(error.message)}</p>`;
         btn.innerText = "TRY AGAIN";
         btn.disabled = false;
-        if (error.message.includes("401") || error.message.includes("key")) { clearApiKey(); alert("Your API Key seems invalid. Please check it."); }
+        // Only wipe a saved key when WE were the ones using it — on the hosted
+        // proxy a 401 means our server-side credentials are wrong, and clearing
+        // the user's key would be both useless and confusing.
+        if (!pfAiProxy && (error.message.includes("401") || error.message.includes("key"))) {
+            clearApiKey();
+            alert("Your API Key seems invalid. Please check it.");
+        }
     }
-}
-
-function escapeHtml(str) {
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
 }
 
 // --- 15. FOLLOW-UP Q&A ---
@@ -3690,26 +4618,38 @@ async function askFollowUp() {
     const question = inputField.value.trim();
     const outputBox = document.getElementById('ai-output');
     const askBtn = document.getElementById('followup-btn');
-    let apiKey = localStorage.getItem('futfidget_groq_key');
-    if (!apiKey) apiKey = document.getElementById('api-key-input').value;
-    if (!question || !apiKey) return;
+    if (!question || !pfAiReady()) return;
+
+    // The thread lives inside #ai-output, appended after the cards/verdict —
+    // generateScoutReport() always leaves one behind, even on the JSON-parse
+    // fallback path, but guard for the case nothing has been generated yet.
+    let thread = document.getElementById('scout-thread');
+    if (!thread) {
+        thread = document.createElement('div');
+        thread.className = 'scout-thread';
+        thread.id = 'scout-thread';
+        outputBox.appendChild(thread);
+    }
 
     aiChatHistory.push({ role: "user", content: question });
-    outputBox.innerHTML += `\n\n<hr style="border-color: #333;">\n<strong style="color: #f2c94c;">YOU:</strong> ${escapeHtml(question)}\n<strong style="color: #30ff8f;">COACH AI:</strong> <em id="ai-thinking">Thinking...</em>`;
+    const youMsg = document.createElement('div');
+    youMsg.className = 'scout-msg you';
+    youMsg.innerHTML = `<span class="scout-msg-lbl">You</span>`;
+    youMsg.appendChild(document.createTextNode(question));
+    thread.appendChild(youMsg);
+
+    const aiMsg = document.createElement('div');
+    aiMsg.className = 'scout-msg ai';
+    aiMsg.innerHTML = `<span class="scout-msg-lbl">Coach AI</span><em id="ai-thinking">Thinking...</em>`;
+    thread.appendChild(aiMsg);
+
     outputBox.scrollTop = outputBox.scrollHeight;
     inputField.value = "";
     askBtn.disabled = true;
     askBtn.style.opacity = "0.5";
 
     try {
-        const response = await fetch('https://api.groq.com/openai/v1/chat/completions', {
-            method: 'POST',
-            headers: { 'Authorization': `Bearer ${apiKey}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({ model: "llama-3.3-70b-versatile", messages: aiChatHistory, temperature: 0.6 })
-        });
-        const data = await response.json();
-        if (data.error) throw new Error(data.error.message);
-        const answer = data.choices[0].message.content;
+        const answer = await pfAiChat(aiChatHistory, { temperature: 0.6 });
         aiChatHistory.push({ role: "assistant", content: answer });
         const thinkingEl = document.getElementById('ai-thinking');
         if (thinkingEl) { const span = document.createElement('span'); span.textContent = answer; thinkingEl.replaceWith(span); }
@@ -3728,3 +4668,744 @@ document.addEventListener('DOMContentLoaded', () => {
     const fInput = document.getElementById('followup-input');
     if (fInput) fInput.addEventListener('keypress', function (e) { if (e.key === 'Enter') askFollowUp(); });
 });
+
+// --- 3b. PITCH CALIBRATION (optional) -------------------------------------
+// Why this screen exists: "who touched the ball" is decided by a PIXEL distance
+// (contact_max_player_dist_px = 80). A pixel is ~11cm of pitch near the camera
+// but ~62cm at the far touchline, so the same rule allows ~8m near and ~50m far,
+// and a player 50m away can be tagged with your touch. Marking the pitch lets
+// that distance be judged in metres instead. See docs/detection-issues.md #14.
+//
+// The fit is a CAMERA (position, height, pan, tilt, roll, focal length), not a
+// free 8-number transform: most of a free transform's parameter space describes
+// pitches folded through the camera or shaped like bow-ties, and with sloppy
+// clicks a free solver lands there while still reporting a tiny error. A camera
+// cannot express those shapes at all.
+//
+// This mirrors polyfut_v2/pipeline/pitch_calibration.py. It exists in the
+// browser for the live overlay only; the clicks are re-fitted server-side so
+// the pipeline runs on a calibration made by the code that consumes it.
+
+const PF_PITCH_LANDMARKS = [
+    ['corner_near_left', '0', '0', 'Corner: left goal line x near touchline'],
+    ['corner_far_left', '0', 'W', 'Corner: left goal line x far touchline'],
+    ['corner_near_right', 'L', '0', 'Corner: right goal line x near touchline'],
+    ['corner_far_right', 'L', 'W', 'Corner: right goal line x far touchline'],
+    ['penarea_L_goalline_near', '0', 'W/2-20.16', 'Left penalty area, ON goal line, near side'],
+    ['penarea_L_goalline_far', '0', 'W/2+20.16', 'Left penalty area, ON goal line, far side'],
+    ['penarea_L_outer_near', '16.5', 'W/2-20.16', 'Left penalty area, OUTER corner, near side'],
+    ['penarea_L_outer_far', '16.5', 'W/2+20.16', 'Left penalty area, OUTER corner, far side'],
+    ['goalarea_L_goalline_near', '0', 'W/2-9.16', 'Left 6-yard box, ON goal line, near side'],
+    ['goalarea_L_goalline_far', '0', 'W/2+9.16', 'Left 6-yard box, ON goal line, far side'],
+    ['goalarea_L_outer_near', '5.5', 'W/2-9.16', 'Left 6-yard box, OUTER corner, near side'],
+    ['goalarea_L_outer_far', '5.5', 'W/2+9.16', 'Left 6-yard box, OUTER corner, far side'],
+    ['penspot_L', '11', 'W/2', 'Left penalty spot'],
+    ['post_L_near', '0', 'W/2-3.66', 'Left goal: near post BASE'],
+    ['post_L_far', '0', 'W/2+3.66', 'Left goal: far post BASE'],
+    ['halfway_near', 'L/2', '0', 'Halfway line meets NEAR touchline'],
+    ['halfway_far', 'L/2', 'W', 'Halfway line meets FAR touchline'],
+    ['centre_spot', 'L/2', 'W/2', 'Centre spot'],
+    ['circle_near', 'L/2', 'W/2-9.15', 'Centre circle, NEAR-side extreme'],
+    ['circle_far', 'L/2', 'W/2+9.15', 'Centre circle, FAR-side extreme'],
+    ['circle_left', 'L/2-9.15', 'W/2', 'Centre circle, LEFT extreme'],
+    ['circle_right', 'L/2+9.15', 'W/2', 'Centre circle, RIGHT extreme'],
+    ['penarea_R_goalline_near', 'L', 'W/2-20.16', 'Right penalty area, ON goal line, near side'],
+    ['penarea_R_goalline_far', 'L', 'W/2+20.16', 'Right penalty area, ON goal line, far side'],
+    ['penarea_R_outer_near', 'L-16.5', 'W/2-20.16', 'Right penalty area, OUTER corner, near side'],
+    ['penarea_R_outer_far', 'L-16.5', 'W/2+20.16', 'Right penalty area, OUTER corner, far side'],
+    ['goalarea_R_goalline_near', 'L', 'W/2-9.16', 'Right 6-yard box, ON goal line, near side'],
+    ['goalarea_R_goalline_far', 'L', 'W/2+9.16', 'Right 6-yard box, ON goal line, far side'],
+    ['goalarea_R_outer_near', 'L-5.5', 'W/2-9.16', 'Right 6-yard box, OUTER corner, near side'],
+    ['goalarea_R_outer_far', 'L-5.5', 'W/2+9.16', 'Right 6-yard box, OUTER corner, far side'],
+    ['penspot_R', 'L-11', 'W/2', 'Right penalty spot'],
+    ['post_R_near', 'L', 'W/2-3.66', 'Right goal: near post BASE'],
+    ['post_R_far', 'L', 'W/2+3.66', 'Right goal: far post BASE'],
+];
+const PF_PITCH_L = 100, PF_PITCH_W = 64;
+
+let pfPitchFrames = [];
+let pfPitchCur = 0;
+let pfPitchClicks = [];
+let pfPitchFit = null;
+let pfPitchDone = null;          // callback: (calibrationPayload | null)
+
+function pfLandmarkXY(key) {
+    const d = PF_PITCH_LANDMARKS.find(function (l) { return l[0] === key; });
+    if (!d) return null;
+    try {
+        const ev = function (s) {
+            return Function('L', 'W', 'return (' + s + ')')(PF_PITCH_L, PF_PITCH_W);
+        };
+        return [ev(d[1]), ev(d[2])];
+    } catch (e) { return null; }
+}
+
+// Camera axes: x=right, y=down, z=forward, so y = z x x. At pan=0 (looking along
+// +X with world up = +Z) right must be -Y and down must be -Z. Getting these
+// signs wrong flips the image, and a test that both generates and fits with the
+// same convention cannot catch it, so they are pinned rather than assumed.
+function pfRotation(pan, tilt, roll) {
+    const fwd = [Math.cos(tilt) * Math.cos(pan), Math.cos(tilt) * Math.sin(pan), -Math.sin(tilt)];
+    let right = [Math.sin(pan), -Math.cos(pan), 0];
+    let down = [fwd[1] * right[2] - fwd[2] * right[1],
+                fwd[2] * right[0] - fwd[0] * right[2],
+                fwd[0] * right[1] - fwd[1] * right[0]];
+    const n = Math.hypot(down[0], down[1], down[2]);
+    if (n < 1e-12) return null;
+    down = down.map(function (v) { return v / n; });
+    if (roll) {
+        const c = Math.cos(roll), s = Math.sin(roll);
+        const r2 = right.map(function (v, i) { return c * v + s * down[i]; });
+        const d2 = right.map(function (v, i) { return -s * v + c * down[i]; });
+        right = r2; down = d2;
+    }
+    return [right, down, fwd];
+}
+
+function pfPoseH(p, cx, cy) {
+    const R = pfRotation(p[3], p[4], p[6]);
+    if (!R) return null;
+    const C = [p[0], p[1], p[2]], f = p[5];
+    const t = R.map(function (r) { return -(r[0] * C[0] + r[1] * C[1] + r[2] * C[2]); });
+    const M = [[R[0][0], R[0][1], t[0]], [R[1][0], R[1][1], t[1]], [R[2][0], R[2][1], t[2]]];
+    return [f * M[0][0] + cx * M[2][0], f * M[0][1] + cx * M[2][1], f * M[0][2] + cx * M[2][2],
+            f * M[1][0] + cy * M[2][0], f * M[1][1] + cy * M[2][1], f * M[1][2] + cy * M[2][2],
+            M[2][0], M[2][1], M[2][2]];
+}
+
+function pfApplyH(H, q) {
+    const w = H[6] * q[0] + H[7] * q[1] + H[8];
+    if (!(Math.abs(w) > 1e-9)) return null;
+    return [(H[0] * q[0] + H[1] * q[1] + H[2]) / w, (H[3] * q[0] + H[4] * q[1] + H[5]) / w];
+}
+
+function pfInv3(H) {
+    const a = H[0], b = H[1], c = H[2], d = H[3], e = H[4], f = H[5], g = H[6], h = H[7], i = H[8];
+    const A = e * i - f * h, B = f * g - d * i, C = d * h - e * g;
+    const det = a * A + b * B + c * C;
+    if (!isFinite(det) || Math.abs(det) < 1e-14) return null;
+    return [A / det, (c * h - b * i) / det, (b * f - c * e) / det,
+            B / det, (a * i - c * g) / det, (c * d - a * f) / det,
+            C / det, (b * g - a * h) / det, (a * e - b * d) / det];
+}
+
+function pfSolveLS(A, b, n) {
+    const M = A.map(function (r, i) { return r.concat([b[i]]); });
+    for (let c = 0; c < n; c++) {
+        let piv = c;
+        for (let r = c + 1; r < n; r++) if (Math.abs(M[r][c]) > Math.abs(M[piv][c])) piv = r;
+        if (Math.abs(M[piv][c]) < 1e-12) return null;
+        const tmp = M[c]; M[c] = M[piv]; M[piv] = tmp;
+        for (let r = 0; r < n; r++) {
+            if (r === c) continue;
+            const k = M[r][c] / M[c][c];
+            for (let j = c; j <= n; j++) M[r][j] -= k * M[c][j];
+        }
+    }
+    return M.map(function (r, i) { return r[n] / M[i][i]; });
+}
+
+// Parameters: [Xc, Yc, h, f, roll, pan_0, tilt_0, pan_1, tilt_1, ...]
+// Position, height, focal length and roll are SHARED across frames because a
+// tripod only rotates; only pan/tilt vary. Each click is fitted in its OWN
+// frame's pixels — mapping clicks into a common reference frame first would run
+// them through the camera-motion chain, which measurably corrupts the fit.
+function pfPoseFor(v, k) {
+    return [v[0], v[1], v[2], v[5 + 2 * k], v[6 + 2 * k], v[3], v[4]];
+}
+
+function pfMultiResid(v, groups, cx, cy) {
+    const out = [];
+    for (let k = 0; k < groups.length; k++) {
+        const g = groups[k];
+        const H = pfPoseH(pfPoseFor(v, k), cx, cy);
+        for (let i = 0; i < g.pit.length; i++) {
+            if (!H) { out.push(1e4, 1e4); continue; }
+            const q = g.pit[i];
+            const w = H[6] * q[0] + H[7] * q[1] + H[8];
+            if (!(w > 1e-9)) { out.push(1e4, 1e4); continue; }
+            out.push((H[0] * q[0] + H[1] * q[1] + H[2]) / w - g.img[i][0],
+                     (H[3] * q[0] + H[4] * q[1] + H[5]) / w - g.img[i][1]);
+        }
+    }
+    return out;
+}
+
+function pfLM(p0, groups, cx, cy, lo, hi, iters) {
+    let p = p0.slice();
+    const n = p.length;
+    let lam = 1e-3;
+    const cost = function (v) { return v.reduce(function (a, b) { return a + b * b; }, 0); };
+    let r = pfMultiResid(p, groups, cx, cy), c = cost(r);
+    for (let it = 0; it < iters; it++) {
+        const m = r.length, J = [];
+        for (let k = 0; k < n; k++) {
+            const step = Math.max(1e-6, Math.abs(p[k]) * 1e-6);
+            const pp = p.slice();
+            pp[k] = Math.min(hi[k], Math.max(lo[k], pp[k] + step));
+            const rr = pfMultiResid(pp, groups, cx, cy);
+            const dd = (pp[k] - p[k]) || step;
+            J.push(rr.map(function (v, i) { return (v - r[i]) / dd; }));
+        }
+        const A = [], g = [];
+        for (let a = 0; a < n; a++) {
+            const row = [];
+            for (let b = 0; b < n; b++) {
+                let s = 0; for (let i = 0; i < m; i++) s += J[a][i] * J[b][i];
+                row.push(s);
+            }
+            A.push(row);
+            let s2 = 0; for (let i = 0; i < m; i++) s2 += J[a][i] * r[i];
+            g.push(-s2);
+        }
+        let improved = false;
+        for (let att = 0; att < 6 && !improved; att++) {
+            const M = A.map(function (row, i) {
+                return row.map(function (v, j) { return i === j ? v * (1 + lam) : v; });
+            });
+            const dp = pfSolveLS(M, g, n);
+            if (!dp || dp.some(function (v) { return !isFinite(v); })) { lam *= 10; continue; }
+            const pn = p.map(function (v, i) { return Math.min(hi[i], Math.max(lo[i], v + dp[i])); });
+            const rn = pfMultiResid(pn, groups, cx, cy), cn = cost(rn);
+            if (cn < c) { p = pn; r = rn; c = cn; lam = Math.max(lam * 0.3, 1e-9); improved = true; }
+            else lam *= 10;
+        }
+        if (!improved) break;
+    }
+    return p;
+}
+
+function pfPitchGroups() {
+    const byFrame = new Map();
+    pfPitchClicks.forEach(function (p) {
+        const pit = pfLandmarkXY(p.landmark);
+        if (!pit) return;
+        if (!byFrame.has(p.frame_index)) {
+            byFrame.set(p.frame_index, { frame: p.frame_index, img: [], pit: [] });
+        }
+        const g = byFrame.get(p.frame_index);
+        g.img.push([p.x, p.y]);      // RAW native-video pixels, no registration
+        g.pit.push(pit);
+    });
+    return Array.from(byFrame.values());
+}
+
+function pfFitPitch() {
+    const groups = pfPitchGroups();
+    const total = groups.reduce(function (a, g) { return a + g.pit.length; }, 0);
+    if (total < 4 || !pfPitchFrames.length) return null;
+    const fr = pfPitchFrames[0];
+    const cx = fr.width / 2, cy = fr.height / 2;
+    const nf = groups.length;
+    const lo = [-40, -60, 1.2, 150, -12 * Math.PI / 180];
+    const hi = [PF_PITCH_L + 40, -0.5, 45, 6000, 12 * Math.PI / 180];
+    for (let k = 0; k < nf; k++) {
+        lo.push(-Math.PI, 1 * Math.PI / 180);
+        hi.push(Math.PI, 85 * Math.PI / 180);
+    }
+    // Pan must be swept: the optimiser cannot rotate the camera halfway round
+    // the pitch by itself. Tilt and focal length are far less multi-modal.
+    let best = null;
+    const pans = [-150, -120, -90, -60, -30, 0, 30, 60, 90, 120, 150, 180];
+    for (let a = 0; a < pans.length; a++) {
+        for (const tilt of [10, 28]) {
+            const seed = [PF_PITCH_L / 2, -12, 8, 800, 0];
+            for (let k = 0; k < nf; k++) seed.push(pans[a] * Math.PI / 180, tilt * Math.PI / 180);
+            for (let i = 0; i < seed.length; i++) seed[i] = Math.min(hi[i], Math.max(lo[i], seed[i]));
+            const p = pfLM(seed, groups, cx, cy, lo, hi, 35);
+            const rr = pfMultiResid(p, groups, cx, cy);
+            const d = [];
+            for (let i = 0; i < rr.length; i += 2) d.push(Math.hypot(rr[i], rr[i + 1]));
+            if (!d.length || d.some(function (v) { return !isFinite(v) || v > 4000; })) continue;
+            const sorted = d.slice().sort(function (x, y) { return x - y; });
+            const med = sorted[Math.floor(sorted.length / 2)];
+            // median, not mean: one mislabelled landmark must not pick the winner
+            if (!best || med < best.med) {
+                best = { p: p, med: med, groups: groups, cx: cx, cy: cy,
+                         rms: Math.sqrt(d.reduce(function (x, y) { return x + y * y; }, 0) / d.length) };
+            }
+        }
+    }
+    return best;
+}
+
+function pfPitchModel(L, W) {
+    const segs = [[[0, 0], [L, 0]], [[0, W], [L, W]], [[0, 0], [0, W]],
+                  [[L, 0], [L, W]], [[L / 2, 0], [L / 2, W]]];
+    [[0, 1], [L, -1]].forEach(function (e) {
+        const gx = e[0], s = e[1];
+        [[16.5, 20.16], [5.5, 9.16]].forEach(function (b) {
+            const dep = b[0], half = b[1];
+            segs.push([[gx, W / 2 - half], [gx + s * dep, W / 2 - half]],
+                      [[gx + s * dep, W / 2 - half], [gx + s * dep, W / 2 + half]],
+                      [[gx + s * dep, W / 2 + half], [gx, W / 2 + half]]);
+        });
+    });
+    const arcs = [];
+    const circ = function (cx, cy, r, a0, a1) {
+        const pts = [];
+        for (let k = 0; k <= 48; k++) {
+            const th = (a0 + (a1 - a0) * k / 48) * Math.PI / 180;
+            pts.push([cx + r * Math.cos(th), cy + r * Math.sin(th)]);
+        }
+        arcs.push(pts);
+    };
+    circ(L / 2, W / 2, 9.15, 0, 360);
+    circ(11, W / 2, 9.15, -53, 53);
+    circ(L - 11, W / 2, 9.15, 127, 233);
+    return { segs: segs, arcs: arcs };
+}
+
+// The decisive check. A calibration can have tiny residuals AND be insensitive
+// to click noise while still being globally wrong; only seeing the model land on
+// the real painted lines rules that out.
+// Plane-to-plane transform straight from the anchors: pitch metres -> this
+// frame's pixels. Normalised DLT, least squares. With four anchors it passes
+// through them exactly; with more it is the closest single projection to all of
+// them. Nothing about cameras, pitch dimensions or lens behaviour enters here,
+// which is the point — those are the assumptions that were fighting the user.
+function pfHomographyFrom(src, dst) {
+    const n = src.length;
+    if (n < 4) return null;
+    const norm = function (pts) {
+        let cx = 0, cy = 0;
+        pts.forEach(function (p) { cx += p[0]; cy += p[1]; });
+        cx /= pts.length; cy /= pts.length;
+        let d = 0;
+        pts.forEach(function (p) { d += Math.hypot(p[0] - cx, p[1] - cy); });
+        d /= pts.length;
+        if (!(d > 1e-9)) return null;
+        const sc = Math.SQRT2 / d;
+        return {sc: sc, cx: cx, cy: cy,
+                out: pts.map(function (p) { return [(p[0]-cx)*sc, (p[1]-cy)*sc]; })};
+    };
+    const S = norm(src), D = norm(dst);
+    if (!S || !D) return null;
+    const AtA = [], Atb = new Array(8).fill(0);
+    for (let i = 0; i < 8; i++) AtA.push(new Array(8).fill(0));
+    for (let i = 0; i < n; i++) {
+        const x = S.out[i][0], y = S.out[i][1];
+        const u = D.out[i][0], v = D.out[i][1];
+        const rows = [[x, y, 1, 0, 0, 0, -u*x, -u*y, u],
+                      [0, 0, 0, x, y, 1, -v*x, -v*y, v]];
+        for (const r of rows) {
+            for (let a = 0; a < 8; a++) {
+                for (let b = 0; b < 8; b++) AtA[a][b] += r[a] * r[b];
+                Atb[a] += r[a] * r[8];
+            }
+        }
+    }
+    const h = pfSolveLS(AtA, Atb, 8);
+    if (!h || h.some(function (v) { return !isFinite(v); })) return null;
+    const Hn = [h[0], h[1], h[2], h[3], h[4], h[5], h[6], h[7], 1];
+    const Ts = [S.sc, 0, -S.sc*S.cx, 0, S.sc, -S.sc*S.cy, 0, 0, 1];
+    const Ti = [1/D.sc, 0, D.cx, 0, 1/D.sc, D.cy, 0, 0, 1];
+    const mul = function (X, Y) {
+        const O = new Array(9).fill(0);
+        for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++)
+            for (let k = 0; k < 3; k++) O[i*3+j] += X[i*3+k] * Y[k*3+j];
+        return O;
+    };
+    let H = mul(Ti, mul(Hn, Ts));
+    // Fix the sign so that w > 0 means "in front of the camera". H and -H are
+    // the same projective transform, so a solver may hand back either, and
+    // without a convention there is no way to tell an in-front point from a
+    // behind-the-camera one. The anchors are all visibly in frame, so whichever
+    // sign makes THEM positive is the right one.
+    let votes = 0;
+    for (let i = 0; i < n; i++) {
+        const w = H[6]*src[i][0] + H[7]*src[i][1] + H[8];
+        votes += (w < 0) ? 1 : -1;
+    }
+    if (votes > 0) H = H.map(function (v) { return -v; });
+    return H;
+}
+
+// Where a pitch segment crosses the horizon, i.e. where w hits zero. Beyond it
+// the projection flips to the opposite side of the image, which is what drew
+// the pitch wrapping back across the frame.
+const PF_W_EPS = 1e-6;
+// A point clipped to just in front of the horizon projects enormously far away
+// (measured: 6.3e8 px at the epsilon above). The direction is correct and the
+// canvas would clip it, but coordinates that size are asking for precision
+// trouble, so the far end is pulled back along the same ray to something sane.
+const PF_MAX_REACH = 20000;
+
+function pfClipToFront(H, a, b) {
+    const wOf = function (q) { return H[6]*q[0] + H[7]*q[1] + H[8]; };
+    const wa = wOf(a), wb = wOf(b);
+    if (wa <= PF_W_EPS && wb <= PF_W_EPS) return null;    // wholly behind
+    let A = a, B = b;
+    if (wa <= PF_W_EPS || wb <= PF_W_EPS) {
+        // Walk the crossing point to just in front of the horizon. Drawing to
+        // the exact crossing sends the line to infinity, so stop short of it.
+        const t = (wa - PF_W_EPS) / (wa - wb);
+        const mid = [a[0] + (b[0]-a[0])*t, a[1] + (b[1]-a[1])*t];
+        if (wa > PF_W_EPS) B = mid; else A = mid;
+    }
+    let P = pfApplyH(H, A), Q = pfApplyH(H, B);
+    if (!P || !Q) return null;
+    // Keep the ray, bound the length.
+    const shorten = function (from, to) {
+        const dx = to[0] - from[0], dy = to[1] - from[1];
+        const d = Math.hypot(dx, dy);
+        if (!(d > PF_MAX_REACH)) return to;
+        const s = PF_MAX_REACH / d;
+        return [from[0] + dx * s, from[1] + dy * s];
+    };
+    if (Math.hypot(P[0], P[1]) < Math.hypot(Q[0], Q[1])) Q = shorten(P, Q);
+    else P = shorten(Q, P);
+    if (!isFinite(P[0]) || !isFinite(P[1]) || !isFinite(Q[0]) || !isFinite(Q[1]))
+        return null;
+    return [P, Q];
+}
+
+// The transform used for THIS frame: anchors first, camera model only as a
+// fallback for a frame the user has not marked up.
+function pfFrameH(frameIndex) {
+    if (!pfPitchFit) return null;
+    const k = pfPitchFit.groups.findIndex(function (g) { return g.frame === frameIndex; });
+    if (k < 0) return null;
+    const g = pfPitchFit.groups[k];
+    const direct = pfHomographyFrom(g.pit, g.img);
+    if (direct) return direct;
+    return pfPoseH(pfPoseFor(pfPitchFit.p, k), pfPitchFit.cx, pfPitchFit.cy);
+}
+
+function pfDrawPitchOverlay() {
+    const cv = document.getElementById('cv-pitch-canvas');
+    const img = document.getElementById('cv-pitch-img');
+    if (!cv || !img || !pfPitchFrames.length) return;
+    const fr = pfPitchFrames[pfPitchCur];
+    cv.width = fr.width; cv.height = fr.height;
+    const ctx = cv.getContext('2d');
+    ctx.clearRect(0, 0, cv.width, cv.height);
+    if (!pfPitchFit) return;
+    const H = pfFrameH(fr.frame_index);
+    if (!H) return;      // no anchors on this frame yet — nothing to draw
+    const model = pfPitchModel(PF_PITCH_L, PF_PITCH_W);
+    ctx.strokeStyle = '#ffe14d';
+    ctx.lineWidth = Math.max(2, fr.width / 480);
+    ctx.globalAlpha = 0.9;
+    model.segs.forEach(function (sg) {
+        const seg = pfClipToFront(H, sg[0], sg[1]);
+        if (!seg) return;
+        ctx.beginPath();
+        ctx.moveTo(seg[0][0], seg[0][1]);
+        ctx.lineTo(seg[1][0], seg[1][1]);
+        ctx.stroke();
+    });
+    model.arcs.forEach(function (pl) {
+        ctx.beginPath();
+        let started = false;
+        for (let i = 0; i + 1 < pl.length; i++) {
+            const seg = pfClipToFront(H, pl[i], pl[i + 1]);
+            if (!seg) { started = false; continue; }
+            if (!started) { ctx.moveTo(seg[0][0], seg[0][1]); started = true; }
+            else { ctx.lineTo(seg[0][0], seg[0][1]); }
+            ctx.lineTo(seg[1][0], seg[1][1]);
+        }
+        ctx.stroke();
+    });
+}
+
+// Per-mark reprojection error, so a bad mark can be named instead of the user
+// being told only that one exists somewhere.
+function pfMarkErrors() {
+    const out = new Map();
+    if (!pfPitchFit) return out;
+    pfPitchFit.groups.forEach(function (g, k) {
+        // the transform actually drawn, so a number shown next to a mark means
+        // "how far the drawn pitch misses it" rather than "how far an idealised
+        // camera would have missed it"
+        const H = pfFrameH(g.frame);
+        if (!H) return;
+        g.pit.forEach(function (q, i) {
+            const w = H[6] * q[0] + H[7] * q[1] + H[8];
+            if (!(w > 1e-9)) { out.set(g.frame + ':' + i, Infinity); return; }
+            const x = (H[0] * q[0] + H[1] * q[1] + H[2]) / w;
+            const y = (H[3] * q[0] + H[4] * q[1] + H[5]) / w;
+            out.set(g.frame + ':' + i,
+                    Math.hypot(x - g.img[i][0], y - g.img[i][1]));
+        });
+    });
+    return out;
+}
+
+// Error for each entry of pfPitchClicks, in click order.
+function pfClickErrors() {
+    const per = pfMarkErrors();
+    const seen = new Map();
+    return pfPitchClicks.map(function (p) {
+        const n = seen.get(p.frame_index) || 0;
+        seen.set(p.frame_index, n + 1);
+        const e = per.get(p.frame_index + ':' + n);
+        return (e === undefined) ? null : e;
+    });
+}
+
+function pfPitchQuality() {
+    const el = document.getElementById('cv-pitch-quality');
+    const useBtn = document.getElementById('cv-pitch-use');
+    if (!el) return;
+    const distinct = new Set(pfPitchClicks.map(function (p) { return p.landmark; }));
+    // A duplicate is the same landmark twice ON THE SAME FRAME. The same
+    // landmark on two different frames is legitimate — that is what lets one
+    // camera be fitted across a pan — and flagging it blocked real work.
+    const perFrame = new Set();
+    const dupes = [];
+    pfPitchClicks.forEach(function (p) {
+        const key = p.frame_index + '|' + p.landmark;
+        if (perFrame.has(key)) {
+            if (dupes.indexOf(p.landmark) < 0) dupes.push(p.landmark);
+        }
+        perFrame.add(key);
+    });
+    const msgs = [];
+    let cls = '', ok = false;
+
+    if (dupes.length) {
+        msgs.push('<b>' + dupes.join(', ') + ' is marked twice on the same frame.</b> ' +
+                  'A landmark is one spot on the pitch, so two positions for it on ' +
+                  'the same frame contradict each other. Tap the wrong one in the ' +
+                  'list to remove it.');
+        cls = 'is-bad';
+    }
+    if (distinct.size < 4) {
+        msgs.push('<b>' + distinct.size + ' of 4 landmarks.</b> Four different ones are ' +
+                  'the minimum; below that there are endless possible answers and ' +
+                  'the app would pick a wrong one without any sign.');
+        el.className = 'cv-pitch-quality is-bad';
+        el.innerHTML = msgs.join('<br><br>');
+        if (useBtn) useBtn.disabled = true;
+        return;
+    }
+
+    if (pfPitchFit) {
+        const p = pfPitchFit.p;
+        const nPar = 5 + 2 * pfPitchFit.groups.length;
+        const dof = 2 * distinct.size - nPar;
+        const panDeg = p[5] * 180 / Math.PI;
+        const across = Math.abs(Math.abs(panDeg) - 90) < 25;
+        msgs.push('<b>This says your camera was:</b> ' + p[2].toFixed(1) + ' m high, ' +
+                  Math.abs(p[1]).toFixed(0) + ' m back from the touchline, pointed ' +
+                  (across ? 'across the pitch' : panDeg.toFixed(0) + '&deg;') +
+                  ', tilted ' + (p[6] * 180 / Math.PI).toFixed(0) + '&deg; down.<br>' +
+                  '<i>A rough sanity check on where you filmed from — the pitch ' +
+                  'above is drawn from your marks either way.</i>');
+        // Error against the DRAWN transform. With four anchors on a frame this
+        // is ~0 by construction; a large value means the anchors on one frame
+        // disagree with each other, which is a real contradiction rather than an
+        // assumption of ours.
+        const drawnErrs = pfClickErrors().filter(function (e) { return e !== null; });
+        drawnErrs.sort(function (a, b) { return a - b; });
+        const drawnMed = drawnErrs.length
+            ? drawnErrs[Math.floor(drawnErrs.length / 2)] : null;
+        if (drawnMed !== null && drawnMed <= 4) {
+            msgs.push('<b style="color:#2ecc71">The pitch is drawn through your ' +
+                      'marks</b> (within ' + drawnMed.toFixed(1) + ' px). If the ' +
+                      'yellow lines still do not sit on the painted ones, add a ' +
+                      'mark where they drift.');
+            if (!cls) cls = 'is-good';
+            ok = true;
+        } else if (drawnMed !== null) {
+            msgs.push('<b style="color:#ffd166">The pitch is drawn as close to ' +
+                      'your marks as one flat surface allows</b> (about ' +
+                      drawnMed.toFixed(0) + ' px off). Usually this means the ' +
+                      'penalty boxes or circle on this ground are not regulation ' +
+                      'size, so the box marks and the touchline marks pull in ' +
+                      'different directions. It is still usable. If one mark is ' +
+                      'much worse than the rest, that one is worth a second look.');
+            if (cls !== 'is-bad') cls = 'is-warn';
+            ok = true;
+        }
+        if (false) {
+            // Name the offender rather than leaving the user to hunt for it.
+            const errs = pfClickErrors();
+            let wi = -1, wv = -1;
+            errs.forEach(function (e, i) { if (e !== null && e > wv) { wv = e; wi = i; } });
+            const who = (wi >= 0 && wv > 8)
+                ? '<span class=mut>The drawn pitch misses <b>' +
+                  pfPitchClicks[wi].landmark + '</b> at ' +
+                  pfPitchClicks[wi].t_sec.toFixed(0) + 's by ' + wv.toFixed(0) +
+                  ' px — if that mark looks right where it is, the two around it ' +
+                  'are worth a second look. Tap any mark to remove it.</span>'
+                : '';
+            msgs.push('' + who);
+        }
+        // The rigid-camera fit is only a note now. It assumes a regulation
+        // 100x64 pitch with regulation box sizes, no lens distortion and the
+        // lens dead centre — none of which a community pitch owes us — so its
+        // disagreement says more about those assumptions than about the marks.
+        if (pfPitchFit.med > 10) {
+            msgs.push('<span class=mut>A regulation-sized pitch does not quite ' +
+                      'match these marks (' + pfPitchFit.med.toFixed(0) + ' px ' +
+                      'off). That is expected if this pitch or its boxes are not ' +
+                      'standard size, and the drawing above ignores it.</span>');
+        }
+        if (dof < 4) {
+            msgs.push('<i>Only ' + dof + ' to spare (' + nPar + ' unknowns vs ' +
+                      (2 * distinct.size) + ' facts). A low error does not prove much ' +
+                      'yet &mdash; aim for 8 landmarks.</i>');
+            if (cls === 'is-good') cls = 'is-warn';
+        }
+        msgs.push('<b>Check the yellow pitch sits on the real lines.</b> That is the ' +
+                  'one check that cannot be fooled.');
+    }
+    if (dupes.length) ok = false;
+    el.className = 'cv-pitch-quality ' + cls;
+    el.innerHTML = msgs.join('<br><br>');
+    if (useBtn) useBtn.disabled = !ok;
+}
+
+function pfRenderPitch() {
+    const img = document.getElementById('cv-pitch-img');
+    const dots = document.getElementById('cv-pitch-dots');
+    const tabs = document.getElementById('cv-pitch-tabs');
+    if (!img || !pfPitchFrames.length) return;
+    const fr = pfPitchFrames[pfPitchCur];
+    if (img.getAttribute('data-frame') !== String(fr.frame_index)) {
+        img.src = 'data:image/jpeg;base64,' + fr.jpeg_b64;
+        img.setAttribute('data-frame', String(fr.frame_index));
+    }
+    Array.prototype.forEach.call(tabs.children, function (b, k) {
+        b.setAttribute('aria-current', k === pfPitchCur ? 'true' : 'false');
+    });
+    dots.innerHTML = '';
+    pfPitchClicks.filter(function (p) { return p.frame_index === fr.frame_index; })
+        .forEach(function (p) {
+            const d = document.createElement('div');
+            d.className = 'cv-pitch-dot';
+            d.style.left = (p.x / fr.width * 100) + '%';
+            d.style.top = (p.y / fr.height * 100) + '%';
+            d.innerHTML = '<b>' + p.landmark + '</b>';
+            dots.appendChild(d);
+        });
+    pfPitchFit = pfFitPitch();
+    pfDrawPitchOverlay();
+    pfPitchQuality();
+    const list = document.getElementById('cv-pitch-list');
+    if (list) {
+        const errs = pfClickErrors();
+        list.innerHTML = pfPitchClicks.map(function (p, i) {
+            const e = errs[i];
+            const bad = (e !== null && e > 8);
+            return '<tr class="cv-pitch-row' + (bad ? ' is-bad' : '') +
+                   '" data-i="' + i + '" title="Tap to remove this mark">' +
+                   '<td>' + p.landmark + '</td><td>' + p.t_sec.toFixed(0) + 's</td>' +
+                   '<td>' + (e === null ? '' : e.toFixed(0) + 'px') + '</td></tr>';
+        }).join('');
+        Array.prototype.forEach.call(list.querySelectorAll('tr'), function (tr) {
+            tr.onclick = function () {
+                const i = parseInt(tr.getAttribute('data-i'), 10);
+                if (!isNaN(i)) { pfPitchClicks.splice(i, 1); pfRenderPitch(); }
+            };
+        });
+    }
+}
+
+function pfPitchPayload() {
+    if (!pfPitchFit || !pfPitchFrames.length) return null;
+    const fr = pfPitchFrames[0];
+    return {
+        clicks: pfPitchClicks.map(function (p) {
+            return { frame_index: p.frame_index, x: p.x, y: p.y, landmark: p.landmark };
+        }),
+        // the browser's own answer, sent as a starting point for the server's
+        // authoritative re-fit (verified there, not trusted)
+        params: pfPitchFit.p,
+        frame_width: fr.width,
+        frame_height: fr.height,
+        pitch_length_m: PF_PITCH_L,
+        pitch_width_m: PF_PITCH_W,
+    };
+}
+
+function showPitchCalibScreen(token, playRanges, done) {
+    pfPitchDone = done;
+    pfPitchClicks = [];
+    pfPitchFit = null;
+    pfPitchCur = 0;
+    const screen = document.getElementById('cv-pitch-screen');
+    const sel = document.getElementById('cv-pitch-landmark');
+    if (!screen || !sel) { done(null); return; }
+    screen.classList.remove('hidden');
+
+    if (!sel.options.length) {
+        PF_PITCH_LANDMARKS.forEach(function (l) {
+            const o = document.createElement('option');
+            o.value = l[0];
+            o.textContent = l[3];
+            sel.appendChild(o);
+        });
+    }
+
+    const fd = new FormData();
+    fd.append('token', token);
+    fd.append('count', '6');
+    fd.append('play_ranges', JSON.stringify(playRanges || []));
+    fetch(cvApiUrl('/api/v2/calibration_frames'), { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+            if (!data || data.error || !(data.frames || []).length) throw new Error('no frames');
+            pfPitchFrames = data.frames;
+            const tabs = document.getElementById('cv-pitch-tabs');
+            tabs.innerHTML = '';
+            pfPitchFrames.forEach(function (f, k) {
+                const b = document.createElement('button');
+                b.type = 'button';
+                b.textContent = f.t_sec.toFixed(0) + 's';
+                b.onclick = function () { pfPitchCur = k; pfRenderPitch(); };
+                tabs.appendChild(b);
+            });
+            pfRenderPitch();
+        })
+        .catch(function () {
+            // Calibration is an enhancement; if frames can't be fetched just
+            // carry on with today's behaviour rather than blocking the user.
+            pfFinishPitch(null);
+        });
+}
+
+function pfFinishPitch(payload) {
+    const screen = document.getElementById('cv-pitch-screen');
+    if (screen) screen.classList.add('hidden');
+    const cb = pfPitchDone;
+    pfPitchDone = null;
+    if (cb) cb(payload);
+}
+
+function pfInitPitchScreen() {
+    const img = document.getElementById('cv-pitch-img');
+    const sel = document.getElementById('cv-pitch-landmark');
+    if (!img || img.getAttribute('data-wired')) return;
+    img.setAttribute('data-wired', '1');
+
+    img.addEventListener('click', function (e) {
+        if (!pfPitchFrames.length) return;
+        const fr = pfPitchFrames[pfPitchCur];
+        const r = img.getBoundingClientRect();
+        // clicks recorded in NATIVE video pixels, whatever size it is displayed at
+        const x = (e.clientX - r.left) / r.width * fr.width;
+        const y = (e.clientY - r.top) / r.height * fr.height;
+        pfPitchClicks.push({
+            landmark: sel.value, frame_index: fr.frame_index,
+            t_sec: fr.t_sec, x: x, y: y,
+        });
+        // Deliberately NOT auto-advancing the dropdown. It silently relabels:
+        // click twice without watching it and the second mark is recorded as a
+        // landmark you never chose, which is indistinguishable from a bad click.
+        pfRenderPitch();
+    });
+
+    const undo = document.getElementById('cv-pitch-undo');
+    if (undo) undo.onclick = function () { pfPitchClicks.pop(); pfRenderPitch(); };
+    const clear = document.getElementById('cv-pitch-clear');
+    if (clear) clear.onclick = function () { pfPitchClicks = []; pfRenderPitch(); };
+    const skip = document.getElementById('cv-pitch-skip');
+    if (skip) skip.onclick = function () { pfFinishPitch(null); };
+    const use = document.getElementById('cv-pitch-use');
+    if (use) use.onclick = function () { pfFinishPitch(pfPitchPayload()); };
+}
+
+document.addEventListener('DOMContentLoaded', pfInitPitchScreen);

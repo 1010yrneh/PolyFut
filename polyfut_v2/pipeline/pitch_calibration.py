@@ -82,7 +82,16 @@ LANDMARKS: dict[str, tuple[str, str]] = {
     "penarea_R_goalline_far":    ("L", "W/2+20.16"),
     "penarea_R_outer_near":      ("L-16.5", "W/2-20.16"),
     "penarea_R_outer_far":       ("L-16.5", "W/2+20.16"),
+    # The right end had neither a 6-yard box nor goalposts while the left had
+    # both — so a camera pointed at the right goal, which is most of this
+    # footage, could not mark the crispest lines available to it.
+    "goalarea_R_goalline_near":  ("L", "W/2-9.16"),
+    "goalarea_R_goalline_far":   ("L", "W/2+9.16"),
+    "goalarea_R_outer_near":     ("L-5.5", "W/2-9.16"),
+    "goalarea_R_outer_far":      ("L-5.5", "W/2+9.16"),
     "penspot_R":                 ("L-11", "W/2"),
+    "post_R_near":               ("L", "W/2-3.66"),
+    "post_R_far":                ("L", "W/2+3.66"),
 }
 
 # Parameter order: Xc, Yc, h, f, roll, then (pan, tilt) per clicked frame.
@@ -500,6 +509,17 @@ def _direct_homography(clicks, L: float, W: float):
     w = Q[:, 2]
     if not np.all(np.abs(w) > 1e-9):
         return None, None
+    # Fix the sign so w > 0 means "in front of the camera". H and -H are the
+    # same projective transform and cv2 may return either, but PitchMapper.
+    # to_pitch rejects points with w <= 0 as being past the horizon — a test
+    # that is only meaningful once a convention exists. Without this the guard
+    # silently inverts on roughly half of all calibrations, discarding good
+    # positions and accepting points genuinely behind the camera. The anchors
+    # are all visibly in frame, so the sign that makes them positive is right.
+    if np.sum(w < 0) > np.sum(w > 0):
+        H = -H
+        Q = -Q
+        w = -w
     resid = np.linalg.norm(Q[:, :2] / w[:, None] - dst, axis=1)
     return H, float(np.median(resid))
 
