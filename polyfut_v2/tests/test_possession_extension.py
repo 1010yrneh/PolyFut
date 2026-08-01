@@ -9,8 +9,14 @@ on only 40% of frames, the last *seen* touch is routinely not the last touch.
 
 from __future__ import annotations
 
+import pytest
+
 from polyfut_v2.config import PipelineV2Config
-from polyfut_v2.pipeline.hotspots import assemble_hotspots, ball_departure_sec
+from polyfut_v2.pipeline.hotspots import (
+    assemble_hotspots,
+    ball_departure_sec,
+    ball_track_from_trajectory,
+)
 
 CFG = PipelineV2Config()
 OFF = PipelineV2Config(hotspot_possession_enabled=False)
@@ -27,6 +33,50 @@ def _ball_holds_then_leaves(last_touch=10.0, hold_sec=3.0, hz=10.0):
         track.append((t, 100.0 + (t - last_touch - hold_sec) * 400.0, 100.0))
         t += 1.0 / hz
     return track
+
+
+# ------------------------------------------------- getting the track at all
+def test_no_trajectory_is_an_empty_track():
+    assert ball_track_from_trajectory(None) == []
+
+
+def test_a_real_trajectory_actually_yields_its_samples():
+    """The test that was missing, and would have caught a dead feature.
+
+    The first version called ``traj.positions()`` — no such method; it is
+    ``positioned()`` — behind a permissive getattr, so it returned an empty
+    track on every real run and the extension never fired. Every other test here
+    passes a hand-built list, so none of them noticed.
+    """
+    from polyfut_v2.pipeline.trajectory import BallSample, BallTrajectory
+
+    def _s(fi, t, x, y):
+        return BallSample(frame_index=fi, t_sec=t, processed_sec=t, x=x, y=y,
+                          bbox=None if x is None else [x - 4, y - 4, x + 4, y + 4],
+                          conf=0.0 if x is None else 0.9,
+                          detected=x is not None, interpolated=False)
+
+    traj = BallTrajectory(samples=[
+        _s(0, 1.0, 10.0, 20.0),
+        _s(1, 2.0, None, None),      # a miss must not appear in the track
+        _s(2, 3.0, 30.0, 40.0),
+    ])
+    track = ball_track_from_trajectory(traj)
+    assert track == [(1.0, 10.0, 20.0), (3.0, 30.0, 40.0)], track
+
+
+def test_the_wrong_object_raises_instead_of_silently_disabling_itself():
+    """An empty track switches the whole feature off while looking exactly like
+    a legitimately blind video.
+
+    This is not hypothetical: a validation script passed ``compute_trajectory``'s
+    *result dict* instead of ``res["trajectory"]``, got a silent empty track, and
+    reported a confident "0.0s gained across 6 hotspots" — a wrong answer that
+    looked like a real measurement. Same failure mode as the untraceable zero
+    ``metric_coverage``, so it fails loudly now.
+    """
+    with pytest.raises(TypeError, match="BallTrajectory"):
+        ball_track_from_trajectory({"trajectory": object()})
 
 
 # --------------------------------------------------------------- the primitive

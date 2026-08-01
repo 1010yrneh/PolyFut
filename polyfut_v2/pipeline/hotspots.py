@@ -51,9 +51,28 @@ def ball_track_from_trajectory(traj) -> BallTrack:
 
     Source ``t_sec``, not ``processed_sec``: hotspots are cut against the real
     video, and ``processed_sec`` is a compacted timeline with dead time removed.
+
+    ``traj`` may be None (no trajectory at all). Anything else that cannot
+    produce samples raises, rather than quietly yielding an empty track.
+
+    That strictness earned itself immediately. The first version of this
+    function read ``traj.positions()`` — a method that does not exist; the real
+    one is ``positioned()`` — behind a ``getattr(..., None) or (lambda: [])``
+    guard. So it returned an empty track on every real run, silently disabling
+    the possession extension entirely, and the whole test suite passed because
+    nothing exercised it against a real trajectory. An empty track is
+    indistinguishable from a legitimately blind video, which is precisely the
+    class of silent failure that made a zero ``metric_coverage`` untraceable.
     """
+    if traj is None:
+        return []
+    positioned = getattr(traj, "positioned", None)
+    if not callable(positioned):
+        raise TypeError(
+            f"expected a BallTrajectory, got {type(traj).__name__}; "
+            f"pass res['trajectory'], not compute_trajectory's result dict")
     out: BallTrack = []
-    for s in (getattr(traj, "positions", None) or (lambda: []))():
+    for s in positioned():
         try:
             out.append((float(s.t_sec), float(s.x), float(s.y)))
         except (TypeError, ValueError, AttributeError):
