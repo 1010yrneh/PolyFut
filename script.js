@@ -2407,6 +2407,28 @@ function __v2SeedTeamHiddenFlags(tracklets) {
     // screen — don't split it in half.
     if (__hsvDist(c0, c1) < 45) return hidden;
 
+    // ...and that distance alone is not enough, because it counts saturation
+    // and brightness. Measured on a real clip (f1fcfbb84a0d @21s, 14 tracked
+    // players): every kit read landed at hue 17-26 — a spread of 8.5, sitting
+    // on that pitch's own turf hue of 28 — while saturation spread 192. The
+    // grass mask in the backend only catches 1.2% of that (bleached) turf, so
+    // jersey_hsv was reporting the GROUND for every player, and the two
+    // "kits" the split found differed in hue by 0.6. It was separating players
+    // by how much their shirt lightened the grass behind it, then hiding
+    // whichever half you had not picked: 6 of 14 players vanished, including
+    // the user's own.
+    //
+    // Two different kits differ in HUE, or one of them is unsaturated (a white
+    // or grey shirt against a coloured one). Same hue + different brightness is
+    // one surface under two lightings, never two teams. Getting this wrong
+    // hides the player from the screen whose entire purpose is finding them, so
+    // when the colour cannot be trusted, nothing is hidden.
+    var dHue = Math.abs(c0[0] - c1[0]);
+    dHue = Math.min(dHue, 180 - dHue);
+    var oneIsUnsaturated = (Math.min(c0[1], c1[1]) < 60 &&
+                            Math.max(c0[1], c1[1]) >= 100);
+    if (dHue < 12 && !oneIsUnsaturated) return hidden;
+
     var mineCluster = (__hsvDist(c0, mine) <= __hsvDist(c1, mine)) ? 0 : 1;
     for (var k2 = 0; k2 < cols.length; k2++) {
         if (assign[k2] !== mineCluster) hidden[idx[k2]] = true;
