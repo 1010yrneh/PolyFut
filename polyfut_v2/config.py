@@ -88,6 +88,17 @@ class PipelineV2Config:
     # confidence filter runs on the max class score before the class list is
     # applied, and NMS offsets boxes by class. Issue 15, step 1.
     harvest_players_from_ball_pass: bool = True
+    # --- Issue 15, step 2: linking harvested players into tracklets ---
+    # A track goes quiet whenever no full-frame scan ran; this is how long it
+    # may stay quiet before it is closed rather than resumed.
+    track_max_gap_sec: float = 2.0
+    # Associate in camera-compensated pixels. Default OFF on measurement: the
+    # camera translates a median of 2.79px between consecutive harvested frames
+    # against a gate that already allows ~39px, so compensation is rarely needed
+    # here while its estimation error perturbs every prediction — switching it
+    # on gave 109 tracks at a 12.9s mean life vs 89 at 16.0s without. Distinct
+    # from the orbital prior (Issue 5), which spans seconds and does need it.
+    track_use_camera: bool = False
 
     # --- Stage 3b: ROI search around last known ball position ---
     # A region-of-interest around the last ball gives higher effective
