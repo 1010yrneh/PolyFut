@@ -64,7 +64,7 @@
         </div>
     </header>
 
-    <!-- CV: seed via tracked, tappable player nodes on a 3s enhanced clip (v2) -->
+    <!-- CV: seed via tracked, tappable player nodes on short clips (v2) -->
     <div id="cv-seed-screen" class="cv-overlay-screen hidden" aria-live="polite">
         <div class="cv-overlay-card">
             <h2 class="cv-overlay-title" id="cv-seed-title">Tap yourself in each clip</h2>
@@ -87,9 +87,45 @@
             </label>
             <div class="cv-overlay-actions">
                 <button type="button" class="cv-btn-secondary" id="cv-seed-cancel">Back</button>
-                <button type="button" class="cv-btn-secondary" id="cv-seed-reroll">Not here - Shuffle Clips</button>
+                <button type="button" class="cv-btn-secondary" id="cv-seed-reroll">Not here - Shuffle This Clip</button>
                 <button type="button" class="cv-btn-secondary" id="cv-seed-skip">Next Clip</button>
                 <button type="button" class="cv-btn-primary" id="cv-seed-next" disabled>Find My Touches</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CV: when were you actually on the pitch? (bounds the whole analysis) -->
+    <div id="cv-playtime-screen" class="cv-overlay-screen hidden">
+        <div class="cv-overlay-card cv-playtime-card">
+            <h2 class="cv-overlay-title">When were you on the pitch?</h2>
+            <p class="cv-overlay-sub">Drag the handles to the stretch you actually played. Everything after this — the clips we ask you to tap yourself in, and the touch search itself — stays inside it, so we never learn the wrong player or count someone else's touches.</p>
+            <p class="cv-overlay-note">Scrub the handles and watch the preview to find your substitution. If you played the whole game, just tap <strong>I played the whole match</strong>.</p>
+
+            <div class="cv-playtime-preview">
+                <video id="cv-playtime-video" playsinline muted preload="metadata"></video>
+                <span id="cv-playtime-preview-time" class="cv-playtime-preview-time">0:00</span>
+            </div>
+
+            <div class="cv-playtime-presets" id="cv-playtime-presets">
+                <button type="button" class="cv-chip" data-preset="whole">Whole match</button>
+                <button type="button" class="cv-chip" data-preset="first">First half</button>
+                <button type="button" class="cv-chip" data-preset="second">Second half</button>
+            </div>
+
+            <div class="cv-playtime-track" id="cv-playtime-track">
+                <div class="cv-playtime-ticks" id="cv-playtime-ticks"></div>
+            </div>
+
+            <div class="cv-playtime-periods" id="cv-playtime-periods"></div>
+
+            <div class="cv-playtime-footer">
+                <button type="button" class="cv-btn-link" id="cv-playtime-add">+ Add another period</button>
+                <span class="cv-playtime-total" id="cv-playtime-total"></span>
+            </div>
+
+            <div class="cv-overlay-actions">
+                <button type="button" class="cv-btn-secondary" id="cv-playtime-whole">I played the whole match</button>
+                <button type="button" class="cv-btn-primary" id="cv-playtime-next">Continue</button>
             </div>
         </div>
     </div>
@@ -102,6 +138,83 @@
             <div id="cv-team-options" class="cv-team-options"></div>
             <div class="cv-overlay-actions">
                 <button type="button" class="cv-btn-secondary" id="cv-team-cancel">Back</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CV: sample a kit colour straight off the video.
+         Automatic detection reads a torso crop that is mostly pitch on wide
+         footage, so it can land on the ground's colour instead of the shirt.
+         Clicking the shirt takes the colour AS THE CAMERA SEES IT, which is
+         what every downstream comparison is against — a "true" navy typed into
+         a colour picker would never match a navy the exposure has crushed. -->
+    <div id="cv-eyedrop-screen" class="cv-overlay-screen hidden">
+        <div class="cv-overlay-card cv-eyedrop-card">
+            <h2 class="cv-overlay-title">Click your shirt</h2>
+            <p class="cv-overlay-sub" id="cv-eyedrop-sub">
+                Click a player wearing your kit. Pick the body, not the shorts or a shadow.
+            </p>
+            <div id="cv-eyedrop-tabs" class="cv-pitch-tabs"></div>
+            <div class="cv-eyedrop-stage">
+                <canvas id="cv-eyedrop-canvas"></canvas>
+                <div id="cv-eyedrop-loupe" class="cv-eyedrop-loupe hidden">
+                    <canvas id="cv-eyedrop-zoom" width="120" height="120"></canvas>
+                </div>
+            </div>
+            <div class="cv-eyedrop-foot">
+                <span class="cv-eyedrop-preview" id="cv-eyedrop-preview"></span>
+                <span id="cv-eyedrop-readout" class="mut">Hover the video to preview a colour.</span>
+            </div>
+            <div class="cv-overlay-actions">
+                <button type="button" class="cv-btn-secondary" id="cv-eyedrop-cancel">Cancel</button>
+                <button type="button" class="cv-btn-primary" id="cv-eyedrop-use" disabled>Use this colour</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- CV: optional pitch calibration. Lets "who touched the ball" be judged in
+         metres instead of pixels — 80px is ~8m near the camera but ~50m at the
+         far touchline, which is how players nowhere near the ball end up tagged. -->
+    <div id="cv-pitch-screen" class="cv-overlay-screen hidden">
+        <div class="cv-overlay-card cv-pitch-card">
+            <h2 class="cv-overlay-title">Mark out the pitch</h2>
+            <p class="cv-overlay-sub">
+                Optional, about a minute. Without it the app judges “who touched
+                the ball” in pixels, which stretches to <b>~50&nbsp;m</b> at the far
+                side of the pitch — the main reason other players show up in your
+                hotspots. Marking the pitch fixes that.
+            </p>
+            <div class="cv-pitch-body">
+                <div class="cv-pitch-main">
+                    <div class="cv-pitch-tabs" id="cv-pitch-tabs"></div>
+                    <div class="cv-pitch-stage" id="cv-pitch-stage">
+                        <img id="cv-pitch-img" alt="Video frame — click pitch landmarks">
+                        <canvas id="cv-pitch-canvas"></canvas>
+                        <div id="cv-pitch-dots"></div>
+                    </div>
+                    <p class="cv-pitch-hint">
+                        Pick a landmark, then click exactly where it is. The
+                        <b class="cv-pitch-key">yellow pitch</b> is what your clicks imply —
+                        <b>it should sit on the real painted lines.</b>
+                    </p>
+                </div>
+                <div class="cv-pitch-side">
+                    <label class="cv-pitch-label" for="cv-pitch-landmark">Next landmark</label>
+                    <select id="cv-pitch-landmark"></select>
+                    <div id="cv-pitch-quality" class="cv-pitch-quality">
+                        Add 4 or more landmarks to begin. Aim for 8, spread near
+                        <i>and</i> far — points all along one line cannot be solved.
+                    </div>
+                    <table id="cv-pitch-list" class="cv-pitch-list"></table>
+                    <div class="cv-pitch-side-actions">
+                        <button type="button" class="cv-btn-secondary" id="cv-pitch-undo">Undo</button>
+                        <button type="button" class="cv-btn-secondary" id="cv-pitch-clear">Clear</button>
+                    </div>
+                </div>
+            </div>
+            <div class="cv-overlay-actions">
+                <button type="button" class="cv-btn-secondary" id="cv-pitch-skip">Skip this</button>
+                <button type="button" class="cv-btn-primary" id="cv-pitch-use" disabled>Use this pitch</button>
             </div>
         </div>
     </div>
@@ -130,9 +243,9 @@
     <!-- CV v2: me / not-me montage review -->
     <div id="cv-montage-screen" class="cv-overlay-screen hidden" aria-live="polite">
         <div class="cv-overlay-card cv-montage-card">
-            <h2 class="cv-overlay-title">Was this you?</h2>
-            <p class="cv-overlay-sub" id="cv-montage-sub">Watch the touch and tap <strong>That's me</strong> if the marked player is you, or <strong>Not me</strong> if it's a teammate.</p>
-            <p class="cv-overlay-note" id="cv-montage-note">These are only the touches we weren't sure about — your answers just resolve the uncertain ones. Touches we're confident are yours are already counted, so you're not reviewing the whole match.</p>
+            <h2 class="cv-overlay-title">Did you touch the ball here?</h2>
+            <p class="cv-overlay-sub" id="cv-montage-sub">Tap <strong>That's my touch</strong> if <strong>you</strong> touched the ball at this moment, or <strong>Not my touch</strong> if it was another player — or if nobody actually touched it.</p>
+            <p class="cv-overlay-note" id="cv-montage-note">Only the touches we weren't sure about — confident ones are already counted. The green box is just our best guess at <em>who</em> touched the ball and can sit on the wrong player, so <strong>judge the moment, not the box</strong>.</p>
             <div id="cv-montage-progress" class="cv-montage-progress"></div>
             <div class="cv-montage-stage" id="cv-montage-stage">
                 <video id="cv-montage-video" playsinline muted style="display:none"></video>
@@ -142,7 +255,6 @@
                     <span id="cv-montage-zoomlevel">1.0×</span>
                     <button type="button" id="cv-montage-zoomin" title="Zoom in">+</button>
                     <button type="button" id="cv-montage-zoomreset" title="Reset view">Reset</button>
-                    <button type="button" id="cv-montage-enhance" title="Sharpen this clip for a closer look">Enhance</button>
                 </div>
                 <svg width="0" height="0" style="position:absolute" aria-hidden="true">
                     <filter id="cv-sharpen">
@@ -157,11 +269,45 @@
                 <button type="button" class="cv-btn-link" id="cv-montage-undo-btn">Undo</button>
             </div>
             <div class="cv-overlay-actions">
-                <button type="button" class="cv-btn-secondary" id="cv-montage-notme">Not me</button>
-                <button type="button" class="cv-btn-primary" id="cv-montage-me">That's me</button>
+                <button type="button" class="cv-btn-secondary" id="cv-montage-notme">Not my touch</button>
+                <button type="button" class="cv-btn-primary" id="cv-montage-me">That's my touch</button>
             </div>
             <div class="cv-montage-footer">
                 <button type="button" class="cv-btn-link" id="cv-montage-finish">Skip the rest &amp; see hotspots</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- First-launch personalization (skippable): Groq API key for AI scout reports -->
+    <div id="pf-onboarding-screen" class="cv-overlay-screen hidden" role="dialog" aria-modal="true" aria-labelledby="pf-onboarding-title">
+        <div class="cv-overlay-card pf-onboarding-card">
+            <div class="setup-eyebrow">
+                <span class="setup-eyebrow-line"></span>
+                <span class="setup-eyebrow-text">Welcome</span>
+            </div>
+            <h2 class="cv-overlay-title" id="pf-onboarding-title">Personalize PolyFut</h2>
+            <p class="cv-overlay-sub">Optional — takes about a minute. Connect a free Groq API key so Match Analysis can write you an AI scout report. Everything else in PolyFut works without it.</p>
+
+            <ol class="pf-onboarding-steps">
+                <li>Open the <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq API Console</a> and sign in (Google / GitHub / email).</li>
+                <li>Click <strong>Create API Key</strong>, give it a name (e.g. PolyFut), and submit.</li>
+                <li>Copy the key — it usually starts with <code>gsk_</code>.</li>
+                <li>Paste it below and click <strong>Save &amp; continue</strong>.</li>
+            </ol>
+
+            <div class="pf-onboarding-keyrow">
+                <label class="setup-label" for="pf-onboarding-key">Your Groq API key</label>
+                <div class="pf-onboarding-keyfields">
+                    <input type="password" id="pf-onboarding-key" class="setup-input" placeholder="gsk_…" autocomplete="off" spellcheck="false">
+                    <button type="button" class="cv-btn-primary" id="pf-onboarding-save">Save &amp; continue</button>
+                </div>
+                <p id="pf-onboarding-error" class="pf-onboarding-error hidden" role="alert"></p>
+            </div>
+
+            <p class="cv-overlay-note">You can skip and add a key later on the Match Analysis page, or open <strong>How to Use → AI Report</strong> anytime for the full walkthrough with screenshots.</p>
+
+            <div class="cv-overlay-actions">
+                <button type="button" class="cv-btn-secondary" id="pf-onboarding-skip">Skip for now</button>
             </div>
         </div>
     </div>
@@ -222,6 +368,9 @@
                     <span>🔔 Notify me when PolyFut needs my input</span>
                 </label>
                 <p class="setup-analysis-hint">Full-match analysis runs on your CPU and may take several hours. You can close this tab and reopen PolyFut later — progress is kept until you cancel the run.</p>
+
+                <button id="manual-start-btn" class="start-btn start-btn-manual" onclick="initAppManual()" disabled style="opacity: 0.5;">Skip AI, tag manually</button>
+                <p class="setup-analysis-hint">Opens your video immediately with no detection — you scrub it yourself and tap the same stat buttons. No hotspots, no team colors, no waiting.</p>
             </div>
 
             <div id="match-catalogue" class="match-catalogue">
@@ -354,7 +503,7 @@
         <h1 class="brand-title" style="margin-top: 20px;">MATCH ANALYSIS</h1>
         <h2 id="result-header" style="text-align:center; color:#8fa093; margin-bottom: 20px; font-weight: 600;"></h2>
 
-        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 800px; background:#11150f; padding:26px; border-radius:0; border:1px solid rgba(48,255,143,0.3); margin-bottom:20px;">
+        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 1180px; background:#11150f; padding:26px; border-radius:0; border:1px solid rgba(48,255,143,0.3); margin-bottom:20px;">
             <div style="text-align:center; flex: 1;">
                 <h3 style="color:#8fa093; font-size:12px; margin:0; text-transform:uppercase; letter-spacing: 0.16em; font-weight: 700;">Goals ⚽</h3>
                 <p id="res-goals" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:54px; color:#30ff8f; margin:5px 0;">0</p>
@@ -366,21 +515,29 @@
             </div>
         </div>
 
-        <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 800px;">
+        <p class="tp-explainer" title="Threat Points are PolyFut's scoring unit">
+            <strong>TP = Threat Points.</strong>
+            1&nbsp;TP ≈ 1% of a goal (a goal is worth 100&nbsp;TP).
+            <strong>Impact</strong> is the immediate chance you created or prevented (Markov) — it can still go negative if things like being dispossessed, a foul, or a defensive error outweighed it.
+            <strong>Risk</strong> is the longer-term, win/loss-adjusted payoff of your choices (Ridge) — positive means the risk paid off for your team, negative means it cost you.
+            Green = worked out this match; red = didn't.
+        </p>
+
+        <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 1180px;">
             <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1;">
-                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET THREAT (TP)</h3>
+                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET THREAT POINTS (TP)</h3>
                 <p id="res-overall" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:30px; color:#f2f7f1; margin:8px 0 0;">0.0</p>
             </div>
             <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
                 <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">OFFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (TP gained)</span><br>
-                        <span id="res-off-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#30ff8f;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Immediate chance created — can go negative if dispossessions outweighed it">IMPACT (net TP, immediate)</span><br>
+                        <span id="res-off-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible TP Lost)</span><br>
-                        <span id="res-off-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#8fdcae;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
+                        <span id="res-off-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
                     </div>
                 </div>
             </div>
@@ -388,46 +545,44 @@
                 <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">DEFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">IMPACT (TP prevented)</span><br>
-                        <span id="res-def-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#4aa3ff;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Immediate chance prevented — can go negative if fouls or defensive errors outweighed it">IMPACT (net TP, immediate)</span><br>
+                        <span id="res-def-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;">RISK (Possible TP increased)</span><br>
-                        <span id="res-def-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#9ec9ff;">0.0</span>
+                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
+                        <span id="res-def-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="ai-scout-panel" style="width: 90%; max-width: 800px; background: #11150f; border: 1px solid rgba(255,255,255,0.08); padding: 22px; border-radius: 0; margin-bottom: 20px;">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px;">
-                <h3 style="font-family: 'Anton', sans-serif; font-weight: 400; letter-spacing: 0.04em; color: #30ff8f; margin: 0; display: flex; align-items: center; gap: 8px;">🤖 AI SCOUT REPORT</h3>
-                <div id="api-key-container" style="display: flex; flex-direction: column; align-items: flex-end; gap: 3px;">
-                    <div style="display: flex; gap: 5px;">
-                        <input type="password" id="api-key-input" placeholder="Paste Groq API Key"
-                               style="background: #0b0d0b; border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 8px 10px; border-radius: 0; width: 150px;">
-                        <button onclick="saveApiKey()" id="save-key-btn" style="background: #1c241c; color: #fff; border: 1px solid rgba(255,255,255,0.14); cursor: pointer; padding: 8px 14px; border-radius: 0; font-weight: 700; font-size: 12px;">SAVE</button>
-                    </div>
+        <div class="ai-scout-panel" style="width: 90%; max-width: 1180px; margin-bottom: 20px;">
+            <div class="scout-header">
+                <h3 class="scout-title">AI Scout Report</h3>
+                <div id="api-key-container" class="scout-key-form">
+                    <input type="password" id="api-key-input" placeholder="Paste Groq API Key" class="scout-key-input">
+                    <button onclick="saveApiKey()" id="save-key-btn" class="scout-key-save">SAVE</button>
                 </div>
-                <div id="api-key-saved" class="hidden" style="display: flex; align-items: center; gap: 10px;">
-                    <span style="color: #30ff8f; font-size: 0.8rem; font-weight: bold;">🔑 KEY SAVED</span>
-                    <button onclick="clearApiKey()" style="background: transparent; border: 1px solid #ff2e4d; color: #ff2e4d; cursor: pointer; font-size: 0.7rem; padding: 4px 8px; border-radius: 0;">RESET</button>
+                <div id="api-key-saved" class="hidden scout-key-saved">
+                    <span>KEY SAVED</span>
+                    <button onclick="clearApiKey()" class="scout-key-reset">RESET</button>
                 </div>
             </div>
-            <button onclick="generateScoutReport()" id="gen-report-btn" class="fidget-btn" style="width: 100%; background: linear-gradient(135deg, #30ff8f 0%, #1fae66 100%); color: #07160c; min-height: 44px; margin-bottom: 14px; font-size: 1rem;">GENERATE REPORT</button>
-            <div id="ai-output" style="color: #a8b4a9; font-family: 'Rajdhani', monospace; font-size: 0.95rem; height: 350px; overflow-y: auto; white-space: pre-wrap; background: #0b0d0b; padding: 16px; border-radius: 0; border: 1px solid rgba(255,255,255,0.08);">Waiting for stats...</div>
-            <div id="followup-container" class="hidden" style="margin-top: 14px; display: flex; gap: 8px;">
-                <input type="text" id="followup-input" placeholder="Ask the Coach AI a follow-up question..."
-                       style="flex-grow: 1; background: #0b0d0b; border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 12px; border-radius: 0; font-family: 'Rajdhani', sans-serif;">
-                <button onclick="askFollowUp()" id="followup-btn" style="background: #30ff8f; color: #07160c; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 22px; border-radius: 0; cursor: pointer; transition: 0.2s;">ASK</button>
+            <button onclick="generateScoutReport()" id="gen-report-btn" class="fidget-btn scout-generate-btn">GENERATE REPORT</button>
+            <div id="ai-output" class="scout-report">
+                <p class="scout-placeholder">Waiting for stats...</p>
+            </div>
+            <div id="followup-container" class="hidden scout-followup">
+                <input type="text" id="followup-input" placeholder="Ask the Coach AI a follow-up question..." class="scout-followup-input">
+                <button onclick="askFollowUp()" id="followup-btn" class="scout-followup-btn">ASK</button>
             </div>
         </div>
 
-        <div class="chart-container-full" style="width:90%; max-width: 800px; height:300px; margin:0 auto; background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:16px; border-radius:0;">
+        <div class="chart-container-full" style="width:90%; max-width: 1180px; height:300px; margin:0 auto; background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:16px; border-radius:0;">
             <canvas id="wpaChart"></canvas>
         </div>
 
-        <button class="start-btn" onclick="location.reload()" style="background:#1c241c; border: 1px solid rgba(255,255,255,0.14); color: #f2f7f1; margin-top:30px; width:90%; max-width: 800px; clip-path: none;">CLOSE ANALYSIS</button>
+        <button class="start-btn" onclick="location.reload()" style="background:#1c241c; border: 1px solid rgba(255,255,255,0.14); color: #f2f7f1; margin-top:30px; width:90%; max-width: 1180px; clip-path: none;">CLOSE ANALYSIS</button>
     </div>
 
     <!-- Floating analysis progress (draggable, closable) -->
@@ -457,7 +612,7 @@
     </div>
 
     <script src="calculations.js"></script>
-    <script src="help.js?v=2"></script>
-    <script src="script.js"></script>
+    <script src="help.js?v=4"></script>
+    <script src="script.js?v=4"></script>
 </body>
 </html>

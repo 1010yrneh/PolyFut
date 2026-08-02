@@ -16,6 +16,7 @@
     --grad-pass: linear-gradient(135deg, #2979ff 0%, #0d47a1 100%);
     --grad-def: linear-gradient(135deg, #00e676 0%, #006064 100%);
     --grad-skill: linear-gradient(135deg, #ffd700 0%, #ff8f00 100%);
+    --bg-paper: #141a10;
 }
 
 body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); font-family: 'Rajdhani', sans-serif; display: flex; flex-direction: column; align-items: stretch; min-height: 100vh; }
@@ -190,6 +191,17 @@ body:has(#setup-screen.hidden) .app-header { display: none; }
 .start-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(48, 255, 143, 0.4); }
 .start-btn:disabled { opacity: 0.5 !important; cursor: not-allowed; background: #1c241c; color: #5f6d63; clip-path: none; }
 
+/* Secondary path: bypass AI detection entirely (see initAppManual in script.js) */
+.start-btn-manual {
+    background: transparent;
+    color: var(--text-secondary);
+    border: 1px solid rgba(255,255,255,0.14);
+    font-size: 16px;
+    padding: 14px;
+}
+.start-btn-manual:hover:not(:disabled) { transform: none; box-shadow: none; border-color: var(--fifa-green); color: var(--fifa-green); }
+.start-btn-manual:disabled { opacity: 0.5 !important; cursor: not-allowed; background: transparent; color: #5f6d63; clip-path: none; border-color: rgba(255,255,255,0.08); }
+
 /* MAIN LAYOUT */
 .main-layout { display: flex; width: 100vw; height: 100vh; overflow: hidden; position: relative; z-index: 1; }
 
@@ -312,24 +324,68 @@ body:has(#setup-screen.hidden) .app-header { display: none; }
    NEW: HYBRID DASHBOARD & AI AGENT STYLES
    ========================================= */
 
-/* AI Output Box Custom Scrollbar */
-#ai-output {
-    max-height: 300px;
+/* AI Scout Report — panel chrome, header, key controls */
+.ai-scout-panel { background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.08); padding: 22px; }
+
+.scout-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 14px; flex-wrap: wrap; gap: 10px; }
+.scout-title { font-family: var(--font-display); font-weight: 400; letter-spacing: 0.04em; color: var(--fifa-green); margin: 0; text-transform: uppercase; }
+
+.scout-key-form { display: flex; gap: 5px; }
+.scout-key-input { background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 8px 10px; width: 150px; font-family: 'Rajdhani', sans-serif; }
+.scout-key-save { background: #1c241c; color: #fff; border: 1px solid rgba(255,255,255,0.14); cursor: pointer; padding: 8px 14px; font-weight: 700; font-size: 12px; }
+.scout-key-saved { display: flex; align-items: center; gap: 10px; }
+.scout-key-saved span { color: var(--fifa-green); font-size: 0.8rem; font-weight: bold; letter-spacing: 0.04em; }
+.scout-key-reset { background: transparent; border: 1px solid var(--fifa-red); color: var(--fifa-red); cursor: pointer; font-size: 0.7rem; padding: 4px 8px; }
+
+.scout-generate-btn { width: 100%; background: linear-gradient(135deg, #30ff8f 0%, #1fae66 100%); color: #07160c; min-height: 44px; margin-bottom: 14px; font-size: 1rem; }
+
+/* AI Scout Report — document body (Layout B: score strip + modular card grid) */
+.scout-report {
+    color: #d3ddd4;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.95rem;
+    max-height: 640px;
     overflow-y: auto;
-    border-top: 1px solid #222;
+    background: var(--bg-dark);
+    padding: 18px 20px;
+    border: 1px solid rgba(255,255,255,0.08);
 }
-#ai-output::-webkit-scrollbar {
-    width: 6px;
-}
-#ai-output::-webkit-scrollbar-track {
-    background: #0e0e12;
-}
-#ai-output::-webkit-scrollbar-thumb {
-    background: #444;
-    border-radius: 0;
-}
-#ai-output::-webkit-scrollbar-thumb:hover {
-    background: var(--fifa-green);
+.scout-report::-webkit-scrollbar { width: 6px; }
+.scout-report::-webkit-scrollbar-track { background: #0e0e12; }
+.scout-report::-webkit-scrollbar-thumb { background: #444; border-radius: 0; }
+.scout-report::-webkit-scrollbar-thumb:hover { background: var(--fifa-green); }
+
+.scout-placeholder { color: var(--text-secondary); text-align: center; margin: 40px 0; font-size: 1rem; }
+
+.scout-top { display: flex; gap: 16px; align-items: center; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.08); padding: 16px 20px; margin-bottom: 18px; }
+.scout-top .scout-score { font-family: var(--font-display); font-weight: 400; font-size: 32px; color: var(--fifa-green); line-height: 1; white-space: nowrap; }
+.scout-top .scout-score-lbl { font-size: 10px; color: var(--text-secondary); letter-spacing: 0.1em; text-transform: uppercase; margin-top: 3px; }
+.scout-top p { margin: 0; font-size: 14.5px; color: var(--text-primary); line-height: 1.5; border-left: 1px solid rgba(255,255,255,0.08); padding-left: 18px; flex: 1; }
+
+.scout-grid { columns: 2; column-gap: 16px; }
+.scout-card { background: var(--bg-paper); border: 1px solid rgba(255,255,255,0.08); padding: 14px 16px; margin-bottom: 16px; break-inside: avoid; }
+.scout-card h4 { font-family: var(--font-display); font-weight: 400; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fifa-green); margin: 0 0 8px; }
+.scout-card p { margin: 0; font-size: 14px; line-height: 1.6; color: #d3ddd4; }
+
+.scout-verdict { background: linear-gradient(180deg, var(--bg-panel), var(--bg-paper)); border: 1px solid rgba(48,255,143,0.22); padding: 16px 20px; margin-top: 2px; }
+.scout-verdict .scout-verdict-lbl { font-size: 10px; letter-spacing: 0.12em; color: var(--fifa-green); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
+.scout-verdict p { margin: 0; font-size: 15.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5; }
+
+/* Follow-up Q&A thread, appended below the verdict */
+.scout-thread { margin-top: 18px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+.scout-msg { max-width: 85%; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; }
+.scout-msg.you { align-self: flex-end; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary); }
+.scout-msg.ai { align-self: flex-start; background: rgba(48,255,143,0.06); border-left: 2px solid var(--fifa-green); color: var(--text-primary); }
+.scout-msg .scout-msg-lbl { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 3px; }
+
+.scout-followup { margin-top: 14px; display: flex; gap: 8px; }
+.scout-followup-input { flex-grow: 1; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 12px; font-family: 'Rajdhani', sans-serif; }
+.scout-followup-btn { background: var(--fifa-green); color: #07160c; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 22px; cursor: pointer; transition: 0.2s; }
+
+@media (max-width: 760px) {
+    .scout-grid { columns: 1; }
+    .scout-top { flex-direction: column; align-items: flex-start; }
+    .scout-top p { border-left: none; padding-left: 0; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 10px; }
 }
 
 /* Mobile Responsiveness for the 5-Stat Dashboard */
@@ -450,6 +506,149 @@ html, body {
     padding: 4px 0 4px 12px;
     text-align: left;
 }
+
+/* v3 playing time: declare the on-pitch ranges that bound the whole analysis */
+#cv-playtime-screen .cv-overlay-card { padding: 18px 28px 22px; }
+#cv-playtime-screen .cv-overlay-title { font-size: 1.35rem; margin-bottom: 6px; }
+#cv-playtime-screen .cv-overlay-sub { margin: 0 0 8px; font-size: 0.92rem; }
+#cv-playtime-screen .cv-overlay-note { margin: -2px auto 12px; }
+
+.cv-playtime-preview {
+    position: relative;
+    width: min(100%, 56vh);
+    margin: 0 auto 14px;
+    background: #000;
+    line-height: 0;
+    overflow: hidden;
+}
+.cv-playtime-preview video { width: 100%; height: auto; display: block; }
+.cv-playtime-preview-time {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    padding: 2px 8px;
+    font-size: 0.8rem;
+    line-height: 1.5;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    background: rgba(0, 0, 0, 0.66);
+}
+
+.cv-playtime-presets {
+    display: flex;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 14px;
+    flex-wrap: wrap;
+}
+.cv-chip {
+    background: transparent;
+    border: 1px solid #3a463c;
+    color: var(--text-secondary);
+    padding: 5px 14px;
+    font-family: inherit;
+    font-size: 0.82rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+}
+.cv-chip:hover { border-color: var(--fifa-green); color: var(--fifa-green); }
+.cv-chip.cv-chip-active { border-color: var(--fifa-green); color: #0b0d0b; background: var(--fifa-green); }
+
+/* The timeline itself: full video duration, with one filled bar per period. */
+.cv-playtime-track {
+    position: relative;
+    height: 46px;
+    margin: 0 12px 6px;      /* room for the handles to sit at 0% / 100% */
+    background: #1a201b;
+    border: 1px solid #2c352d;
+    touch-action: none;      /* pointer drags must not scroll the page */
+}
+.cv-playtime-ticks { position: absolute; inset: 0; pointer-events: none; }
+.cv-playtime-tick {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    width: 1px;
+    background: rgba(255, 255, 255, 0.08);
+}
+.cv-playtime-tick span {
+    position: absolute;
+    top: 2px;
+    left: 4px;
+    font-size: 0.62rem;
+    line-height: 1;
+    color: var(--text-secondary);
+    opacity: 0.7;
+}
+
+.cv-playtime-range {
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    background: rgba(48, 255, 143, 0.22);
+    border-left: 1px solid var(--fifa-green);
+    border-right: 1px solid var(--fifa-green);
+}
+.cv-playtime-range-label {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 4px;
+    text-align: center;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    color: var(--fifa-green);
+    pointer-events: none;
+    white-space: nowrap;
+    overflow: hidden;
+}
+.cv-playtime-handle {
+    position: absolute;
+    top: -4px;
+    bottom: -4px;
+    width: 18px;
+    margin-left: -9px;       /* centred on the edge it controls */
+    cursor: ew-resize;
+    touch-action: none;
+    background: transparent;
+    border: none;
+    padding: 0;
+}
+.cv-playtime-handle::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    bottom: 0;
+    left: 7px;
+    width: 4px;
+    background: var(--fifa-green);
+    box-shadow: 0 0 8px rgba(48, 255, 143, 0.5);
+}
+.cv-playtime-handle:focus-visible { outline: 2px solid var(--fifa-gold); }
+
+.cv-playtime-periods { margin: 10px 12px 0; }
+.cv-playtime-period {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    padding: 5px 0;
+    font-size: 0.85rem;
+    font-variant-numeric: tabular-nums;
+    color: var(--text-primary);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.cv-playtime-period-name { color: var(--text-secondary); letter-spacing: 0.06em; text-transform: uppercase; font-size: 0.72rem; }
+
+.cv-playtime-footer {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin: 10px 12px 4px;
+}
+.cv-playtime-total { font-size: 0.85rem; color: var(--fifa-green); font-variant-numeric: tabular-nums; }
 
 /* v2 seed: enhanced clip with tracked, tappable player nodes */
 .cv-seed-stage {
@@ -623,6 +822,23 @@ html, body {
 .cv-seed-clip-dot.picked { background: #9fe8c2; }
 .cv-btn-primary:disabled, .cv-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
+/* Pipeline-produced warnings (e.g. low-resolution footage) — a dismissible
+   banner fixed above everything, including the review overlay screens. */
+.pf-pipeline-warnings {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 7000;
+    display: flex; align-items: flex-start; gap: 14px;
+    background: #3a2c0d; border-bottom: 1px solid rgba(255, 207, 90, 0.4);
+    color: #ffe6a8; padding: 12px 18px;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+}
+.pf-pipeline-warnings-body { flex: 1; font-size: 0.85rem; line-height: 1.5; }
+.pf-pipeline-warnings-body p { margin: 2px 0; }
+.pf-pipeline-warnings-close {
+    background: none; border: none; color: #ffe6a8; font-size: 1.3rem;
+    line-height: 1; cursor: pointer; padding: 0 4px; flex: 0 0 auto;
+}
+.pf-pipeline-warnings-close:hover { color: #fff; }
+
 /* Setup-screen toggle: alerts when PolyFut needs the user's input */
 .pf-alert-toggle-row {
     display: flex; align-items: center; gap: 9px;
@@ -657,6 +873,55 @@ html, body {
     color: var(--text-secondary); font-size: 0.9rem; line-height: 1.5; margin-bottom: 18px;
 }
 .pf-alert-ask-actions { display: flex; gap: 12px; justify-content: flex-end; }
+
+/* First-launch Groq personalization */
+.pf-onboarding-card {
+    max-width: min(560px, 94vw);
+    text-align: left;
+}
+.pf-onboarding-card .cv-overlay-title { text-align: left; }
+.pf-onboarding-card .cv-overlay-sub { text-align: left; margin-bottom: 16px; }
+.pf-onboarding-steps {
+    margin: 0 0 18px;
+    padding-left: 1.25em;
+    color: #a8b4a9;
+    font-size: 0.95rem;
+    line-height: 1.5;
+}
+.pf-onboarding-steps li { margin-bottom: 8px; }
+.pf-onboarding-steps a { color: #f2c94c; }
+.pf-onboarding-steps code {
+    background: #1a211a;
+    padding: 1px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e8f5ec;
+    font-size: 0.9em;
+}
+.pf-onboarding-keyrow { margin-bottom: 14px; }
+.pf-onboarding-keyfields {
+    display: flex;
+    gap: 10px;
+    align-items: stretch;
+    flex-wrap: wrap;
+}
+.pf-onboarding-keyfields .setup-input {
+    flex: 1 1 220px;
+    min-width: 0;
+}
+.pf-onboarding-keyfields .cv-btn-primary {
+    flex: 0 0 auto;
+    white-space: nowrap;
+}
+.pf-onboarding-error {
+    margin: 8px 0 0;
+    color: #ff7a8a;
+    font-size: 0.88rem;
+}
+.pf-onboarding-error.hidden { display: none; }
+.pf-onboarding-card .cv-overlay-actions {
+    justify-content: flex-start;
+    margin-top: 8px;
+}
 
 /* v2 me/not-me montage review */
 .cv-montage-card {
@@ -704,13 +969,14 @@ html, body {
 }
 .cv-montage-controls button:hover { background: rgba(48, 255, 143, 0.25); }
 .cv-montage-controls button:disabled { opacity: 0.4; cursor: default; }
-#cv-montage-enhance { font-weight: 600; }
-#cv-montage-enhance.on { background: var(--fifa-green); color: #04180d; border-color: var(--fifa-green); }
 #cv-montage-zoomlevel { color: #9fe8c2; font-size: 0.78rem; min-width: 34px; text-align: center; }
 .cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 10px 0 12px; font-family: 'Rajdhani', sans-serif; }
 .cv-montage-time { color: #e8f5ec; font-weight: 700; }
 .cv-montage-kinds { color: #93a397; text-transform: capitalize; }
 .cv-montage-conf { color: var(--fifa-green); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.85rem; align-self: center; }
+.cv-montage-crowded { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(255, 186, 48, 0.16); border: 1px solid rgba(255, 186, 48, 0.5); color: #ffca63; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
+.cv-montage-linked { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(48, 255, 143, 0.12); border: 1px solid rgba(48, 255, 143, 0.45); color: #7defad; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
+.cv-montage-unlinked { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(160, 170, 165, 0.14); border: 1px solid rgba(160, 170, 165, 0.45); color: #aeb8b2; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
 .cv-montage-footer { margin-top: 14px; text-align: center; }
 .cv-btn-link { background: none; border: none; color: #8fa39a; text-decoration: underline; cursor: pointer; font-size: 0.85rem; }
 .cv-btn-link:hover { color: var(--fifa-green); }
@@ -762,31 +1028,191 @@ html, body {
     align-items: center;
 }
 
+/* One team = a card holding its kit colours plus the select button. A kit can
+   carry several colours (red/blue halves, hoops); averaging them would produce
+   a colour the kit doesn't contain, so each is kept and shown separately. */
+.cv-team-card {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    background: #11141b;
+    border: 2px solid #2a2f3a;
+    padding: 16px 22px;
+    transition: border-color 0.15s;
+}
+.cv-team-card:hover,
+.cv-team-card:focus-within {
+    border-color: var(--fifa-green);
+}
+
+.cv-team-chips {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    flex-wrap: wrap;
+    min-height: 84px;
+}
+
+/* The chip IS the colour input, so tapping it opens the OS picker directly. */
+.cv-team-chip-wrap {
+    position: relative;
+    width: 68px;
+    height: 68px;
+    display: inline-flex;
+}
+.cv-team-chip-input {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 100%;
+    height: 100%;
+    padding: 0;
+    border: 3px solid rgba(255, 255, 255, 0.25);
+    border-radius: 50%;
+    background: var(--chip, #888);
+    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+    cursor: pointer;
+    overflow: hidden;
+}
+/* Hide the native swatch chrome so the control reads as a plain colour disc. */
+.cv-team-chip-input::-webkit-color-swatch-wrapper { padding: 0; }
+.cv-team-chip-input::-webkit-color-swatch { border: none; border-radius: 50%; }
+.cv-team-chip-input::-moz-color-swatch { border: none; border-radius: 50%; }
+.cv-team-chip-input:hover { border-color: rgba(255, 255, 255, 0.55); }
+.cv-team-chip-input:focus-visible {
+    outline: 2px solid var(--fifa-green);
+    outline-offset: 3px;
+}
+
+.cv-team-chip-del,
+.cv-team-chip-add {
+    font-family: 'Rajdhani', sans-serif;
+    line-height: 1;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.cv-team-chip-del {
+    position: absolute;
+    top: -4px;
+    right: -4px;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    border: 2px solid #11141b;
+    background: #2a2f3a;
+    color: var(--text-primary);
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+.cv-team-chip-del:hover { background: #b4381f; }
+
+.cv-team-chip-add {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px dashed #3a4150;
+    background: transparent;
+    color: var(--text-secondary, #8b927c);
+    font-size: 1.4rem;
+}
+.cv-team-chip-add:hover {
+    border-color: var(--fifa-green);
+    color: var(--fifa-green);
+}
+
+/* Sample the kit colour off the video itself. Sits beside the "+" so the three
+   ways to set a colour (auto, typed, sampled) are in one place. */
+.cv-team-chip-pipette {
+    width: 44px;
+    height: 44px;
+    border-radius: 50%;
+    border: 2px dashed #3a4150;
+    background: transparent;
+    color: var(--text-secondary, #8b927c);
+    font-size: 1.15rem;
+    line-height: 1;
+    cursor: pointer;
+    transition: 0.15s;
+}
+.cv-team-chip-pipette:hover {
+    border-color: var(--fifa-green);
+    color: var(--fifa-green);
+}
+
+.cv-eyedrop-card { max-width: 1000px; width: 94vw; }
+.cv-eyedrop-stage {
+    position: relative;
+    border: 1px solid #2a2f35;
+    border-radius: 6px;
+    overflow: hidden;
+    line-height: 0;
+}
+#cv-eyedrop-canvas {
+    display: block;
+    width: 100%;
+    height: auto;
+    cursor: crosshair;
+    /* the shirts are ~10px wide at source, so show real pixels rather than a
+       smoothed guess at what is between them */
+    image-rendering: pixelated;
+}
+.cv-eyedrop-loupe {
+    position: absolute;
+    width: 120px;
+    height: 120px;
+    border: 2px solid var(--fifa-green, #2ecc71);
+    border-radius: 50%;
+    overflow: hidden;
+    pointer-events: none;
+    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
+}
+.cv-eyedrop-loupe canvas { display: block; image-rendering: pixelated; }
+.cv-eyedrop-foot {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 10px;
+    font-size: 13px;
+}
+.cv-eyedrop-preview {
+    width: 40px;
+    height: 26px;
+    border-radius: 4px;
+    border: 1px solid #3a4150;
+    background: #11141b;
+    display: inline-block;
+    flex: 0 0 auto;
+}
+
 .cv-team-swatch {
     display: flex;
     flex-direction: column;
     align-items: center;
-    gap: 10px;
-    background: #11141b;
+    gap: 4px;
+    background: transparent;
     border: 2px solid #2a2f3a;
     border-radius: 0;
-    padding: 16px 22px;
+    padding: 8px 18px;
     cursor: pointer;
     transition: 0.15s;
     font-family: 'Rajdhani', sans-serif;
+    width: 100%;
 }
 .cv-team-swatch:hover {
     border-color: var(--fifa-green);
-    transform: translateY(-2px);
+    background: rgba(0, 0, 0, 0.25);
 }
 
-.cv-team-chip {
-    width: 84px;
-    height: 84px;
-    border-radius: 50%;
-    border: 3px solid rgba(255, 255, 255, 0.25);
-    box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.4);
+.cv-team-pick {
+    color: var(--text-secondary, #8b927c);
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 1px;
 }
+.cv-team-swatch:hover .cv-team-pick { color: var(--fifa-green); }
 
 .cv-team-label {
     color: var(--text-primary);
@@ -1377,3 +1803,225 @@ html, body {
     border-radius: 0;
     box-shadow: 0 0 4px rgba(255, 200, 60, 0.6);
 }
+
+/* ===== Match Analysis: Threat Points explainer ===== */
+.tp-explainer {
+    width: 90%;
+    max-width: 800px;
+    margin: 0 auto 16px;
+    padding: 12px 16px;
+    background: rgba(48, 255, 143, 0.06);
+    border: 1px solid rgba(48, 255, 143, 0.28);
+    border-left: 3px solid var(--fifa-green);
+    color: #a8b4a9;
+    font-family: 'Rajdhani', sans-serif;
+    font-size: 0.92rem;
+    line-height: 1.45;
+    text-align: left;
+    box-sizing: border-box;
+}
+.tp-explainer strong { color: #e8f5ec; font-weight: 700; }
+
+/* ===== How to Use (help modal) ===== */
+.help-btn-top {
+    position: fixed;
+    top: 14px;
+    right: 14px;
+    z-index: 12000;
+    background: #11150f;
+    color: #30ff8f;
+    border: 1px solid rgba(48, 255, 143, 0.45);
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 800;
+    font-size: 12px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 10px 14px;
+    cursor: pointer;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
+}
+.help-btn-top:hover {
+    background: rgba(48, 255, 143, 0.12);
+    border-color: #30ff8f;
+}
+body.help-open { overflow: hidden; }
+
+#help-modal {
+    position: fixed;
+    inset: 0;
+    z-index: 13000;
+    background: rgba(5, 8, 6, 0.78);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 24px;
+    box-sizing: border-box;
+}
+#help-modal.hidden { display: none !important; }
+
+.help-content {
+    position: relative;
+    width: min(820px, 100%);
+    max-height: min(86vh, 900px);
+    overflow-y: auto;
+    background: #0f140f;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    padding: 28px 28px 32px;
+    color: #c5d0c6;
+    font-family: 'Rajdhani', sans-serif;
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.55);
+}
+.help-content h2 {
+    margin: 0 0 16px;
+    color: #fff;
+    border-bottom: 1px solid #333;
+    padding-bottom: 12px;
+    font-family: 'Anton', 'Rajdhani', sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+.help-content h4 {
+    color: #30ff8f;
+    margin: 18px 0 8px;
+    font-size: 1rem;
+    letter-spacing: 0.04em;
+}
+.help-content p { margin: 0 0 12px; line-height: 1.5; color: #a0a0b0; }
+.help-content ul { margin: 0 0 12px; padding-left: 1.2em; }
+.help-content li { margin-bottom: 8px; line-height: 1.45; }
+.help-content a { color: #f2c94c; }
+.help-content code {
+    background: #1a211a;
+    padding: 1px 6px;
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: #e8f5ec;
+    font-size: 0.9em;
+}
+
+.help-close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: transparent;
+    border: none;
+    color: #9aa69c;
+    font-size: 28px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 4px 8px;
+}
+.help-close:hover { color: #fff; }
+
+.help-tabs {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 18px;
+}
+.help-tabs .tab-btn {
+    background: #151b15;
+    color: #8fa093;
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    font-family: 'Rajdhani', sans-serif;
+    font-weight: 700;
+    font-size: 12px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+.help-tabs .tab-btn:hover { color: #e8f5ec; border-color: rgba(48, 255, 143, 0.35); }
+.help-tabs .tab-btn.active {
+    color: #07160c;
+    background: #30ff8f;
+    border-color: #30ff8f;
+}
+
+.help-content .tab-content { display: none; }
+.help-content .tab-content.active { display: block; }
+
+.help-img {
+    display: block;
+    max-width: 100%;
+    height: auto;
+    border-radius: 8px;
+    margin: 10px 0;
+    border: 1px solid #333;
+    box-shadow: 0 4px 10px rgba(0, 0, 0, 0.5);
+}
+
+@media (max-width: 640px) {
+    .help-btn-top { top: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
+    .help-content { padding: 22px 16px 24px; }
+    .tp-explainer { font-size: 0.85rem; }
+}
+
+/* --- pitch calibration screen (Issue 14) --------------------------------- */
+.cv-pitch-card { max-width: 1120px; width: 96vw; }
+.cv-pitch-body {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 300px;
+    gap: 16px;
+    align-items: start;
+}
+.cv-pitch-main { min-width: 0; }
+.cv-pitch-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.cv-pitch-tabs button {
+    padding: 4px 10px; font-size: 12px; border-radius: 6px; cursor: pointer;
+    background: #1b2026; color: #e8eaed; border: 1px solid #2a2f35;
+}
+.cv-pitch-tabs button[aria-current="true"] {
+    background: #4da3ff; color: #06121f; border-color: #4da3ff; font-weight: 600;
+}
+/* The border lives on the STAGE, not the image: with it on the image the
+   image box is 2px wider than the absolutely-positioned canvas, so the drawn
+   pitch is horizontally scaled ~0.3% against the frame and the click dots use a
+   different reference than the clicks themselves. */
+.cv-pitch-stage {
+    position: relative; display: block; line-height: 0; width: 100%;
+    border: 1px solid #2a2f35; border-radius: 6px; overflow: hidden;
+}
+.cv-pitch-stage img { display: block; width: 100%; height: auto; cursor: crosshair; }
+#cv-pitch-canvas, #cv-pitch-dots {
+    position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none;
+}
+.cv-pitch-dot {
+    position: absolute; width: 10px; height: 10px; margin: -5px 0 0 -5px;
+    border-radius: 50%; background: #4da3ff; box-shadow: 0 0 0 1px #000;
+}
+.cv-pitch-dot b {
+    position: absolute; left: 12px; top: -5px; font: 10px/1 monospace;
+    background: rgba(0,0,0,.72); padding: 2px 4px; border-radius: 3px; white-space: nowrap;
+}
+.cv-pitch-hint { font-size: 12px; color: #9aa0a6; margin: 8px 0 0; line-height: 1.5; }
+.cv-pitch-key { color: #ffe14d; }
+.cv-pitch-side { min-width: 0; }
+.cv-pitch-label { display: block; font-size: 12px; color: #9aa0a6; margin-bottom: 4px; }
+#cv-pitch-landmark {
+    width: 100%; padding: 7px 8px; border-radius: 6px;
+    background: #1b2026; color: #e8eaed; border: 1px solid #2a2f35; font-size: 13px;
+}
+.cv-pitch-quality {
+    margin-top: 10px; padding: 9px 10px; border-radius: 6px; font-size: 12px;
+    line-height: 1.5; background: #181d23; border: 1px solid #2a2f35; color: #c8ccd1;
+}
+.cv-pitch-quality.is-good { border-color: #2ecc71; }
+.cv-pitch-quality.is-warn { border-color: #ffd166; }
+.cv-pitch-quality.is-bad  { border-color: #ff6b6b; }
+.cv-pitch-list {
+    width: 100%; border-collapse: collapse; margin-top: 10px;
+    font: 11px/1.5 monospace; color: #c8ccd1;
+}
+.cv-pitch-list td { padding: 2px 3px; border-bottom: 1px solid #22272c; }
+.cv-pitch-side-actions { display: flex; gap: 6px; margin-top: 10px; }
+@media (max-width: 900px) {
+    .cv-pitch-body { grid-template-columns: minmax(0, 1fr); }
+}
+
+/* clickable mark rows: tap one to remove just that mark (Undo only ever
+   removed the last, so a wrong mark made early meant clearing everything) */
+.cv-pitch-list tr { cursor: pointer; }
+.cv-pitch-list tr:hover td { background: #22272c; }
+.cv-pitch-list tr.is-bad td { color: #ff9d9d; }
+.cv-pitch-list tr.is-bad td:first-child::after { content: "  ✗"; }

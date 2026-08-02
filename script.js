@@ -2181,6 +2181,7 @@ function renderTeamOptions(warningText) {
         opts.appendChild(__cvBuildTeamCard(team, i));
     });
     if (!cvTeams.length && sub) sub.innerText = 'No players detected to read colours from. Try another clip.';
+    __cvEyedropInit();      // idempotent; wires the sample-from-video overlay
     pfAlertInputNeeded();   // team picker is ready — needs the user to choose
 }
 
@@ -2271,6 +2272,27 @@ function __cvBuildTeamCard(team, i) {
         chips.appendChild(add);
     }
 
+    // Sample this kit's main colour off the video. Automatic detection reads a
+    // torso crop that is mostly pitch on wide footage, so it can report the
+    // ground rather than the shirt; clicking the shirt sidesteps that. It also
+    // beats typing a hex, because what matters downstream is the colour AS THE
+    // CAMERA SEES IT — a "true" navy would never match one the exposure has
+    // crushed toward black.
+    if (cvToken) {
+        const drop = document.createElement('button');
+        drop.type = 'button';
+        drop.className = 'cv-team-chip-pipette';
+        drop.innerHTML = '&#128167;';
+        drop.title = 'Pick this team’s main colour from the video';
+        drop.setAttribute('aria-label',
+            'Pick ' + (team.label || 'this team') + '’s colour from the video');
+        drop.onclick = function (e) {
+            e.stopPropagation();
+            __cvOpenEyedropper(i);
+        };
+        chips.appendChild(drop);
+    }
+
     const btn = document.createElement('button');
     btn.type = 'button';
     btn.className = 'cv-team-swatch';
@@ -2287,6 +2309,201 @@ function __cvBuildTeamCard(team, i) {
     card.appendChild(chips);
     card.appendChild(btn);
     return card;
+}
+
+// --- eye-dropper: take a kit colour straight off a video frame -------------
+// Frames are fetched once and reused; the endpoint returns them at native
+// resolution so the shirt is as sharp as the source allows.
+let __cvEyedrop = {
+    teamIndex: 0, frames: [], cur: 0, img: null, hex: null, loaded: false,
+};
+
+function __cvEyedropEls() {
+    return {
+        screen: document.getElementById('cv-eyedrop-screen'),
+        canvas: document.getElementById('cv-eyedrop-canvas'),
+        zoom: document.getElementById('cv-eyedrop-zoom'),
+        loupe: document.getElementById('cv-eyedrop-loupe'),
+        tabs: document.getElementById('cv-eyedrop-tabs'),
+        preview: document.getElementById('cv-eyedrop-preview'),
+        readout: document.getElementById('cv-eyedrop-readout'),
+        use: document.getElementById('cv-eyedrop-use'),
+        sub: document.getElementById('cv-eyedrop-sub'),
+    };
+}
+
+function __cvOpenEyedropper(teamIndex) {
+    const el = __cvEyedropEls();
+    if (!el.screen || !cvToken) return;
+    __cvEyedrop.teamIndex = teamIndex;
+    __cvEyedrop.hex = null;
+    el.use.disabled = true;
+    el.preview.style.background = '#11141b';
+    el.readout.innerText = 'Hover the video to preview a colour.';
+    el.screen.classList.remove('hidden');
+    if (__cvEyedrop.loaded && __cvEyedrop.frames.length) {
+        __cvEyedropShow(__cvEyedrop.cur);
+        return;
+    }
+    el.sub.innerText = 'Loading frames from your video…';
+    const fd = new FormData();
+    fd.append('token', cvToken);
+    fd.append('count', '6');
+    fetch('/api/v2/calibration_frames', { method: 'POST', body: fd })
+        .then(function (r) { return r.json(); })
+        .then(function (j) {
+            if (!j || !j.frames || !j.frames.length) {
+                el.sub.innerText = 'Could not read frames from this video.';
+                return;
+            }
+            __cvEyedrop.frames = j.frames;
+            __cvEyedrop.loaded = true;
+            __cvEyedrop.cur = Math.min(1, j.frames.length - 1);
+            el.sub.innerText = 'Click a player wearing your kit. Pick the body, '
+                + 'not the shorts or a shadow.';
+            __cvEyedropTabs();
+            __cvEyedropShow(__cvEyedrop.cur);
+        })
+        .catch(function () {
+            el.sub.innerText = 'Could not reach the server for video frames.';
+        });
+}
+
+function __cvEyedropTabs() {
+    const el = __cvEyedropEls();
+    if (!el.tabs) return;
+    el.tabs.innerHTML = '';
+    __cvEyedrop.frames.forEach(function (fr, i) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.innerText = Math.round(fr.t_sec) + 's';
+        b.setAttribute('aria-current', i === __cvEyedrop.cur ? 'true' : 'false');
+        b.onclick = function () { __cvEyedropShow(i); };
+        el.tabs.appendChild(b);
+    });
+}
+
+function __cvEyedropShow(i) {
+    const el = __cvEyedropEls();
+    const fr = __cvEyedrop.frames[i];
+    if (!fr || !el.canvas) return;
+    __cvEyedrop.cur = i;
+    __cvEyedropTabs();
+    const img = new Image();
+    img.onload = function () {
+        el.canvas.width = img.naturalWidth;
+        el.canvas.height = img.naturalHeight;
+        el.canvas.getContext('2d').drawImage(img, 0, 0);
+        __cvEyedrop.img = img;
+    };
+    img.src = 'data:image/jpeg;base64,' + fr.jpeg_b64;
+}
+
+// Canvas pixel under a pointer event. The canvas is CSS-scaled to fit, so the
+// ratio between its backing store and its displayed box is what maps a click
+// to a pixel — using clientWidth alone would sample the wrong place.
+function __cvEyedropPixel(ev) {
+    const el = __cvEyedropEls();
+    const c = el.canvas;
+    const r = c.getBoundingClientRect();
+    if (!r.width || !r.height) return null;
+    const x = Math.floor((ev.clientX - r.left) * (c.width / r.width));
+    const y = Math.floor((ev.clientY - r.top) * (c.height / r.height));
+    if (x < 0 || y < 0 || x >= c.width || y >= c.height) return null;
+    return { x: x, y: y };
+}
+
+// Median of a small neighbourhood, not one pixel: a single pixel on a ~10px
+// shirt is as likely to be a compression artefact or a blown highlight as the
+// kit, and a median is unmoved by either.
+function __cvEyedropSample(x, y, half) {
+    const c = __cvEyedropEls().canvas;
+    half = half || 1;
+    const x0 = Math.max(0, x - half), y0 = Math.max(0, y - half);
+    const x1 = Math.min(c.width - 1, x + half), y1 = Math.min(c.height - 1, y + half);
+    const w = x1 - x0 + 1, h = y1 - y0 + 1;
+    if (w < 1 || h < 1) return null;
+    const d = c.getContext('2d').getImageData(x0, y0, w, h).data;
+    const rs = [], gs = [], bs = [];
+    for (let i = 0; i < d.length; i += 4) { rs.push(d[i]); gs.push(d[i+1]); bs.push(d[i+2]); }
+    const med = function (a) { a.sort(function (p, q) { return p - q; });
+                               return a[Math.floor(a.length / 2)]; };
+    return { r: med(rs), g: med(gs), b: med(bs) };
+}
+
+function __cvRgbToHex(c) {
+    const h = function (v) { return ('0' + Math.max(0, Math.min(255, v | 0)).toString(16)).slice(-2); };
+    return '#' + h(c.r) + h(c.g) + h(c.b);
+}
+
+function __cvEyedropInit() {
+    const el = __cvEyedropEls();
+    if (!el.canvas || el.canvas.__wired) return;
+    el.canvas.__wired = true;
+
+    el.canvas.addEventListener('mousemove', function (ev) {
+        const p = __cvEyedropPixel(ev);
+        if (!p) return;
+        const s = __cvEyedropSample(p.x, p.y, 1);
+        if (!s) return;
+        const hex = __cvRgbToHex(s);
+        el.preview.style.background = hex;
+        el.readout.innerText = hex + '  —  click to take it';
+        // Magnifier, so a ~10px shirt is actually aimable. Sits just above the
+        // cursor when there is room and just below when there isn't, and is
+        // clamped inside the stage — a fixed offset flies off the top on a
+        // short frame and the loupe ends up parked in the corner.
+        const stage = el.canvas.parentElement.getBoundingClientRect();
+        const LO = 120, GAP = 14;
+        const cxr = ev.clientX - stage.left, cyr = ev.clientY - stage.top;
+        let ly = cyr - LO - GAP;
+        if (ly < 0) ly = Math.min(cyr + GAP, stage.height - LO);
+        const lx = Math.max(0, Math.min(cxr - LO / 2, stage.width - LO));
+        el.loupe.classList.remove('hidden');
+        el.loupe.style.left = Math.max(0, lx) + 'px';
+        el.loupe.style.top = Math.max(0, ly) + 'px';
+        const z = el.zoom.getContext('2d');
+        z.imageSmoothingEnabled = false;
+        z.clearRect(0, 0, 120, 120);
+        if (__cvEyedrop.img) {
+            z.drawImage(__cvEyedrop.img, p.x - 6, p.y - 6, 13, 13, 0, 0, 120, 120);
+            z.strokeStyle = '#2ecc71';
+            z.lineWidth = 2;
+            z.strokeRect(51, 51, 18, 18);
+        }
+    });
+    el.canvas.addEventListener('mouseleave', function () {
+        el.loupe.classList.add('hidden');
+    });
+    el.canvas.addEventListener('click', function (ev) {
+        const p = __cvEyedropPixel(ev);
+        if (!p) return;
+        const s = __cvEyedropSample(p.x, p.y, 1);
+        if (!s) return;
+        __cvEyedrop.hex = __cvRgbToHex(s);
+        el.preview.style.background = __cvEyedrop.hex;
+        el.readout.innerText = 'Picked ' + __cvEyedrop.hex
+            + ' — press "Use this colour", or click again to re-pick.';
+        el.use.disabled = false;
+    });
+
+    const cancel = document.getElementById('cv-eyedrop-cancel');
+    if (cancel) cancel.onclick = function () {
+        el.screen.classList.add('hidden');
+    };
+    if (el.use) el.use.onclick = function () {
+        if (!__cvEyedrop.hex) return;
+        const team = cvTeams[__cvEyedrop.teamIndex];
+        if (team) {
+            const next = __cvTeamHexes(team);
+            if (next.length) next[0] = __cvEyedrop.hex;
+            else next.push(__cvEyedrop.hex);
+            __cvSetTeamHexes(team, next);
+            team.hex_source = 'eyedropper';
+        }
+        el.screen.classList.add('hidden');
+        renderTeamOptions();
+    };
 }
 
 function pickTeam(i) {
