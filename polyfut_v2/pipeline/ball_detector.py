@@ -139,9 +139,15 @@ class YoloBallDetector:
         self.cfg = cfg
         self._model = model
         self._consec_misses = 0
+        # Players taken off the most recent full-frame scan, as
+        # (xyxy, conf, cls) — the same shape the player detector returns — or
+        # None when this frame had no full-frame scan. Read it right after
+        # detect(); it is overwritten on the next call.
+        self.last_players: tuple | None = None
         self.stats = {
             "roi_hits": 0, "roi_misses": 0,
             "full_scans": 0, "skipped_full_scans": 0,
+            "harvested_frames": 0, "harvested_players": 0,
         }
 
     def reset(self) -> None:
@@ -160,6 +166,73 @@ class YoloBallDetector:
             return True
         stride = max(1, int(getattr(self.cfg, "ball_miss_backoff_stride", 3) or 1))
         return (self._consec_misses - after) % stride == 0
+
+    def _harvest_classes(self) -> list[int] | None:
+        """Ball + every body class, or None when there is nothing extra to take.
+
+        The model emits all four classes from one forward pass — the class list
+        is a post-NMS filter, not a cheaper inference — so a full-frame ball scan
+        already computed the players and then discarded them.
+        """
+        if not getattr(self.cfg, "harvest_players_from_ball_pass", False):
+            return None
+        extra = [getattr(self.cfg, name, None) for name in
+                 ("player_class_id", "goalkeeper_class_id", "referee_class_id")]
+        extra = [int(c) for c in extra if c is not None
+                 and int(c) != int(self.cfg.ball_class_id)]
+        if not extra:
+            return None                    # single-class model: nothing to gain
+        return [int(self.cfg.ball_class_id)] + extra
+
+    def _raw(self, image: np.ndarray, imgsz: int, classes: list[int],
+             conf: float):
+        """(xyxy, conf, cls) for one inference, or None."""
+        fast = fast_infer.try_detect(
+            self.model, image,
+            imgsz=imgsz, conf=conf, iou=0.7, classes=classes,
+            enabled=bool(getattr(self.cfg, "fast_infer_enabled", True)),
+        )
+        if fast is not None:
+            return fast
+        results = self.model.predict(
+            image, imgsz=imgsz, conf=conf, classes=classes, verbose=False,
+        )
+        if not results:
+            return None
+        res = results[0]
+        if res.boxes is None or len(res.boxes) == 0:
+            return None
+        return (res.boxes.xyxy.cpu().numpy(),
+                res.boxes.conf.cpu().numpy(),
+                res.boxes.cls.cpu().numpy())
+
+    def _infer_and_harvest(self, image: np.ndarray, imgsz: int):
+        """Full-frame ball scan that also keeps the players it already found.
+
+        The ball half is deliberately unchanged: candidates are filtered on the
+        max class score *before* the class list is applied, and NMS offsets
+        boxes by class, so widening the request cannot alter which ball box
+        wins. Verified detection-for-detection against the ball-only path.
+        """
+        classes = self._harvest_classes()
+        if classes is None:
+            return self._infer(image, imgsz), None
+        got = self._raw(image, imgsz, classes, self.cfg.ball_conf_min)
+        if got is None:
+            return None, None
+        xyxy, conf, cls = got
+        is_ball = cls == int(self.cfg.ball_class_id)
+        ball = parse_best_ball(
+            xyxy[is_ball], conf[is_ball], cls[is_ball],
+            ball_class_id=self.cfg.ball_class_id,
+            conf_min=self.cfg.ball_conf_min,
+        ) if bool(is_ball.any()) else None
+        # Players were requested at the ball's (lower) threshold so the ball
+        # candidate set is untouched; hold them to their own threshold here.
+        body = (~is_ball) & (conf >= float(self.cfg.player_conf_min))
+        players = ((xyxy[body], conf[body], cls[body])
+                   if bool(body.any()) else None)
+        return ball, players
 
     def _infer(self, image: np.ndarray, imgsz: int) -> BallDetection | None:
         # Ball tracking is ~91% of a run and 43% of every predict() call is
@@ -235,10 +308,19 @@ class YoloBallDetector:
 
         # Cold path (or ROI-miss fallback): full-frame re-acquire, throttled
         # during a miss storm (see class docstring).
+        self.last_players = None
         if det is None:
             if self._should_full_scan():
-                det = self._infer(frame, self.cfg.ball_full_imgsz)
+                # Take the players out of this pass too — it computed them
+                # anyway. Only the FULL-FRAME scan is harvested: the ROI crop is
+                # a 240px window, so bodies in it are cut off and their boxes
+                # would be wrong.
+                det, self.last_players = self._infer_and_harvest(
+                    frame, self.cfg.ball_full_imgsz)
                 self.stats["full_scans"] += 1
+                if self.last_players is not None:
+                    self.stats["harvested_frames"] += 1
+                    self.stats["harvested_players"] += len(self.last_players[0])
             else:
                 self.stats["skipped_full_scans"] += 1
 

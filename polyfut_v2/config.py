@@ -79,6 +79,15 @@ class PipelineV2Config:
     # numpy (verified to return identical detections) for ~8.6ms, and ball
     # tracking is ~91% of a run. Set False to go back through Ultralytics.
     fast_infer_enabled: bool = True
+    # Keep the players out of the full-frame ball scan instead of discarding
+    # them. The model emits ball + keeper + player + referee from ONE forward
+    # pass (the class list is a post-NMS filter), and on a measured run the
+    # full-frame re-acquire already fires on 242 of 451 analysed frames — so
+    # roughly half the video's player positions are already paid for and thrown
+    # away. Costs no extra inference and cannot change the ball result: the
+    # confidence filter runs on the max class score before the class list is
+    # applied, and NMS offsets boxes by class. Issue 15, step 1.
+    harvest_players_from_ball_pass: bool = True
 
     # --- Stage 3b: ROI search around last known ball position ---
     # A region-of-interest around the last ball gives higher effective
