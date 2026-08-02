@@ -71,6 +71,15 @@ class PipelineV2Config:
     ball_imgsz: int = 416
     ball_full_imgsz: int = 640
 
+    # Call the compiled OpenVINO model directly instead of going through
+    # Ultralytics' predictor. Measured on this project's soccer model: a full
+    # predict() is 69.3ms of which only 39.6ms is the network — the rest is
+    # letterbox rebuilding, a torch round-trip and Results construction that
+    # nothing downstream reads. The bypass reproduces the same arithmetic in
+    # numpy (verified to return identical detections) for ~8.6ms, and ball
+    # tracking is ~91% of a run. Set False to go back through Ultralytics.
+    fast_infer_enabled: bool = True
+
     # --- Stage 3b: ROI search around last known ball position ---
     # A region-of-interest around the last ball gives higher effective
     # resolution on a tiny object and is far cheaper than full-frame every step.

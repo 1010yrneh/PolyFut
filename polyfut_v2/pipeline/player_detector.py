@@ -17,6 +17,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from polyfut_v2.pipeline import fast_infer
 from polyfut_v2.pipeline.ball_detector import _get_model, map_bbox_to_full, roi_crop
 
 
@@ -102,6 +103,20 @@ class YoloPlayerDetector:
         return self._model
 
     def _infer(self, image: np.ndarray) -> tuple[np.ndarray, np.ndarray, np.ndarray] | None:
+        # Straight to the compiled model where possible — see fast_infer. The
+        # NMS threshold must be the same one the predict() call below uses, or
+        # the two paths would disagree about overlapping boxes.
+        fast = fast_infer.try_detect(
+            self.model, image,
+            imgsz=self.cfg.player_imgsz,
+            conf=self.cfg.player_conf_min,
+            iou=float(getattr(self.cfg, "player_nms_iou", 0.45)),
+            classes=player_request_classes(self.cfg),
+            enabled=bool(getattr(self.cfg, "fast_infer_enabled", True)),
+        )
+        if fast is not None:
+            return None if fast[0].shape[0] == 0 else fast
+
         results = self.model.predict(
             image,
             imgsz=self.cfg.player_imgsz,

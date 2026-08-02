@@ -18,6 +18,7 @@ from typing import Any, Protocol
 
 import numpy as np
 
+from polyfut_v2.pipeline import fast_infer
 from polyfut_v2.pipeline.color import is_bbox_on_foreign_surface
 
 _MODEL_CACHE: dict[str, Any] = {}
@@ -161,6 +162,31 @@ class YoloBallDetector:
         return (self._consec_misses - after) % stride == 0
 
     def _infer(self, image: np.ndarray, imgsz: int) -> BallDetection | None:
+        # Ball tracking is ~91% of a run and 43% of every predict() call is
+        # Ultralytics plumbing, so go straight to the compiled model when we
+        # can. Verified to return identical detections; falls back silently on
+        # the first call (the predictor is built lazily) and on any backend
+        # without a compiled OpenVINO model.
+        fast = fast_infer.try_detect(
+            self.model, image,
+            imgsz=imgsz,
+            conf=self.cfg.ball_conf_min,
+            # Ultralytics' default when predict() is called without `iou`,
+            # which is what the fallback below does.
+            iou=0.7,
+            classes=[self.cfg.ball_class_id],
+            enabled=bool(getattr(self.cfg, "fast_infer_enabled", True)),
+        )
+        if fast is not None:
+            xyxy, conf, cls = fast
+            if xyxy.shape[0] == 0:
+                return None
+            return parse_best_ball(
+                xyxy, conf, cls,
+                ball_class_id=self.cfg.ball_class_id,
+                conf_min=self.cfg.ball_conf_min,
+            )
+
         results = self.model.predict(
             image,
             imgsz=imgsz,
