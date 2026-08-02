@@ -288,8 +288,10 @@ class YoloBallDetector:
     ) -> BallDetection | None:
         # Warm path: search a small ROI around the last known position.
         det: BallDetection | None = None
+        roi_ran = False
 
         if self.cfg.roi_enabled and last_center is not None:
+            roi_ran = True
             crop, offset = roi_crop(frame, last_center, self.cfg.roi_half_px)
             if crop.size > 0:
                 det = self._infer(crop, self.cfg.ball_imgsz)
@@ -299,17 +301,24 @@ class YoloBallDetector:
                         conf=det.conf,
                     )
             self.stats["roi_hits" if det is not None else "roi_misses"] += 1
-            # ROI miss → re-scan the whole frame this same step. On a small pitch
-            # or a camera zoom/angle change the ball can leave the ROI between
-            # samples; without this the tracker would coast on a stale position
-            # for several frames and recall collapses (fast-ball footage).
-            if not self.cfg.roi_fallback_full:
-                det = None
 
         # Cold path (or ROI-miss fallback): full-frame re-acquire, throttled
         # during a miss storm (see class docstring).
+        #
+        # ``roi_fallback_full`` decides only what happens after an ROI MISS:
+        # re-scan the whole frame now, or coast on the stale position. On a
+        # small pitch or through a zoom the ball can leave the ROI between
+        # samples, and without the re-scan recall collapses on fast-ball
+        # footage — hence the default of True.
+        #
+        # It used to be applied as an unconditional ``det = None`` here, which
+        # did the opposite of what it says on both counts: it discarded ROI
+        # *hits*, and by emptying ``det`` it then triggered the very full scan
+        # it was meant to suppress. Dormant at the default, but it silently
+        # made "ROI only" benchmarks slower than ROI-plus-fallback.
+        allow_full = (not roi_ran) or self.cfg.roi_fallback_full
         self.last_players = None
-        if det is None:
+        if det is None and allow_full:
             if self._should_full_scan():
                 # Take the players out of this pass too — it computed them
                 # anyway. Only the FULL-FRAME scan is harvested: the ROI crop is
