@@ -813,11 +813,46 @@ independently useful and none bets the product on same-kit re-ID.
 2. **Associate detections into tracklets** (ByteTrack-style: IoU + motion,
    greedy, microseconds — the detection is already paid for). Produces the ~40s
    continuous "where you are" the measurements show is available.
-3. **Feed the tracklet into the orbital prior** as a strong motion signal, and
-   raise `tracklet_max_gap_sec` to what the data supports instead of 3s. This is
-   CLAUDE.md §4.1's stated top priority and Issue 4's unfinished half.
+3. ~~**Feed the tracklet into the orbital prior**~~ — **tried and refuted, see
+   below.** Not implemented; `scoring.py` is untouched.
 4. **Keep the ball as the anchor and keep human review for identity.** The
    tracklet informs the prior; it never becomes the source of truth.
+
+### Step 3 was measured and does not work
+
+The hypothesis was that the orbital prior grows its radius with the gap only
+because it doesn't know where the player went, so a tracklet spanning that gap
+would let it start from a fresh position instead. Measured on 120s of
+`b48758eb195e` (901 samples, 157 tracks, 80 contact candidates, 79 gaps):
+
+| carry tolerance | gaps bridged | tracked position closer than the stale anchor | **orbital prior improved** |
+|---|---|---|---|
+| 1.5 m | 23 (29%) | 12/23 (52%) | **0 / 23** |
+| 4.0 m | 19 (24%) | 9/19 (47%) | **0 / 19** |
+| 8.0 m | 5 (6%) | 1/5 (20%) | **0 / 5** |
+
+Three reasons, all structural:
+
+* **The prior is already saturated.** Median distance from the stale anchor to
+  the next contact is 60.7px on 0.5–2s gaps, against a radius of
+  `80 + 60·gap` ≥ 110px. It is already 1.0, and a better position estimate
+  cannot improve on 1.0. It could only help by *lowering* the prior for the
+  wrong body — i.e. discrimination, not prediction.
+* **It bridges the wrong gaps.** 40% of sub-0.5s gaps (where the prior needs no
+  help), 8% of 2–5s gaps and **0% above 5s** (where it is weakest). Exactly
+  backwards from useful.
+* **A looser tolerance makes it worse, not better.** `track_at` refuses when two
+  tracks are equally close, and at a contact several players usually are — so
+  widening the gate converts matches into ambiguity refusals.
+
+This is consistent with the existing "do not repeat" note that displacement
+separates you from other players with **AUC 0.539**. A better-measured
+displacement is still displacement.
+
+**What steps 1–2 leave behind:** harvested players (~1% cost, ball provably
+unchanged) and tracklets (mean life 16.0s). Both work; neither has a consumer.
+Keep them only if a *measured* use appears — do not wire them in on the
+assumption that more information must help somewhere.
 
 ### Measured, for reference
 * Player work is **3.4%** of a run (`player_enrich` 77.3s vs `ball_tracking`
@@ -849,6 +884,15 @@ independently useful and none bets the product on same-kit re-ID.
   Measured: 4 of 6 players lost inside a second at 21–28px. The cost is
   attractive and the result is unusable; do not re-try it without first fixing
   resolution.
+* **Feeding tracklets into the orbital prior.** Built and measured: it improved
+  the prior on **0 of 23** bridged gaps at any tolerance, because the prior is
+  already 1.0 on the gaps it manages to bridge and bridges 0% of the gaps over
+  5s where it isn't. See "Step 3 was measured and does not work".
+* **Camera compensation inside the association gate.** Measured: 109 tracks at a
+  12.9s mean life with it against 89 at 16.0s without, because the camera moves
+  a median 2.79px between harvested frames while the gate already allows ~39px —
+  all noise, no information. Separate from the orbital's use of it over
+  multi-second gaps, which is not in question.
 * **Assuming the pipeline tracks all players.** It has not since v2. Any
   proposal justified by "stop tracking everyone" is aimed at 3.4% of runtime.
 * **Trusting track lifetime as evidence of correct identity.** Lifetime is

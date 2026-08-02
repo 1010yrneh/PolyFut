@@ -13,6 +13,7 @@ import pytest
 
 from polyfut_v2.pipeline.player_tracks import (
     PlayerTracker,
+    TrackIndex,
     _allowance_px,
 )
 
@@ -176,6 +177,70 @@ def test_the_config_flag_can_turn_it_back_on():
     cfg.track_use_camera = True
     t = PlayerTracker(cfg, camera=_Camera(dx=_PAN))
     assert t.camera is not None
+
+
+# -------------------------------------------------- carrying an identity
+def _two_players():
+    """One walking right, one walking left, well apart throughout."""
+    t = PlayerTracker()
+    for k in range(20):
+        t.update(k, k * 0.25, _dets(_box(100 + k * 4, 200),
+                                    _box(500 - k * 4, 260)))
+    return TrackIndex(t.finished(min_points=3))
+
+
+def test_carry_follows_the_body_that_was_there():
+    """The whole point: the orbital can start from where the player IS rather
+    than where they were plus an allowance for the gap."""
+    idx = _two_players()
+    got = idx.carry((100.0, 200.0), 0.0, 4.0)
+    assert got is not None
+    x, y, t_seen = got
+    assert x == pytest.approx(100 + 16 * 4, abs=6)     # k=16 at t=4.0
+    assert y == pytest.approx(200, abs=6)
+    assert t_seen == pytest.approx(4.0, abs=0.3)
+
+
+def test_carry_does_not_jump_to_the_other_player():
+    idx = _two_players()
+    x, _y, _t = idx.carry((100.0, 200.0), 0.0, 4.0)
+    # the other player is heading the other way; we must not have followed them
+    assert x > 100
+
+
+def test_carry_returns_none_when_no_track_was_there():
+    idx = _two_players()
+    assert idx.carry((320.0, 50.0), 0.0, 4.0) is None
+
+
+def test_carry_returns_none_past_the_end_of_the_track():
+    idx = _two_players()
+    assert idx.carry((100.0, 200.0), 0.0, 60.0) is None
+
+
+def test_an_ambiguous_sighting_is_refused_rather_than_guessed():
+    """Two tracks equally close is exactly when an identity gets handed to the
+    wrong body, so it declines."""
+    t = PlayerTracker()
+    for k in range(8):
+        # two players a couple of pixels apart the whole time
+        t.update(k, k * 0.25, _dets(_box(300, 200), _box(303, 200)))
+    idx = TrackIndex(t.finished(min_points=3))
+    assert idx.track_at((301.0, 200.0), 0.5) is None
+
+
+def test_the_match_tolerance_scales_with_depth():
+    """1.5m near the camera is many more pixels than 1.5m at the far side."""
+    near = PlayerTracker()
+    far = PlayerTracker()
+    for k in range(8):
+        near.update(k, k * 0.25, _dets(_box(300, 200, h=40)))
+        far.update(k, k * 0.25, _dets(_box(300, 200, h=12)))
+    i_near = TrackIndex(near.finished(min_points=3))
+    i_far = TrackIndex(far.finished(min_points=3))
+    off = (300.0 + 20.0, 200.0)          # 20px away
+    assert i_near.track_at(off, 0.5) is not None   # 20px is under 1.5m up close
+    assert i_far.track_at(off, 0.5) is None        # but far more than 1.5m away
 
 
 def test_a_track_reports_its_span():

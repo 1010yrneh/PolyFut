@@ -205,3 +205,75 @@ class PlayerTracker:
         return [t for t in self.tracks
                 if len(t.points) >= min_points
                 and t.duration_sec >= min_duration_sec]
+
+
+class TrackIndex:
+    """Answers "where did this body get to?" — the point of tracking them.
+
+    Stage 7's orbital prior currently reasons from the last *confident sighting*
+    of the target and grows its search radius with the elapsed time, because
+    between contacts it has no idea where the player went. When a tracklet spans
+    that gap it does know, and the prior can be taken from a fresh position
+    instead of an old one plus an allowance.
+
+    Deliberately conservative about which track a point belongs to: a sighting
+    is matched only if a track passes close to it at that moment, scaled by the
+    box's own height so it means the same thing at both ends of the pitch. No
+    match returns None and the caller keeps today's behaviour.
+    """
+
+    def __init__(self, tracks: list[PlayerTrack]):
+        self.tracks = list(tracks)
+
+    def track_at(self, xy: tuple[float, float], t_sec: float,
+                 *, tol_m: float = 1.5,
+                 max_dt: float = 0.5) -> PlayerTrack | None:
+        """The track passing through ``xy`` at ``t_sec``, if exactly one does.
+
+        Ambiguity returns None rather than a guess: two tracks equally close to
+        a sighting is precisely the moment an identity would be handed to the
+        wrong body.
+        """
+        hits = []
+        for tr in self.tracks:
+            p = self._nearest_point(tr, t_sec, max_dt)
+            if p is None:
+                continue
+            cx, cy = p.centre
+            tol_px = tol_m * (p.height / _PLAYER_HEIGHT_M)
+            d = math.hypot(cx - xy[0], cy - xy[1])
+            if d <= tol_px:
+                hits.append((d, tr))
+        if len(hits) != 1:
+            return None
+        return hits[0][1]
+
+    @staticmethod
+    def _nearest_point(tr: PlayerTrack, t_sec: float,
+                       max_dt: float) -> TrackPoint | None:
+        best, best_dt = None, None
+        for p in tr.points:
+            dt = abs(p.t_sec - t_sec)
+            if dt > max_dt:
+                continue
+            if best_dt is None or dt < best_dt:
+                best, best_dt = p, dt
+        return best
+
+    def carry(self, xy: tuple[float, float], t_from: float, t_to: float,
+              *, tol_m: float = 1.5, max_dt: float = 0.5,
+              ) -> tuple[float, float, float] | None:
+        """Where the body that was at ``xy`` at ``t_from`` is around ``t_to``.
+
+        Returns (x, y, t_of_that_sighting) or None when no single track covers
+        both moments. The returned time is the sighting's own, not ``t_to`` —
+        the caller still needs to know how stale the answer is.
+        """
+        tr = self.track_at(xy, t_from, tol_m=tol_m, max_dt=max_dt)
+        if tr is None:
+            return None
+        p = self._nearest_point(tr, t_to, max_dt)
+        if p is None:
+            return None
+        cx, cy = p.centre
+        return cx, cy, p.t_sec
