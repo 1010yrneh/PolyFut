@@ -837,6 +837,17 @@ def _run_v2_job(job_id: str, video_path: Path, seed_taps: list, out_dir: Path,
                 on_pitch_sec=result.get("on_pitch_sec"),
                 attribution=result.get("attribution"),
                 calibration_status=result.get("calibration_status"),
+                # Ball tracking is ~76% of a run, and how long it takes depends
+                # on how many network calls each frame costs — an ROI hit is one,
+                # an ROI miss plus a full re-acquire is two. app_service has
+                # always returned these counters and this whitelist dropped them,
+                # so "why did this run take three hours" could only be answered
+                # by re-running it. Persist them: with n_analysed_frames they
+                # make ms-per-frame and calls-per-frame readable straight off
+                # job_state.json.
+                ball_detector_stats=result.get("ball_detector_stats"),
+                ball_sanity=result.get("ball_sanity"),
+                n_analysed_frames=result.get("n_samples"),
                 # Needed again at decision time: hotspots are rebuilt from
                 # scratch there, and the possession extension needs the ball.
                 ball_track=result.get("ball_track"),
