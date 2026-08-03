@@ -14,6 +14,7 @@ License: derived from the Roboflow football-players-detection dataset (CC BY 4.0
 
 from __future__ import annotations
 
+import sys
 import threading
 import urllib.request
 from pathlib import Path
@@ -22,7 +23,31 @@ SOCCER_MODEL_URL = (
     "https://huggingface.co/uisikdag/yolo-v8-football-players-detection/"
     "resolve/main/best.pt"
 )
-SOCCER_MODEL_PATH = Path(__file__).resolve().parent.parent / "models" / "soccer_uisikdag.pt"
+
+
+def _models_root() -> Path:
+    """Where ``models/`` lives, running from source or from a frozen build.
+
+    In a PyInstaller build the package is unpacked under ``sys._MEIPASS`` and
+    ``__file__`` points inside it, so walking up from ``__file__`` happens to
+    land in the right place — but only by coincidence of the layout. Reading
+    ``_MEIPASS`` says it outright, and it is the difference between finding the
+    bundled model and silently falling back to the COCO one that "barely
+    detects a soccer ball".
+
+    The installer puts the app in Program Files, which a normal user cannot
+    write to, so the model has to be *shipped* rather than fetched on first
+    run. Nothing here writes when the bundle is intact.
+    """
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            return Path(base) / "models"
+        return Path(sys.executable).resolve().parent / "models"
+    return Path(__file__).resolve().parent.parent / "models"
+
+
+SOCCER_MODEL_PATH = _models_root() / "soccer_uisikdag.pt"
 SOCCER_MODEL_OV_DIR = SOCCER_MODEL_PATH.parent / "soccer_uisikdag_openvino_model"
 SOCCER_MODEL_IMGSZ = 640  # OpenVINO export is a fixed input size
 
