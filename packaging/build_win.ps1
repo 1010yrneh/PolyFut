@@ -35,10 +35,21 @@ if ($Ffmpeg) {
     Write-Host "Bundled ffmpeg.exe from packaging/bin"
 }
 
+# Inno Setup lands in different places depending on how it was installed.
+# `winget install JRSoftware.InnoSetup` without an admin prompt installs
+# per-user into LOCALAPPDATA, which the two Program Files paths miss entirely —
+# and the only symptom was "Inno Setup not found", i.e. a build that quietly
+# produced no installer at all.
 $Iscc = @(
     "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe",
-    "$env:ProgramFiles\Inno Setup 6\ISCC.exe"
+    "$env:ProgramFiles\Inno Setup 6\ISCC.exe",
+    "$env:LOCALAPPDATA\Programs\Inno Setup 6\ISCC.exe"
 ) | Where-Object { Test-Path $_ } | Select-Object -First 1
+
+if (-not $Iscc) {
+    $OnPath = Get-Command ISCC.exe -ErrorAction SilentlyContinue
+    if ($OnPath) { $Iscc = $OnPath.Source }
+}
 
 if ($Iscc) {
     Write-Host "Building installer with Inno Setup..."
