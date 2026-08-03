@@ -1835,7 +1835,38 @@ function pfAddPlayingPeriod() {
         cursor = Math.max(cursor, r[1]);
     });
     if (d - cursor > 20) gaps.push([cursor, d]);
-    if (!gaps.length) return;
+
+    // No gap anywhere — which is the NORMAL case, because the screen opens with
+    // the whole video selected. This used to `return` here, so the very first
+    // click on "Add another period" did nothing at all and the feature looked
+    // like it did not exist. Carve the room out of the widest period instead:
+    // someone who came off and back on wants two spells out of one, and that is
+    // the only thing this button can sensibly mean when everything is covered.
+    if (!gaps.length) {
+        if (!sorted.length) {
+            cvPlayRanges = [[0, Math.min(d, Math.max(60, d * 0.45))]];
+            pfRenderPlayingTime();
+            return;
+        }
+        var wi = 0;
+        sorted.forEach(function (r, i) {
+            if (r[1] - r[0] > sorted[wi][1] - sorted[wi][0]) wi = i;
+        });
+        var w = sorted[wi];
+        var span = w[1] - w[0];
+        if (span < 40) return;              // too short to split into two
+        // Leave a real gap in the middle so the two halves cannot merge back
+        // together on the next normalise.
+        var gap = Math.max(20, Math.min(span * 0.2, 300));
+        var half = (span - gap) / 2;
+        sorted.splice(wi, 1,
+                      [w[0], w[0] + half],
+                      [w[1] - half, w[1]]);
+        cvPlayRanges = pfMergeRanges(sorted);
+        pfRenderPlayingTime();
+        return;
+    }
+
     gaps.sort(function (a, b) { return (b[1] - b[0]) - (a[1] - a[0]); });
     var g = gaps[0];
     var gapLen = g[1] - g[0];
