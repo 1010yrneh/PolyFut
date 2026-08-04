@@ -1861,10 +1861,17 @@ html, body {
 .tp-explainer strong { color: #e8f5ec; font-weight: 700; }
 
 /* ===== How to Use (help modal) ===== */
+/* Top-LEFT, not top-right: .pf-pipeline-warnings is a fixed full-width bar at
+   top:0 whose close X sits at the right end, and this button has the higher
+   z-index, so it covered the X and the warning could not be dismissed.
+   --pf-warn-h is that bar's measured height (0 when there is no bar), published
+   by pfSetWarningHeight — the bar spans the full width, so the left corner is
+   just as much inside it as the right one and moving across is not enough on
+   its own; the button has to drop below it. */
 .help-btn-top {
     position: fixed;
-    top: 14px;
-    right: 14px;
+    top: calc(var(--pf-warn-h, 0px) + 14px);
+    left: 14px;
     z-index: 12000;
     background: #11150f;
     color: #30ff8f;
@@ -1990,7 +1997,10 @@ body.help-open { overflow: hidden; }
 }
 
 @media (max-width: 640px) {
-    .help-btn-top { top: 8px; right: 8px; padding: 8px 10px; font-size: 11px; }
+    .help-btn-top {
+        top: calc(var(--pf-warn-h, 0px) + 8px);
+        left: 8px; padding: 8px 10px; font-size: 11px;
+    }
     .help-content { padding: 22px 16px 24px; }
     .tp-explainer { font-size: 0.85rem; }
 }

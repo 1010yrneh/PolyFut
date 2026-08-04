@@ -78,11 +78,20 @@ if (typeof window !== 'undefined') window.addEventListener('focus', pfStopAlert)
 // previously dropped on the floor after being read into __v2Montage.warnings.
 // A fixed top banner (not nested in a screen's card) survives screen swaps —
 // the montage card's innerHTML gets wiped and rebuilt on repeat runs.
+// The banner is full-width at top:0, so the "How to use" button collides with it
+// in EITHER top corner — on the right it covered the dismiss X, on the left it
+// covers the warning text. Publish the banner's height so the button can sit
+// below it instead. Measured, not hardcoded: the height depends on how many
+// warnings there are and how the text wraps, which changes with window width.
+function pfSetWarningHeight(px) {
+    document.body.style.setProperty('--pf-warn-h', (px || 0) + 'px');
+}
+
 function pfShowPipelineWarnings(warnings) {
     const list = (warnings || []).filter(Boolean);
     const existing = document.getElementById('pf-pipeline-warnings');
     if (existing) existing.remove();
-    if (!list.length) return;
+    if (!list.length) { pfSetWarningHeight(0); return; }
     const wrap = document.createElement('div');
     wrap.id = 'pf-pipeline-warnings';
     wrap.className = 'pf-pipeline-warnings';
@@ -92,7 +101,18 @@ function pfShowPipelineWarnings(warnings) {
         '</div>' +
         '<button type="button" class="pf-pipeline-warnings-close" aria-label="Dismiss">×</button>';
     document.body.appendChild(wrap);
-    wrap.querySelector('.pf-pipeline-warnings-close').onclick = function () { wrap.remove(); };
+    pfSetWarningHeight(wrap.offsetHeight);
+    // Re-publish on resize: a narrower window wraps the text onto more lines and
+    // makes the banner taller, which would leave the button overlapping again.
+    if (window.ResizeObserver) {
+        new ResizeObserver(function () {
+            if (wrap.isConnected) pfSetWarningHeight(wrap.offsetHeight);
+        }).observe(wrap);
+    }
+    wrap.querySelector('.pf-pipeline-warnings-close').onclick = function () {
+        wrap.remove();
+        pfSetWarningHeight(0);
+    };
 }
 
 // One-time, remembered opt-in — a small styled prompt (never a native dialog).
