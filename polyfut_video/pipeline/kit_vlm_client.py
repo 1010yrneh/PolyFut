@@ -20,6 +20,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import time
 import urllib.error
 import urllib.request
 
@@ -29,6 +30,38 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 # Short: this runs while the user waits on the team-picker screen, and a slow
 # answer is worth less than falling straight back to k-means.
 TIMEOUT_SEC = 45
+
+# --- circuit breaker ------------------------------------------------------
+# Catching the error per call is not enough. Groq's free tier is shared at the
+# ORGANISATION level, so once it is exhausted it stays exhausted for everyone,
+# and without this every subsequent analysis would stall the team-picker screen
+# for the full timeout before falling back to k-means — and burn another slot
+# of the proxy's own hourly per-IP allowance doing it. After a refusal we stop
+# asking and go straight to the local read.
+QUOTA_COOLDOWN_SEC = 15 * 60      # 429/413: may recover, retry later
+AUTH_COOLDOWN_SEC = 24 * 60 * 60  # 401/403: will not fix itself unattended
+_blocked_until = 0.0
+_block_reason = ""
+
+
+def _block(seconds: float, reason: str) -> None:
+    global _blocked_until, _block_reason
+    until = time.time() + seconds
+    if until > _blocked_until:
+        _blocked_until, _block_reason = until, reason
+    log.info("kit vision read paused for %.0f min (%s); using the local "
+             "k-means kit colours meanwhile", seconds / 60, reason)
+
+
+def blocked_for() -> float:
+    """Seconds until the vision read is worth attempting again (0 = now)."""
+    return max(0.0, _blocked_until - time.time())
+
+
+def reset_block() -> None:
+    """Test hook / manual clear."""
+    global _blocked_until, _block_reason
+    _blocked_until, _block_reason = 0.0, ""
 
 
 def _post(url: str, payload: dict, headers: dict) -> dict | None:
@@ -46,8 +79,17 @@ def _post(url: str, payload: dict, headers: dict) -> dict | None:
         except Exception:
             pass
         log.info("kit VLM HTTP %s: %s", e.code, detail)
+        if e.code in (401, 403):
+            _block(AUTH_COOLDOWN_SEC, f"credentials rejected (HTTP {e.code})")
+        elif e.code in (402, 413, 429):
+            # 413 is Groq's "request too large", which it reports alongside the
+            # rate-limit family; either way the next identical request fails too.
+            _block(QUOTA_COOLDOWN_SEC, f"quota or size limit (HTTP {e.code})")
     except (urllib.error.URLError, TimeoutError, ValueError, OSError) as e:
         log.info("kit VLM unreachable: %s", e)
+        # Offline or the proxy is down — both persist for a while, and the user
+        # should not wait out the timeout again on their next run.
+        _block(QUOTA_COOLDOWN_SEC, f"unreachable ({type(e).__name__})")
     return None
 
 
@@ -74,6 +116,12 @@ def load_proxy_config(config_paths=None) -> tuple[str, str] | None:
 
 def ask(messages: list[dict], model: str, *, config_paths=None) -> str | None:
     """Send a vision chat request; return the reply text, or None."""
+    waiting = blocked_for()
+    if waiting > 0:
+        log.info("kit vision read skipped (%s; %.0f min left) — using k-means",
+                 _block_reason, waiting / 60)
+        return None
+
     payload = {
         "messages": messages,
         "model": model,

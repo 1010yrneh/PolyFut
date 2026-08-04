@@ -158,23 +158,56 @@ Only inline `data:image/...` URIs are accepted. A caller-supplied `http(s)` URL
 is refused — this endpoint is public, and fetching URLs on request would make it
 a proxy for arbitrary hosts.
 
-**This needs a redeploy.** The previously deployed build validates message
-content as a string and rejects images, so the app keeps the switch off by
-default:
+**On by default from 1.0.0**, and only when a proxy or key is configured — with
+neither, kit colours come from local k-means exactly as before and no frame
+leaves the machine. Turn it off with `POLYFUT_KIT_VISION=0`, or
+`"kit_vision": false` in `ai_config.json`.
+
+It needs a proxy built from the current file (an older build validates message
+content as a string and rejects images outright):
 
 ```bash
 modal deploy ai_backend/report_backend.py
 ```
 
-Then turn it on with `POLYFUT_KIT_VISION=1`, or `"kit_vision": true` in
-`ai_config.json`. Left off, kit colours come from local k-means exactly as
-before — no network, no key, no frames leaving the machine.
+### When the quota runs out
+
+Every failure falls back to the local k-means read, and **the client stops
+asking after a refusal** rather than paying the timeout again on every
+subsequent analysis. The free tier is shared at the organisation level, so once
+it is exhausted it is exhausted for everyone:
+
+| Response | Pause before retrying |
+|---|---|
+| 429 / 413 / 402 — quota or size | 15 minutes |
+| 401 / 403 — credentials rejected | 24 hours (it will not fix itself) |
+| unreachable / timeout | 15 minutes |
+
+Settings live in `kit_vlm_client.py`. Nothing about this is visible to the user
+beyond the swatches being the local ones.
+
+### Live findings worth keeping
+
+- The vision docs say 5 images per request; `qwen/qwen3.6-27b` rejects more
+  than 3.
+- The model reasons in a `<think>` block. Left on it consumed a 2,000-token
+  budget without ever answering, so the kit read sends
+  `reasoning_effort: "none"`.
+- **JSON mode is unusable with this model** — Groq validates the whole
+  completion as JSON and the reply opens with `<think>`, so every request
+  failed with `json_validate_failed`, at every payload size.
+- `reasoning_effort` goes through `extra_body`; the pinned `groq==0.11.0`
+  predates it as a named argument.
+- A vision request is far more expensive against the shared quota than a report:
+  three 640px stills plus a reserved completion budget exceeds the per-request
+  limit outright.
 
 ## Still to do
 
-- **Installer packaging**: `ai_config.json` isn't in `packaging/pyinstaller.spec`
-  yet, so a built installer will report `enabled: false` and fall back to the
-  key flow. Needs doing before release.
+- ~~**Installer packaging**: `ai_config.json` isn't in
+  `packaging/pyinstaller.spec`~~ — done; the spec bundles it when present and
+  skips it cleanly when absent, and `_ai_config_paths()` reads `sys._MEIPASS`
+  so a frozen build finds it by name rather than by luck of the layout.
 - **`help.js` and the website** still describe the bring-your-own-key setup
   (`GroqSetup1-6.png`, `website/index.html`). That copy is now wrong for the
   default path and should be rewritten once the proxy is live.

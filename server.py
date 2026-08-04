@@ -384,7 +384,24 @@ def health():
 # then ai_config.json beside the app, then next to the user's data dir.
 
 def _ai_config_paths() -> list[Path]:
-    return [ROOT / "ai_config.json", DATA_ROOT / "ai_config.json"]
+    """Where ai_config.json may live, from source or from a frozen build.
+
+    The spec bundles it to the top of the archive, which PyInstaller unpacks
+    under ``sys._MEIPASS``. ROOT is ``Path(__file__).parent``, which lands there
+    too — but by coincidence of layout rather than by saying so, the same
+    fragility ``_models_root`` calls out. Naming _MEIPASS explicitly matters
+    more now that the vision kit read is on by default: if this list misses the
+    bundled file, every installed user silently gets the local-only read and
+    nothing reports that they were meant to get more.
+    """
+    paths = [ROOT / "ai_config.json", DATA_ROOT / "ai_config.json"]
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            paths.insert(0, Path(base) / "ai_config.json")
+        paths.append(Path(sys.executable).resolve().parent / "ai_config.json")
+    # Preserve order, drop duplicates.
+    return list(dict.fromkeys(paths))
 
 
 def _load_ai_config() -> dict:
@@ -494,23 +511,30 @@ def _warm_kit_detector() -> None:
 
 
 def _kit_vision_enabled() -> bool:
-    """Is the optional vision kit read switched on?
+    """Is the vision kit read switched on? On by default from 1.0.0.
 
-    OFF unless explicitly enabled, for two reasons. It sends stills from the
-    user's match to a third party, which is not something to start doing as a
-    side effect of an update. And it needs a Modal proxy built from the current
-    ai_backend/report_backend.py: the previously deployed one validates message
-    content as a string and rejects images outright, so turning this on before
-    redeploying would add a doomed round trip to every kit read.
+    It only ever runs when a proxy or key is configured (vision_kit_reader
+    returns None otherwise), so this is not a switch that reaches users with no
+    AI route set up — for them nothing changes and no frame leaves the machine.
 
-    Enable with POLYFUT_KIT_VISION=1, or "kit_vision": true in ai_config.json.
+    On is the right default because the kit pair decides the team gate: with the
+    right pair it keeps 98% of your touches and removes 100% of the opponent's,
+    with a wrong one 16-26%. Every failure mode falls back to the local k-means
+    read, and kit_vlm_client stops asking after a refusal rather than stalling
+    the team-picker screen on every subsequent run.
+
+    Turn it off with POLYFUT_KIT_VISION=0, or "kit_vision": false in
+    ai_config.json.
     """
     env = os.environ.get("POLYFUT_KIT_VISION", "").strip().lower()
     if env in ("1", "true", "yes", "on"):
         return True
     if env in ("0", "false", "no", "off"):
         return False
-    return bool(_load_ai_config().get("kit_vision"))
+    configured = _load_ai_config().get("kit_vision")
+    if isinstance(configured, bool):
+        return configured
+    return True
 
 
 def _kit_vision_hook(make_reader):
