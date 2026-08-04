@@ -1,0 +1,27 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "polyfut-server",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["server.py"],
+      "port": 5000
+    },
+    {
+      "name": "polyfut-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["-m", "http.server", "8137", "--directory", "."],
+      "port": 8137
+    },
+    {
+      "name": "calib-tool-static",
+      "runtimeExecutable": "python",
+      "runtimeArgs": [
+        "-m", "http.server", "8781",
+        "--directory",
+        "C:/Users/27HENR~1/AppData/Local/Temp/claude/C--Users-27HenryC1-OneDrive---Taipei-American-School-Desktop-PolyFut-Clean/4a0e4bda-0d89-4d5d-aa29-cb9f8ffb94cf/scratchpad"
+      ],
+      "port": 8781
+    }
+  ]
+}

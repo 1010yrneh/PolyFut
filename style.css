@@ -92,6 +92,30 @@ body { margin: 0; background-color: var(--bg-dark); color: var(--text-primary); 
 body:has(#setup-screen.hidden) .app-header,
 body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
 
+/* ...but hiding .pf-net-bg was only two thirds of the job, which the rule above
+   was written as though it had finished. The net is mounted THREE times: the
+   fixed background, plus a `.pf-net-inline` copy inside the seed screen and
+   another inside #cv-processing-screen. The processing-screen copy is the one
+   that matters — it is on screen for the entire run, so the animations the rule
+   above was meant to stop simply carried on in a second element it did not
+   match. Verified in the browser: with the background hidden and the processing
+   screen up, document.getAnimations() still reported pf-net-drift-a/-b and
+   pf-net-pulse running over ~800k px2 of SVG.
+   Freeze rather than hide: this copy is visible to the user while they wait, so
+   it should still be drawn — it just has no business repainting sixty times a
+   second for forty minutes while the CPU is trying to run inference. Transform
+   on a <g> and opacity on the nodes both repaint; neither composites on the GPU.
+   The spinner and progress bar already carry the "still working" signal.
+   The seed-screen copy is left alone: seeding took 4s on the last real run. */
+#cv-processing-screen .pf-net-a,
+#cv-processing-screen .pf-net-b,
+#cv-processing-screen .pf-net-node { animation: none; }
+/* pf-net-pulse cycles the nodes between .35 and .75, and the element's own
+   opacity is 1, so simply cancelling the animation leaves every node lit at
+   full strength — brighter than the design ever shows. Pin them mid-cycle so
+   the frozen net looks like a still of the animation, not a different one. */
+#cv-processing-screen .pf-net-node { opacity: .55; }
+
 /* Long analyses are the norm here, so honour the OS setting rather than
    animating for hours on a machine whose owner asked us not to. */
 @media (prefers-reduced-motion: reduce) {
