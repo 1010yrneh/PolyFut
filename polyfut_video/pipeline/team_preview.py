@@ -242,6 +242,64 @@ def _is_neutral_crop(crop: np.ndarray) -> bool:
     return _NEUTRAL_V_LO < v < _NEUTRAL_V_HI
 
 
+# Two entries are the same kit under different light when they share a hue and
+# differ mainly in how washed out they are. Sun, distance and compression drain
+# saturation; they do not rotate hue.
+_SHADE_HUE_TOL = 6       # OpenCV hue units (~12 degrees)
+_SHADE_VALUE_TOL = 60    # brightness gap above which they are different kits
+_SHADE_MIN_SAT = 35      # below this the hue is noise, so never merge on it
+
+
+def _hsv_of(hexstr: str):
+    h = hexstr.lstrip("#")
+    bgr = np.uint8([[[int(h[4:6], 16), int(h[2:4], 16), int(h[0:2], 16)]]])
+    return [int(x) for x in cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)[0, 0]]
+
+
+def _same_kit_different_light(a: str, b: str) -> bool:
+    """True when two candidate colours are one kit seen under different light.
+
+    Deliberately NOT a colour-distance test. Measured on the ISB/TAS clip, the
+    two shades of the orange kit sit dE76 45.5 apart while orange and the
+    referee's red sit 48.2 apart — 2.7 apart, so no distance threshold can
+    separate "one kit twice" from "two different things".
+
+    Hue does separate them: the two oranges share hue 13 exactly, the red is at
+    6. The value guard keeps a genuinely light kit and a genuinely dark one
+    apart even when they share a hue (sky blue and navy are not one team).
+    """
+    ha, sa, va = _hsv_of(a)
+    hb, sb, vb = _hsv_of(b)
+    if sa < _SHADE_MIN_SAT and sb < _SHADE_MIN_SAT:
+        return False                       # both greyish: hue means nothing
+    dh = abs(ha - hb)
+    dh = min(dh, 180 - dh)                 # hue is circular
+    return dh <= _SHADE_HUE_TOL and abs(va - vb) <= _SHADE_VALUE_TOL
+
+
+def merge_shades(candidates: list[str]) -> list[str]:
+    """Collapse same-kit-different-light duplicates, keeping the truest one.
+
+    Offering both a shirt and its washed-out twin invites an arbitrary pick: on
+    a live run the model chose the pale orange #bc9766 over the truer #8e551c,
+    which kept just as many of your own touches but removed 95% of the
+    opponent's instead of 100%.
+
+    The survivor is the most saturated member of each group — the reading least
+    diluted by sun and grass, and so the closest to the kit as worn.
+    """
+    out: list[str] = []
+    for hx in candidates:
+        for i, kept in enumerate(out):
+            if _same_kit_different_light(hx, kept):
+                if _hsv_of(hx)[1] > _hsv_of(kept)[1]:
+                    out[i] = hx            # keep the more saturated reading
+                break
+        else:
+            out.append(hx)
+    return out
+
+
 def measured_kit_palette(crops, pitch_lab=None, palette=None, k: int = 6):
     """Up to ``k`` colours actually measured off the players in this video.
 
@@ -475,6 +533,10 @@ def detect_team_kits(
             for h in (hexes_a[0], hexes_b[0]):
                 if h not in candidates:
                     candidates.append(h)
+            # k-means splits one kit across lighting conditions, so the list
+            # arrives with near-duplicates; offering a shirt beside its
+            # washed-out twin is a coin flip the model has no way to win.
+            candidates = merge_shades(candidates)
             picked = vlm(vlm_frames, candidates)
         except Exception:                     # never fail a kit read on this
             log.exception("kit vision read failed; keeping k-means colours")
