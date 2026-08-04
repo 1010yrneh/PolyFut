@@ -39,3 +39,8 @@ website/downloads/*.exe
 
 # Local notebooks (exploratory, carry output cruft)
 notebooks/
+
+# AI proxy wiring: holds the deployed Modal URL + shared app token. Not the Groq
+# key (that lives only in Modal's secret store), but still not for git — it is
+# per-deployment and rotating it shouldn't mean a commit.
+ai_config.json

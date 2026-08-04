@@ -1,4 +1,4 @@
-; Inno Setup script — build after PyInstaller (packaging/build_win.ps1).
+; Inno Setup script - build after PyInstaller (packaging/build_win.ps1).
 ; Requires Inno Setup 6: https://jrsoftware.org/isinfo.php
 
 #define MyAppName "PolyFut"

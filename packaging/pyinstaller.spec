@@ -10,7 +10,17 @@ from pathlib import Path
 
 from PyInstaller.utils.hooks import collect_all, collect_submodules
 
-ROOT = Path(SPECPATH).resolve().parent.parent
+# SPECPATH is the directory CONTAINING this spec (packaging/), so the repo root
+# is one level up, not two. With .parent.parent every path here pointed at the
+# directory above the repo: the build died on "the soccer model is missing"
+# looking in <parent-of-repo>/models, and had it somehow got past that it would
+# have gone looking for index.html up there too.
+ROOT = Path(SPECPATH).resolve().parent
+if not (ROOT / "server.py").exists():          # fail loudly, not mysteriously
+    raise SystemExit(
+        f"pyinstaller.spec: expected the repo root at {ROOT}, but server.py is "
+        f"not there. SPECPATH={SPECPATH!r}"
+    )
 ICON = ROOT / "packaging" / "icons" / "polyfut.ico"
 
 block_cipher = None
@@ -79,7 +89,9 @@ hiddenimports = [
     "PIL",
     "yaml",
     "webview",
-    "polyfut_video.main",
+    # (polyfut_video.main was listed here and does not exist — the build logged
+    # "ERROR: Hidden import 'polyfut_video.main' not found" on every run.
+    # collect_submodules("polyfut_video") below covers the real modules.)
     "polyfut_video.pipeline.detection",
     "sklearn",
     "sklearn.cluster",

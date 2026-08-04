@@ -1,3 +1,8 @@
+﻿# NOTE: keep this file ASCII-only and BOM-prefixed. Windows
+# PowerShell 5.1 reads a BOM-less .ps1 as the ANSI codepage, where a
+# UTF-8 em-dash decodes to a smart quote -- which PowerShell accepts
+# as a string delimiter, so one dash in a comment or message broke
+# parsing of the whole script before any step ran.
 # Build PolyFut desktop app on Windows (PyInstaller + optional Inno Setup).
 $ErrorActionPreference = "Stop"
 $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
@@ -37,7 +42,7 @@ if ($Ffmpeg) {
 
 # Inno Setup lands in different places depending on how it was installed.
 # `winget install JRSoftware.InnoSetup` without an admin prompt installs
-# per-user into LOCALAPPDATA, which the two Program Files paths miss entirely —
+# per-user into LOCALAPPDATA, which the two Program Files paths miss entirely -
 # and the only symptom was "Inno Setup not found", i.e. a build that quietly
 # produced no installer at all.
 $Iscc = @(
@@ -61,7 +66,7 @@ if ($Iscc) {
         Copy-Item $Setup (Join-Path $Root "website\downloads\PolyFut-Setup-$Version.exe") -Force -ErrorAction SilentlyContinue
     }
 } else {
-    Write-Host "Inno Setup not found — skip installer. Install from https://jrsoftware.org/isinfo.php" -ForegroundColor Yellow
+    Write-Host "Inno Setup not found - skip installer. Install from https://jrsoftware.org/isinfo.php" -ForegroundColor Yellow
     Write-Host "Portable app folder: dist\PolyFut\"
 }
 
