@@ -51,9 +51,12 @@ _VALID_ROLES = {"system", "user", "assistant"}
 
 # --- vision (kit-colour reads) -------------------------------------------
 # The kit picker sends a handful of match stills and asks which two shirt
-# colours the teams are wearing. Groq caps a vision request at 5 images and
-# 20MB; we stay well under both because these are 640x360 stills re-encoded as
-# JPEG, and because every byte here is shared free-tier quota.
+# colours the teams are wearing. This is the abuse ceiling for a public
+# endpoint, deliberately left at Groq's documented 5 rather than tracking the
+# current model's real limit — qwen3.6-27b rejects more than 3, which the
+# client enforces (kit_vlm.MAX_IMAGES) so a swap to a roomier model needs no
+# redeploy here. Stills are 640x360 JPEGs, far under the 20MB request cap, and
+# every byte is shared free-tier quota.
 MAX_IMAGES = 5
 MAX_IMAGE_BYTES = 400_000        # per image, as base64 — ~300KB of JPEG
 MAX_IMAGE_BYTES_TOTAL = 1_500_000
@@ -177,6 +180,32 @@ def _validate_messages(raw) -> tuple[list[dict] | None, str | None]:
     return out, None
 
 
+# Groq's documented values. An allowlist rather than a pass-through for the
+# same reason _response_format_kwargs is one: a caller reaching this public
+# endpoint must not be able to hand arbitrary fields to the upstream API.
+_REASONING_EFFORTS = {"none", "default", "low", "medium", "high"}
+
+
+def _reasoning_kwargs(effort) -> dict:
+    """Forward a known reasoning_effort value, drop anything else.
+
+    qwen3.6-27b reasons in a <think> block by default. For the kit-colour read
+    that is pure cost: the thinking ran past a 2000-token completion budget and
+    was truncated before the model ever emitted its answer, and the reserved
+    budget also counts toward the request-size limit that was rejecting three
+    images with a 413. "none" turns it off, leaving just the answer.
+
+    Sent via ``extra_body`` rather than as a named argument: the pinned
+    groq==0.11.0 predates the parameter and raises "got an unexpected keyword
+    argument 'reasoning_effort'". extra_body goes straight into the request
+    JSON, so this works without disturbing a version pin that exists to keep
+    httpx off 0.28 (see the image definition above).
+    """
+    if isinstance(effort, str) and effort in _REASONING_EFFORTS:
+        return {"extra_body": {"reasoning_effort": effort}}
+    return {}
+
+
 def _response_format_kwargs(fmt) -> dict:
     """Only a JSON-mode request is forwarded to Groq; anything else in this
     field is dropped rather than passed through to the upstream API unvalidated
@@ -250,6 +279,7 @@ def generate_report(payload: dict, request: Request):
     max_tokens = max(256, min(max_tokens, MAX_OUTPUT_TOKENS))
     model = str(payload.get("model") or DEFAULT_MODEL)
     kwargs = _response_format_kwargs(payload.get("response_format"))
+    kwargs.update(_reasoning_kwargs(payload.get("reasoning_effort")))
 
     client = Groq(api_key=os.environ["GROQ_API_KEY"])
     try:
@@ -266,8 +296,12 @@ def generate_report(payload: dict, request: Request):
         if status == 429 or "rate_limit" in detail:
             # The shared org quota, not this user's. Say so — otherwise it reads
             # as "the app is broken" when it's "everyone is using it right now".
-            return fail(429, "The AI service is busy right now (shared free-tier "
-                             "limit). Wait a minute and try again.")
+            # Carry Groq's own wording through: its limits are per-minute AND
+            # per-day, and "wait a minute" is wrong advice for the daily one —
+            # which is what an image request is most likely to exhaust, a few
+            # stills costing far more tokens than a whole report.
+            return fail(429, "The AI service is busy right now (shared "
+                             f"free-tier limit). Upstream said: {detail[:300]}")
         if status == 401:
             return fail(502, "The AI service rejected our credentials. This is a "
                              "server-side problem, not something you can fix.")

@@ -45,7 +45,10 @@ import numpy as np
 log = logging.getLogger(__name__)
 
 VISION_MODEL = "qwen/qwen3.6-27b"
-MAX_IMAGES = 5              # Groq's per-request cap
+# Groq's vision docs say 5 images per request; this model rejects more than 3
+# ("Too many images provided. This model supports up to 3 images"), measured
+# against the live API. Trust the API over the docs.
+MAX_IMAGES = 3
 JPEG_QUALITY = 82
 SEND_WIDTH = 640            # native for this footage; no gain in upscaling
 
@@ -106,10 +109,23 @@ def build_palette_text(candidates: list[str]) -> str:
     return "Colours measured on players in this video:\n" + "\n".join(lines)
 
 
+def _spread(frames: list, n: int) -> list:
+    """Pick n items spread across the list, not the first n.
+
+    With only three slots the choice matters: the candidates are ordered by
+    time, and three consecutive early ones can all be the same phase of the
+    match (or all still the warm-up). Spreading them samples the game.
+    """
+    if len(frames) <= n:
+        return list(frames)
+    idx = np.linspace(0, len(frames) - 1, n).round().astype(int)
+    return [frames[i] for i in dict.fromkeys(idx.tolist())]
+
+
 def frames_to_data_uris(frames: list[np.ndarray]) -> list[str]:
     """JPEG-encode BGR frames as inline data: URIs, at most MAX_IMAGES of them."""
     uris = []
-    for fr in frames[:MAX_IMAGES]:
+    for fr in _spread(list(frames), MAX_IMAGES):
         if fr is None or getattr(fr, "size", 0) == 0:
             continue
         if fr.shape[1] > SEND_WIDTH:
@@ -147,6 +163,19 @@ def parse_choice(text: str, candidates: list[str]) -> list[str] | None:
     if not text or not candidates:
         return None
     raw = text.strip()
+    # qwen3.6-27b is a thinking model: it emits a <think>...</think> block
+    # before the answer, and that block is prose which can easily contain
+    # braces ("the JSON should be {team_one: ...}"). Scanning for the first
+    # brace without removing it would parse the model's working-out instead of
+    # its answer, so strip it first. An unterminated block means the reply was
+    # cut off mid-thought and there is no answer to find.
+    if "<think>" in raw:
+        _before, _sep, after = raw.partition("</think>")
+        if not _sep:
+            log.info("kit vision read: reply ended inside its <think> block "
+                     "(max_tokens too small?)")
+            return None
+        raw = after.strip()
     if raw.startswith("```"):
         raw = raw.strip("`")
         raw = raw.split("\n", 1)[1] if "\n" in raw else raw

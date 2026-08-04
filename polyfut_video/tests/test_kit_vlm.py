@@ -74,6 +74,24 @@ def test_a_letter_past_the_end_of_a_short_list_is_refused():
         '{"team_one":"A","team_two":"F"}', MEASURED[:3]) is None
 
 
+def test_a_thinking_block_is_stripped_before_parsing():
+    """qwen3.6-27b reasons in <think>...</think> before answering, and that
+    prose contains braces. Parsing the first brace found would read the model's
+    working-out instead of its conclusion."""
+    reply = (
+        '<think>\nI should reply with {"team_one":"A","team_two":"B"} if the '
+        'teams were purple, but looking again the shirts are orange and navy.\n'
+        '</think>\n{"team_one":"C","team_two":"D"}')
+    assert kit_vlm.parse_choice(reply, MEASURED) == ["#8f561b", "#110a25"]
+
+
+def test_a_reply_cut_off_mid_thought_is_refused():
+    """An unterminated <think> means max_tokens ran out before the answer."""
+    assert kit_vlm.parse_choice(
+        '<think>The shirts look orange, so maybe {"team_one":"A"',
+        MEASURED) is None
+
+
 def test_an_unconfident_answer_is_refused():
     """The prompt lets the model say the frames don't show two teams — that is
     the warm-up case, and guessing there is what caused the original bug."""
@@ -144,8 +162,20 @@ def test_candidates_are_described_in_words_not_just_hex():
 
 # ------------------------------------------------------------- the payload
 def test_images_are_capped_at_the_api_limit():
+    """qwen3.6-27b rejects more than 3 images, whatever the docs say — that
+    rejection was observed live, so the cap is pinned here."""
     frames = [np.full((36, 64, 3), i * 10, np.uint8) for i in range(12)]
-    assert len(kit_vlm.frames_to_data_uris(frames)) == kit_vlm.MAX_IMAGES <= 5
+    assert kit_vlm.MAX_IMAGES == 3
+    assert len(kit_vlm.frames_to_data_uris(frames)) == kit_vlm.MAX_IMAGES
+
+
+def test_the_chosen_frames_are_spread_across_the_match():
+    """Three consecutive early frames can all be the same phase of play, or all
+    still the warm-up; spreading them samples the game."""
+    frames = list(range(9))
+    assert kit_vlm._spread(frames, 3) == [0, 4, 8]
+    assert kit_vlm._spread([1, 2], 3) == [1, 2]      # fewer than asked for
+    assert kit_vlm._spread([], 3) == []
 
 
 def test_empty_and_broken_frames_are_skipped():

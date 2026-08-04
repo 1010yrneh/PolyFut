@@ -78,8 +78,25 @@ def ask(messages: list[dict], model: str, *, config_paths=None) -> str | None:
         "messages": messages,
         "model": model,
         "temperature": 0,          # a colour read is not a creative task
+        # Room to think, not room to write. qwen3.6-27b reasons inside a
+        # <think> block before answering, and that block counts against
+        # max_tokens: at 300 it was consumed entirely by reasoning and Groq
+        # rejected the empty result with json_validate_failed. The answer
+        # itself is about 30 tokens.
+        # Reasoning off. Left on, qwen3.6-27b spent more than 2000 completion
+        # tokens narrating its way down the colour list and was truncated before
+        # it ever answered. Its reasoning was correct — it identified the
+        # referee's shirt and the grass unprompted — but this call needs the
+        # conclusion, not the derivation. Off, the answer is ~30 tokens, which
+        # also shrinks the reserved budget that counts toward the request-size
+        # limit rejecting three images with a 413.
+        "reasoning_effort": "none",
         "max_tokens": 300,
-        "response_format": {"type": "json_object"},
+        # Deliberately NOT response_format=json_object. Groq validates that the
+        # whole completion is JSON, and with reasoning ON that failed against
+        # the <think> block (HTTP 400 json_validate_failed, empty
+        # failed_generation, at every payload size). parse_choice tolerates
+        # fences and surrounding prose, so JSON mode buys nothing it needs.
     }
 
     proxy = load_proxy_config(config_paths)
