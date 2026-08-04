@@ -274,6 +274,14 @@ def detect_team_kits(
     bounded early window. A cap.set() per frame re-decodes a whole GOP each on
     sparse-keyframe phone/broadcast video, which can stall for minutes; kit
     colours are constant, so an early window is sufficient and far faster.
+
+    The samples are SPREAD across that window. They used to be taken back to
+    back at sample_every_seconds, which meant n_samples=20 every 3s stopped
+    after 60 seconds and sample_window_minutes was unreachable — a dead
+    parameter. On a broadcast the first minute is the warm-up: players are in
+    training bibs, not match kits, so both swatches were decided from footage
+    the actual kits do not appear in. On an 82-minute ISB v TAS recording that
+    returned two purples for an orange team and a navy one.
     """
     info = probe_video(video_path)
     n_frames = int(info.get("frame_count") or 0)
@@ -281,7 +289,12 @@ def detect_team_kits(
     if n_frames < 1:
         return None
 
-    stride = max(1, int(round(fps * sample_every_seconds)))
+    # Spread n_samples over the window. sample_every_seconds stays a floor so
+    # short clips are sampled exactly as before — a 60s upload still gets 3s
+    # spacing, because there is no wider window for it to spread into.
+    span_sec = min(sample_window_minutes * 60.0, n_frames / max(fps, 1e-6))
+    every_sec = max(sample_every_seconds, span_sec / max(n_samples, 1))
+    stride = max(1, int(round(fps * every_sec)))
     max_frame = min(n_frames - 1, int(sample_window_minutes * 60 * fps))
 
     det = Detector(DetectConfig(
