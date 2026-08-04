@@ -173,10 +173,35 @@ def _is_referee_crop(crop: np.ndarray) -> bool:
     return (h <= 12 or h >= 168) and s >= 70 and v >= 50
 
 
+# A crop with no colour in it is only uninformative if it is also mid-toned.
+# The previous test was `s < 30 or (v > 210 and s < 50)`, which threw away every
+# unsaturated crop — and white is the least saturated thing on a pitch, so it
+# discarded an entire white-kitted team, plus black kits (also near-zero
+# saturation) and pale blues. Two of the commonest kit colours in football.
+#
+# It barely showed on the current footage because turf contamination keeps
+# measured saturation high, which made it a latent bug that would get WORSE as
+# footage improved: the better the exposure, the more cleanly a white shirt
+# reads as white, and the more reliably it was dropped.
+#
+# White is bright, black is dark, and neither is grey. What genuinely carries no
+# kit signal is the middle: worn concrete, deep shadow, a washed-out blur.
+_NEUTRAL_S_MAX = 30     # below this a crop has no usable hue
+_NEUTRAL_V_LO = 55      # darker than this is a black/navy kit, not "neutral"
+_NEUTRAL_V_HI = 195     # brighter than this is a white kit, not "neutral"
+
+
 def _is_neutral_crop(crop: np.ndarray) -> bool:
+    """True when a crop carries no kit signal at all — not merely no colour."""
     hsv = cv2.cvtColor(crop, cv2.COLOR_BGR2HSV)
-    h, s, v = (int(x) for x in np.median(hsv.reshape(-1, 3), axis=0))
-    return s < 30 or (v > 210 and s < 50)
+    _h, s, v = (int(x) for x in np.median(hsv.reshape(-1, 3), axis=0))
+    if s >= _NEUTRAL_S_MAX:
+        return False                      # it has a colour; that is a kit
+    # Colourless. Keep the extremes (white / black kits), drop the middle.
+    # A light-grey kit does fall in the dropped band, but grey is genuinely
+    # indistinguishable from worn concrete at this resolution and it is a far
+    # rarer kit than white or black.
+    return _NEUTRAL_V_LO < v < _NEUTRAL_V_HI
 
 
 def _kmeans_two_kits(
