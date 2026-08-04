@@ -848,6 +848,11 @@ def _run_v2_job(job_id: str, video_path: Path, seed_taps: list, out_dir: Path,
                 ball_detector_stats=result.get("ball_detector_stats"),
                 ball_sanity=result.get("ball_sanity"),
                 n_analysed_frames=result.get("n_samples"),
+                # Which kit colours the run was actually given. The team gate
+                # keeps 98% of your touches with the right pair and 16-26% with
+                # a wrong one, so "why did it miss my player" is unanswerable
+                # without them — as it was for the ISB/TAS report.
+                seed=result.get("seed"),
                 # Needed again at decision time: hotspots are rebuilt from
                 # scratch there, and the possession extension needs the ball.
                 ball_track=result.get("ball_track"),

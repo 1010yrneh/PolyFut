@@ -532,8 +532,19 @@ def run_to_montage(
         "n_your_team": len(out["kept"]),
         "n_review": sum(1 for it in items if it["status"] == "review"),
         "n_crowded": sum(1 for it in items if it.get("crowded")),
+        # The kit hexes decide the team gate outright: with the right pair
+        # 98% of your touches survive it and 100% of the opponent's are removed;
+        # with a wrong pair that collapses to 16-26% kept, measured on the
+        # ISB/TAS footage. So a run that dropped your own team is only
+        # explicable if the record says which colours it was given.
+        # has_opponent matters on its own — without it classify_team falls back
+        # to the one-sided band, which loses 26% of your team by itself.
         "seed": {"n_samples": seed.n_samples, "has_color": seed.has_color(),
-                 "gallery": len(seed.gallery)},
+                 "gallery": len(seed.gallery),
+                 "my_team_hexes": list(my_team_hexes or []),
+                 "opponent_hex": opponent_hex,
+                 "opponent_hexes": list(opponent_hexes or []),
+                 "has_opponent": bool(seed.opponent_kits())},
         "warnings": warnings,
         "montage": items,
         "hotspots": [h.to_dict() for h in out["hotspots"]],
