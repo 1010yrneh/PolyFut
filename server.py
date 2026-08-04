@@ -493,6 +493,37 @@ def _warm_kit_detector() -> None:
         traceback.print_exc()
 
 
+def _kit_vision_enabled() -> bool:
+    """Is the optional vision kit read switched on?
+
+    OFF unless explicitly enabled, for two reasons. It sends stills from the
+    user's match to a third party, which is not something to start doing as a
+    side effect of an update. And it needs a Modal proxy built from the current
+    ai_backend/report_backend.py: the previously deployed one validates message
+    content as a string and rejects images outright, so turning this on before
+    redeploying would add a doomed round trip to every kit read.
+
+    Enable with POLYFUT_KIT_VISION=1, or "kit_vision": true in ai_config.json.
+    """
+    env = os.environ.get("POLYFUT_KIT_VISION", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    return bool(_load_ai_config().get("kit_vision"))
+
+
+def _kit_vision_hook(make_reader):
+    """The vlm hook for detect_team_kits, or None to keep the local-only path."""
+    if not _kit_vision_enabled():
+        return None
+    try:
+        return make_reader([str(p) for p in _ai_config_paths()])
+    except Exception:
+        app.logger.exception("kit vision setup failed; using k-means colours")
+        return None
+
+
 def _detect_team_kits_isolated(video_path: str, timeout_sec: float = 480.0) -> tuple[list[dict] | None, str | None]:
     """Run kit preview in-process on a worker thread with a timeout.
 
@@ -517,9 +548,12 @@ def _detect_team_kits_isolated(video_path: str, timeout_sec: float = 480.0) -> t
 
     def _work() -> None:
         try:
-            from polyfut_video.pipeline.team_preview import detect_team_kits
+            from polyfut_video.pipeline.team_preview import (
+                detect_team_kits, vision_kit_reader,
+            )
             result["kits"] = detect_team_kits(
                 video_path, weights=str(WEIGHTS), device=str(DEVICE),
+                vlm=_kit_vision_hook(vision_kit_reader),
             )
         except Exception as exc:  # noqa: BLE001 — reported to caller
             result["err"] = f"{type(exc).__name__}: {exc}"

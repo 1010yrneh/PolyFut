@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import logging
+import os
+
 import cv2
 import numpy as np
 
@@ -12,6 +15,41 @@ from polyfut_video.pipeline.team_classify import (
     _jersey_hsv_feature, _torso_crop, looks_like_pitch, pitch_palette,
     pitch_reference_lab, standout_colours, standout_kit_lab,
 )
+
+log = logging.getLogger(__name__)
+
+
+def vision_kit_reader(config_paths=None):
+    """Build the ``vlm`` hook for :func:`detect_team_kits`.
+
+    Returns a callable, or None when no vision route is configured — so the
+    caller can pass the result straight through and get today's behaviour when
+    there is no key and no proxy.
+
+    The model is shown the frames together with the colours measured off players
+    in this video and CHOOSES two of them, so it can only ever return a colour
+    that is really on the pitch.
+    """
+    from polyfut_video.pipeline import kit_vlm, kit_vlm_client
+
+    if not (kit_vlm_client.load_proxy_config(config_paths)
+            or os.environ.get("GROQ_API_KEY", "").strip()):
+        return None
+
+    def read(frames, candidates):
+        uris = kit_vlm.frames_to_data_uris(frames)
+        if not uris or len(candidates) < 2:
+            return None
+        reply = kit_vlm_client.ask(
+            kit_vlm.build_messages(uris, candidates), kit_vlm.VISION_MODEL,
+            config_paths=config_paths,
+        )
+        picked = kit_vlm.parse_choice(reply or "", candidates)
+        if picked:
+            log.info("kit vision read chose %s from %s", picked, candidates)
+        return picked
+
+    return read
 
 
 def _resize_frame(frame: np.ndarray, target_width: int = 960) -> np.ndarray:
@@ -204,6 +242,32 @@ def _is_neutral_crop(crop: np.ndarray) -> bool:
     return _NEUTRAL_V_LO < v < _NEUTRAL_V_HI
 
 
+def measured_kit_palette(crops, pitch_lab=None, palette=None, k: int = 6):
+    """Up to ``k`` colours actually measured off the players in this video.
+
+    The snap target for a vision read. It must be WIDER than the two colours
+    k-means settled on: the case worth fixing is exactly the one where those two
+    are wrong, and snapping to them could only ever return the wrong answer. So
+    this clusters the same per-player readings loosely and hands back everything
+    that is genuinely on a shirt somewhere, letting the model choose among them.
+    """
+    reads = []
+    for c in crops:
+        px = _jersey_bgr_pixels(c, palette=palette)
+        if px is None or len(px) < 8:
+            continue
+        reads.append(np.median(px, axis=0))
+    if len(reads) < k:
+        k = max(1, len(reads))
+    if not reads:
+        return []
+    data = np.float32(np.vstack(reads))
+    crit = (cv2.TERM_CRITERIA_EPS + cv2.TERM_CRITERIA_MAX_ITER, 30, 0.5)
+    _compact, _labels, centers = cv2.kmeans(
+        data, k, None, crit, 4, cv2.KMEANS_PP_CENTERS)
+    return [_bgr_to_hex(c) for c in centers]
+
+
 def _kmeans_two_kits(
     crops: list[np.ndarray],
     pitch_lab=None,
@@ -265,10 +329,15 @@ def detect_team_kits(
     imgsz: int = 640,
     sample_window_minutes: float = 8.0,
     sample_every_seconds: float = 3.0,
+    vlm=None,
 ) -> list[dict] | None:
     """
     Sample frames, detect players, k-means torso colours → two kit swatches.
     Returns [{"id","label","hex"}, ...] or None if detection fails.
+
+    ``vlm`` is an optional ``(frames, kmeans_hexes) -> [hex, hex] | None`` hook
+    (see :func:`vision_kit_reader`). It runs only after k-means has produced a
+    full answer, so it can refine the result but never cause a failure.
 
     Frames are sampled *sequentially* (grab/retrieve — no per-frame seeks) from a
     bounded early window. A cap.set() per frame re-decodes a whole GOP each on
@@ -306,6 +375,11 @@ def detect_team_kits(
 
     crops: list[np.ndarray] = []
     seen_frames: list[np.ndarray] = []
+    # Full frames kept for the optional vision read. Whole frames, not crops:
+    # the entire point is the scene context the crops throw away — formation,
+    # who is a referee, what is crowd. Costs nothing extra to decode, they are
+    # frames this loop already has.
+    vlm_frames: list[np.ndarray] = []
     sampled = 0
     pitch_lab = None
     palette = None
@@ -327,6 +401,10 @@ def detect_team_kits(
                 palette = pitch_palette(seen_frames)
                 pitch_lab = pitch_reference_lab(seen_frames)
         dets = det.detect_frame(frame)
+        # Prefer frames with several players on them — a still of an empty half
+        # tells a vision model nothing about either kit.
+        if len([d for d in dets if d.get("class") == "player"]) >= 4:
+            vlm_frames.append(frame)
         for d in dets:
             if d.get("class") != "player":
                 continue
@@ -385,6 +463,24 @@ def detect_team_kits(
     hexes_b = [h for h in hexes_b if h not in hexes_a] or hexes_b
     if hexes_a[0] == hexes_b[0]:
         return None
+
+    # Optional vision pass. k-means has already produced a complete answer above;
+    # this can only re-order or re-point it, never leave the caller empty-handed.
+    if vlm is not None:
+        try:
+            # Candidates deliberately include colours k-means did NOT pick as
+            # the two kits — otherwise a wrong k-means answer could never be
+            # corrected, which is the whole reason for the vision read.
+            candidates = measured_kit_palette(crops, pitch_lab, palette)
+            for h in (hexes_a[0], hexes_b[0]):
+                if h not in candidates:
+                    candidates.append(h)
+            picked = vlm(vlm_frames, candidates)
+        except Exception:                     # never fail a kit read on this
+            log.exception("kit vision read failed; keeping k-means colours")
+            picked = None
+        if picked:
+            hexes_a, hexes_b = [picked[0]], [picked[1]]
 
     # ``hex`` stays the dominant colour so older clients / saved sessions keep
     # working; ``hexes`` carries the full set for multi-coloured kits.
