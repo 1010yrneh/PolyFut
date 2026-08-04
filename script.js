@@ -4607,7 +4607,20 @@ async function pfAiChat(messages, opts) {
         // limit, upstream error) — surface it rather than silently retrying,
         // unless the user has their own key to fall back on.
         var msg = (data && data.error) || ('AI service error (HTTP ' + response.status + ')');
-        if (pfSavedGroqKey() && response.status !== 429) return pfAiChatDirect(messages, opts);
+        // Two different things arrive as 429. scope "app" is the shared
+        // endpoint's own per-IP allowance, and using a personal key there would
+        // route around our own abuse control — so that one is reported, not
+        // retried. scope "upstream" is the shared Groq quota being exhausted,
+        // which is precisely the case a user's own key should cover; without
+        // this, someone who had gone to the trouble of adding a key still got
+        // told the service was busy.
+        // Only an explicit "upstream" unlocks the personal key. A proxy too old
+        // to send scope says nothing, and the safe reading of silence is the
+        // app's own limit — better to report a busy service than to quietly
+        // hand everyone a way around it.
+        var appLimited = response.status === 429
+            && !(data && data.scope === 'upstream');
+        if (pfSavedGroqKey() && !appLimited) return pfAiChatDirect(messages, opts);
         throw new Error(msg);
     }
 

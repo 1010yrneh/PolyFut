@@ -1,22 +1,29 @@
-// help.js - Help Modal content
+// help.js — How to Use modal (definitions, interface, scoring, Groq API key)
 
 const helpModalHTML = `
-    <button onclick="openHelp()" class="help-btn-top">HOW TO USE</button>
+    <button type="button" onclick="openHelp()" class="help-btn-top" aria-label="How to use PolyFut">HOW TO USE</button>
 
-    <div id="help-modal" class="hidden">
+    <div id="help-modal" class="hidden" role="dialog" aria-modal="true" aria-labelledby="help-modal-title">
         <div class="help-content">
-            <span class="help-close" onclick="closeHelp()">&times;</span>
-            <h2 style="margin-top: 0; color: #fff; border-bottom: 1px solid #333; padding-bottom: 10px;">How to Use PolyFut</h2>
+            <button type="button" class="help-close" onclick="closeHelp()" aria-label="Close help">&times;</button>
+            <h2 id="help-modal-title">How to Use PolyFut</h2>
 
             <div class="help-tabs">
-                <button class="tab-btn active" onclick="switchTab('tab-definitions', this)">1. Definitions</button>
-                <button class="tab-btn" onclick="switchTab('tab-interface', this)">2. Interface</button>
-                <button class="tab-btn" onclick="switchTab('tab-calculations', this)">3. Calculations</button>
-                <button class="tab-btn" onclick="switchTab('tab-ai', this)">4. AI Report</button>
-                <button class="tab-btn" onclick="switchTab('tab-steps', this)">5. Next Steps</button>
+                <button type="button" class="tab-btn active" onclick="switchTab('tab-definitions', this)">1. Definitions</button>
+                <button type="button" class="tab-btn" onclick="switchTab('tab-interface', this)">2. Interface</button>
+                <button type="button" class="tab-btn" onclick="switchTab('tab-calculations', this)">3. Calculations</button>
+                <button type="button" class="tab-btn" onclick="switchTab('tab-ai', this)">4. AI Report</button>
+                <button type="button" class="tab-btn" onclick="switchTab('tab-steps', this)">5. Next Steps</button>
             </div>
 
             <div id="tab-definitions" class="tab-content active">
+                <h4>Threat Points (TP)</h4>
+                <ul>
+                    <li><strong>TP = Threat Points</strong> — PolyFut's scoring unit for how much an action helped (or hurt) your team.</li>
+                    <li><strong>Scale:</strong> 1 TP ≈ 1% of a goal. A goal is worth <strong>100 TP</strong>.</li>
+                    <li><strong>Net Threat:</strong> Your overall score after combining impact (chance creation / chance prevention) and risk (mistakes, volume that leads to turnovers).</li>
+                </ul>
+
                 <h4>Shooting &amp; Finishing</h4>
                 <ul>
                     <li><strong>Shot Taken:</strong> Deliberate attempt to score a goal with foot or head, excluding accidental crosses.</li>
@@ -61,9 +68,12 @@ const helpModalHTML = `
                 <h4>1. Match Setup</h4>
                 <ul>
                     <li><strong>Select Position:</strong> Click on the pitch map to choose the position you are playing (Forward [FW], Midfielder [MF], or Defender [DF]). The engine will adapt its scoring model based on your choice.</li>
-                    <li><strong>Upload Video:</strong> Click the upload button to load your match video. You can convert YouTube URLs to mp4 using <a href="https://turboscribe.ai/downloader/youtube/mp4" target="_blank" style="color: #f2c94c;">TurboScribe</a> (or any other format converter).</li>
-                    <li><strong>Start analysis:</strong> Once your position is selected and the video is loaded, click <strong>Find touch hotspots</strong>. The video player opens after analysis completes.</li>
-                    <li><strong>Processing time:</strong> Full matches are analysed locally on your CPU in many short chunks (detect players + ball on thousands of frames). A 90-minute game can take <strong>several hours</strong> — this is normal. You can <strong>turn off the display</strong>, lock the screen, or close the browser tab; analysis keeps running on the server until you choose Cancel &amp; discard run. Only a full shutdown or system sleep will stop it. Keep your laptop plugged in.</li>
+                    <li><strong>Upload Video:</strong> Click the upload button to load your match video. You can convert YouTube URLs to mp4 using <a href="https://turboscribe.ai/downloader/youtube/mp4" target="_blank" rel="noopener">TurboScribe</a> (or any other format converter).</li>
+                    <li><strong>Pick your team:</strong> After upload, choose which kit colour you played in.</li>
+                    <li><strong>Playing time (if shown):</strong> Tell PolyFut when you were actually on the pitch so analysis stays inside those windows.</li>
+                    <li><strong>Tap yourself:</strong> In the four short clips, tap the marker on <strong>you</strong> so the app learns who to follow.</li>
+                    <li><strong>Start analysis:</strong> Once seeding is done, click <strong>Find My Touches</strong>. Review uncertain clips, then log actions in the video player.</li>
+                    <li><strong>Processing time:</strong> Full matches are analysed locally on your CPU. A long game can take a while — this is normal. You can turn off the display, lock the screen, or close the browser tab; analysis keeps running until you choose Cancel &amp; discard. Only a full shutdown or system sleep will stop it. Keep your laptop plugged in.</li>
                 </ul>
 
                 <h4>2. Tracking &amp; Playback</h4>
@@ -72,13 +82,14 @@ const helpModalHTML = `
                     <li><strong>Speed:</strong> Press "S" to toggle between slow and fast playback speeds. Use the speed dropdowns to configure both speeds.</li>
                     <li><strong>Zoom &amp; Pan:</strong> Scroll the mouse wheel over the video to zoom in or out. Click and drag to pan around the zoomed view. Click RESET ZOOM to return to normal.</li>
                     <li><strong>Log Actions:</strong> When you perform a key action on the pitch, pause the video and click the specific category and action (e.g., "Pass" → "Cross into Box").</li>
-                    <li><strong>Manage Substitutions:</strong> If you are subbed off, add a <strong>BENCH (SUB)</strong> block to signal to the AI that you were off the pitch so it doesn't dilute your results.</li>
+                    <li><strong>Manage Substitutions:</strong> If you are subbed off, add a <strong>BENCH (SUB)</strong> block to signal that you were off the pitch so it doesn't dilute your results.</li>
                 </ul>
 
                 <h4>3. Monitoring Results</h4>
                 <ul>
-                    <li><strong>Live Dashboard:</strong> Your <strong>Net Impact</strong> score (calculating your xG added and Risk factor) will update instantly with every action you log.</li>
+                    <li><strong>Live Dashboard:</strong> Your <strong>Net Threat (TP)</strong> score updates as you log actions.</li>
                     <li><strong>Performance Chart:</strong> Watch the live line chart plot your positive and negative momentum over the course of the match.</li>
+                    <li><strong>Match Analysis page:</strong> After FINISH, you get goals/assists, Net Threat Points, offense/defense breakdown, and an optional AI scout report.</li>
                 </ul>
             </div>
 
@@ -87,6 +98,7 @@ const helpModalHTML = `
                 <p>This engine is a completely custom model built on professional sports data science principles, combining two major predictive systems:</p>
                 <ul>
                     <li><strong>What do we do?</strong> PolyFut is built for high school, middle school, and college players who want to take initiative in analysing their own performance without needing professional tools. Action values are derived from Premier League 2024-2025 data processed through Machine Learning techniques.</li>
+                    <li><strong>Threat Points (TP):</strong> 1 TP = 1% of a goal (a goal = 100 TP). Your Match Analysis score is reported in TP.</li>
                     <li><strong>Markov Chains (Immediate Threat):</strong> Values how much an action immediately increases the probability of scoring an Expected Goals (xG).</li>
                     <li><strong>Ridge Regression (Long-Term Win%):</strong> Punishes mistakes and values actions that help a team maintain control and win over 90 minutes.</li>
                     <li><strong>Shadow xG Multipliers:</strong> Solves the famous "defensive bias" in football data by assigning defenders the value of the offensive chances they destroy.</li>
@@ -94,26 +106,38 @@ const helpModalHTML = `
             </div>
 
             <div id="tab-ai" class="tab-content">
-                <h4>Connecting the AI (Groq reports)</h4>
-                <p style="margin-bottom: 5px; color: #a0a0b0;">To get your AI scouting report, you need a free Groq API key:</p>
+                <h4>AI scout reports</h4>
+                <p>Reports work straight away — there is nothing to set up. When you click <strong>GENERATE REPORT</strong>, PolyFut sends your match statistics (the numbers you logged, not your video) to its AI service and writes you a coach-level breakdown. You can ask follow-up questions in the box below the report.</p>
+
+                <h4>What leaves your machine, and when</h4>
+                <p>Almost everything PolyFut does runs locally. Two things do not, and both are worth knowing about:</p>
                 <ul>
-                    <li><strong>Step 1:</strong> Go to the <a href="https://console.groq.com/keys" target="_blank" style="color: #f2c94c;">Groq API Console</a> and log in using any method you prefer.<br>
-                        <img src="GroqSetup1.png" alt="Groq Login Screen" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
-                        <img src="GroqSetup2.png" alt="Groq Console Screen" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <li><strong>Your report request</strong> — only when you click Generate. It contains your logged match statistics. Your video is never uploaded.</li>
+                    <li><strong>A few still frames, during setup</strong> — to work out the two teams' kit colours, PolyFut may send up to three small stills from your match to the same AI service. This happens once per video, automatically, because getting the kit colours right is what lets it tell your team from the opposition. If it is unavailable, PolyFut works the colours out on your own machine instead and carries on.</li>
+                </ul>
+                <p>To keep everything local, set <code>kit_vision</code> to <code>false</code> in <code>ai_config.json</code> next to the app. Reports then remain available on demand, and no frames are ever sent.</p>
+
+                <h4>If the AI is busy</h4>
+                <p>The AI allowance is shared between everyone using PolyFut, so it can run out. Reports will say so; kit colours quietly fall back to the local method and analysis continues as normal.</p>
+                <p>To avoid the shared queue you can add your own free Groq key, which PolyFut will use whenever the shared allowance is spent. It is stored on your device and never sent anywhere except Groq.</p>
+                <ul>
+                    <li><strong>Step 1:</strong> Go to the <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq API Console</a> and log in using any method you prefer.<br>
+                        <img class="help-img" src="GroqSetup1.png" alt="Groq login screen">
+                        <img class="help-img" src="GroqSetup2.png" alt="Groq console screen">
                     </li>
-                    <li><strong>Step 2:</strong> Click the <strong>"Create API Key"</strong> button.<br>
-                        <img src="GroqSetup3.png" alt="Create API Key Button" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <li><strong>Step 2:</strong> Click <strong>"Create API Key"</strong>.<br>
+                        <img class="help-img" src="GroqSetup3.png" alt="Create API Key button">
                     </li>
-                    <li><strong>Step 3:</strong> Give your API key a name (e.g., "PolyFut1") and click submit.<br>
-                        <img src="GroqSetup4.png" alt="Name API Key" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <li><strong>Step 3:</strong> Give it a name (e.g. "PolyFut1") and submit.<br>
+                        <img class="help-img" src="GroqSetup4.png" alt="Naming the API key">
                     </li>
-                    <li><strong>Step 4:</strong> Copy the generated API key.<br>
-                        <img src="GroqSetup5.png" alt="Copy API Key" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <li><strong>Step 4:</strong> Copy the key — it starts with <code>gsk_</code>.<br>
+                        <img class="help-img" src="GroqSetup5.png" alt="Copying the API key">
                     </li>
-                    <li><strong>Step 5:</strong> Paste it into the <strong>API Key Slot</strong> at the bottom of the PolyFut dashboard, and save it.<br>
-                        <img src="GroqSetup6.png" alt="Paste in PolyFut" style="max-width: 100%; height: auto; border-radius: 8px; margin: 10px 0; border: 1px solid #333; box-shadow: 0 4px 10px rgba(0,0,0,0.5);">
+                    <li><strong>Step 5:</strong> On the <strong>Match Analysis</strong> page, paste it into the <strong>API Key</strong> field at the top of the AI Scout Report panel and click <strong>SAVE</strong>.<br>
+                        <img class="help-img" src="GroqSetup6.png" alt="Pasting the key into PolyFut">
                     </li>
-                    <li style="margin-top: 10px;"><strong>Get Feedback:</strong> Once your key is saved, click <strong>GENERATE REPORT</strong> to have the AI analyze your match data and write a professional, coach-level breakdown!</li>
+                    <li style="margin-top: 10px;"><strong>First launch:</strong> PolyFut offers this on opening too. Skipping it is fine — reports work without it.</li>
                 </ul>
             </div>
 
@@ -121,13 +145,56 @@ const helpModalHTML = `
                 <h4>Next Steps</h4>
                 <p>PolyFut is designed to grow with you. Longer-term work includes user accounts for progress tracking and comparative valuations against professionals and peers.</p>
                 <ul>
-                    <li><strong>Sending Feedback:</strong> Go to <a href="https://forms.gle/zdpUEc1exkUhDdfp7" target="_blank" style="color: #f2c94c;">this Link</a> to submit relevant feedback for our website.</li>
+                    <li><strong>Sending Feedback:</strong> Go to <a href="https://forms.gle/zdpUEc1exkUhDdfp7" target="_blank" rel="noopener">this Link</a> to submit relevant feedback for our website.</li>
                 </ul>
             </div>
         </div>
     </div>
 `;
 
-document.addEventListener('DOMContentLoaded', () => {
+function openHelp() {
+    const modal = document.getElementById('help-modal');
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    document.body.classList.add('help-open');
+}
+
+function closeHelp() {
+    const modal = document.getElementById('help-modal');
+    if (!modal) return;
+    modal.classList.add('hidden');
+    document.body.classList.remove('help-open');
+}
+
+function switchTab(tabId, btn) {
+    document.querySelectorAll('#help-modal .tab-content').forEach(function (el) {
+        el.classList.remove('active');
+    });
+    document.querySelectorAll('#help-modal .tab-btn').forEach(function (el) {
+        el.classList.remove('active');
+    });
+    const panel = document.getElementById(tabId);
+    if (panel) panel.classList.add('active');
+    if (btn) btn.classList.add('active');
+}
+
+document.addEventListener('DOMContentLoaded', function () {
     document.body.insertAdjacentHTML('beforeend', helpModalHTML);
+
+    // Hide optional setup screenshots that aren't shipped with this build.
+    document.querySelectorAll('#help-modal .help-img').forEach(function (img) {
+        img.addEventListener('error', function () {
+            img.style.display = 'none';
+        });
+    });
+
+    const modal = document.getElementById('help-modal');
+    if (modal) {
+        modal.addEventListener('click', function (e) {
+            if (e.target === modal) closeHelp();
+        });
+    }
+    document.addEventListener('keydown', function (e) {
+        if (e.key === 'Escape') closeHelp();
+    });
 });

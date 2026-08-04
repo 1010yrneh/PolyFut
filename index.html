@@ -11,7 +11,7 @@
      front-end change. style.css previously had no version query at all, so a
      returning user kept whatever CSS the browser had cached — the reason two
      separate style fixes appeared to do nothing until the cache was busted. -->
-<link rel="stylesheet" href="style.css?v=5">
+<link rel="stylesheet" href="style.css?v=6">
 </head>
 <body>
     <!-- ===== NEON NET BACKGROUND ===== -->
@@ -290,7 +290,8 @@
                 <span class="setup-eyebrow-text">Welcome</span>
             </div>
             <h2 class="cv-overlay-title" id="pf-onboarding-title">Personalize PolyFut</h2>
-            <p class="cv-overlay-sub">Optional — takes about a minute. Connect a free Groq API key so Match Analysis can write you an AI scout report. Everything else in PolyFut works without it.</p>
+            <p class="cv-overlay-sub"><strong>AI scout reports already work — there is nothing to set up.</strong> Skip this and start analysing.</p>
+            <p class="cv-overlay-sub">The AI allowance is shared between everyone using PolyFut, so it can occasionally be busy. Adding your own free Groq key takes about a minute and gives you your own allowance to fall back on.</p>
 
             <ol class="pf-onboarding-steps">
                 <li>Open the <a href="https://console.groq.com/keys" target="_blank" rel="noopener">Groq API Console</a> and sign in (Google / GitHub / email).</li>
@@ -308,7 +309,7 @@
                 <p id="pf-onboarding-error" class="pf-onboarding-error hidden" role="alert"></p>
             </div>
 
-            <p class="cv-overlay-note">You can skip and add a key later on the Match Analysis page, or open <strong>How to Use → AI Report</strong> anytime for the full walkthrough with screenshots.</p>
+            <p class="cv-overlay-note">You can skip and add a key later on the Match Analysis page. Open <strong>How to Use → AI Report</strong> anytime for the walkthrough with screenshots — and for what PolyFut sends to its AI service and how to turn that off.</p>
 
             <div class="cv-overlay-actions">
                 <button type="button" class="cv-btn-secondary" id="pf-onboarding-skip">Skip for now</button>
@@ -615,8 +616,8 @@
         </div>
     </div>
 
-    <script src="calculations.js?v=5"></script>
-    <script src="help.js?v=5"></script>
-    <script src="script.js?v=5"></script>
+    <script src="calculations.js?v=6"></script>
+    <script src="help.js?v=6"></script>
+    <script src="script.js?v=6"></script>
 </body>
 </html>

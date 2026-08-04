@@ -242,10 +242,18 @@ def generate_report(payload: dict, request: Request):
     from fastapi.responses import JSONResponse
     from groq import Groq
 
-    def fail(status: int, message: str):
+    def fail(status: int, message: str, scope: str | None = None):
         # Modal endpoints don't turn a returned tuple into a status code — it
         # would be serialised as a JSON array with a 200. JSONResponse does.
-        return JSONResponse(status_code=status, content={"error": message})
+        body = {"error": message}
+        # Two very different things arrive as 429, and the client must tell them
+        # apart. "app" is this endpoint's own per-IP allowance — falling back to
+        # a personal key there would just route around our abuse control.
+        # "upstream" is the shared Groq quota being spent, which is exactly when
+        # a user's own key should be used instead.
+        if scope:
+            body["scope"] = scope
+        return JSONResponse(status_code=status, content=body)
 
     expected = os.environ.get("POLYFUT_APP_TOKEN", "")
     if not expected:
@@ -266,7 +274,7 @@ def generate_report(payload: dict, request: Request):
         return fail(429, (
             f"You've generated {MAX_REPORTS_PER_IP_PER_HOUR} reports in the last "
             f"hour, which is this app's limit. Try again shortly."
-        ))
+        ), scope="app")
 
     try:
         temperature = float(payload.get("temperature", DEFAULT_TEMPERATURE))
@@ -301,7 +309,8 @@ def generate_report(payload: dict, request: Request):
             # which is what an image request is most likely to exhaust, a few
             # stills costing far more tokens than a whole report.
             return fail(429, "The AI service is busy right now (shared "
-                             f"free-tier limit). Upstream said: {detail[:300]}")
+                             f"free-tier limit). Upstream said: {detail[:300]}",
+                        scope="upstream")
         if status == 401:
             return fail(502, "The AI service rejected our credentials. This is a "
                              "server-side problem, not something you can fix.")
