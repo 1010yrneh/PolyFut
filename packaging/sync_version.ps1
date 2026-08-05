@@ -17,9 +17,17 @@ $content = $content -replace '(?m)^#define MyAppVersion ".*"', "#define MyAppVer
 # latter emits a BOM, and this file is fetched over HTTP by the site, where a
 # leading BOM breaks strict JSON parsers and is invisible in every editor.
 $webVersion = Join-Path $Root "website\version.json"
+# installer_url is what the download button actually uses. The installer is a
+# GitHub Release asset, not a file on the site: Pages caps the whole site at
+# 1GB and git rejects any file over 100MB, so a ~400MB installer can never be
+# served from website/. Kept in step with $Version here so a release cannot
+# silently keep offering the previous build.
+$Repo = $env:POLYFUT_RELEASE_REPO
+if (-not $Repo) { $Repo = "1010yrneh/Polyfut" }
 $json = @{
     version = $Version
     windows_installer = "downloads/PolyFut-Setup-$Version.exe"
+    installer_url = "https://github.com/$Repo/releases/download/v$Version/PolyFut-Setup-$Version.exe"
 } | ConvertTo-Json
 [System.IO.File]::WriteAllText($webVersion, $json, (New-Object System.Text.UTF8Encoding $false))
 

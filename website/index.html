@@ -332,7 +332,7 @@
       </div>
       <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(46px, 6.5vw, 104px); line-height: 0.9; margin: 0px;">Ready to break<br>down your game?</h2>
       <div style="display: flex; flex-direction: column; align-items: center; gap: 16px; margin-top: 32px;">
-        <a href="downloads/PolyFut-Setup-1.0.0.exe" class="pf-cta" style="display: inline-flex; align-items: center; gap: 12px; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-family: Anton, sans-serif; font-size: 24px; letter-spacing: 0.04em; text-transform: uppercase; padding: 22px 44px; text-decoration: none; clip-path: polygon(16px 0px, 100% 0px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0px 100%, 0px 16px);">Download PolyFut · v<span id="pf-version">1.0.0</span></a>
+        <a href="https://github.com/1010yrneh/Polyfut/releases/download/v1.0.0/PolyFut-Setup-1.0.0.exe" class="pf-cta" style="display: inline-flex; align-items: center; gap: 12px; background: rgb(48, 255, 143); color: rgb(7, 22, 12); font-family: Anton, sans-serif; font-size: 24px; letter-spacing: 0.04em; text-transform: uppercase; padding: 22px 44px; text-decoration: none; clip-path: polygon(16px 0px, 100% 0px, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0px 100%, 0px 16px);">Download PolyFut · v<span id="pf-version">1.0.0</span></a>
         <p style="margin: 0px; color: rgb(111, 125, 114); font-size: 14.5px; font-weight: 500; max-width: 60ch;">Requires Windows 10 or later, 8&nbsp;GB+ RAM recommended, several GB free disk for match videos. First launch downloads the YOLO detector weights (~22&nbsp;MB).</p>
       </div>
     </div>
@@ -355,9 +355,15 @@
     fetch('version.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (v) {
         if (!v || !v.version) return;
         document.getElementById('pf-version').textContent = v.version;
-        var name = 'PolyFut-Setup-' + v.version + '.exe';
+        // The installer is a GitHub Release asset, not a file on this site:
+        // Pages caps the whole site at 1GB and git rejects any file over
+        // 100MB, so a ~400MB installer can never live here. installer_url
+        // keeps the host swappable without touching this page.
+        var url = v.installer_url ||
+            ('https://github.com/1010yrneh/Polyfut/releases/download/v' +
+             v.version + '/PolyFut-Setup-' + v.version + '.exe');
         document.querySelectorAll('a[href*="PolyFut-Setup"]').forEach(function (a) {
-            a.href = 'downloads/' + name;
+            a.href = url;
         });
     }).catch(function () {});
 </script>
