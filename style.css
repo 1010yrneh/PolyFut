@@ -1052,6 +1052,120 @@ html, body {
 .cv-montage-hs span:last-child { color: #93a397; }
 .cv-montage-empty { color: #93a397; font-size: 0.9rem; line-height: 1.4; }
 
+/* =====================================================================
+   LIGHT THEME — review montage only.
+   See demo/light-theme.html for the full palette and its rationale.
+
+   Scoped to #cv-montage-screen on purpose. .cv-overlay-card, .cv-overlay-title,
+   .cv-btn-primary and friends are shared with the seed, playing-time, team,
+   pitch, processing and onboarding overlays; restyling them unscoped would
+   convert all six.
+
+   The rule the palette hangs on: the brand neon #30ff8f is 1.33:1 against
+   white, where 4.5:1 is the floor for text. It cannot be a text colour here.
+   So --lt-accent (#0b7a42, 5.4:1) does the reading and the neon keeps the one
+   job it is good at — a solid fill under a dark label, 12.6:1.
+   ===================================================================== */
+#cv-montage-screen {
+    --lt-surface: #ffffff;
+    --lt-ink: #12211a;      /* 16.7:1 on white */
+    --lt-muted: #5d6b63;    /*  5.6:1 on white */
+    --lt-accent: #0b7a42;   /*  5.4:1 on white */
+    --lt-border: #e2e8e3;
+    --lt-border-strong: #cfdad4;
+    --lt-radius: 6px;
+    /* The media well stays dark. This is the screen where the user judges
+       640x360 video, and a white surround around dark footage fights it:
+       simultaneous contrast makes the frame read muddier than it is, which is
+       exactly the judgement we are asking them to make. Light chrome around a
+       dark media well is what editing tools do, and why. */
+    --lt-well: #12211a;
+
+    /* Lighter scrim than the near-black used elsewhere, so the card reads as
+       paper rather than a hole punched in the screen. */
+    background: rgba(18, 33, 26, 0.55);
+}
+
+#cv-montage-screen .cv-overlay-card {
+    background: var(--lt-surface);
+    border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius);
+    box-shadow: 0 18px 48px rgba(18, 33, 26, 0.22);
+}
+
+/* Gold on white measures ~1.8:1 and is unreadable; the title carries the
+   question the user is answering, so it takes the strongest ink. */
+#cv-montage-screen .cv-overlay-title {
+    color: var(--lt-ink);
+    text-transform: none;
+    letter-spacing: -0.01em;
+    font-weight: 700;
+}
+#cv-montage-screen .cv-overlay-sub { color: var(--lt-muted); }
+#cv-montage-screen .cv-overlay-sub strong { color: var(--lt-ink); }
+#cv-montage-screen .cv-overlay-note {
+    color: var(--lt-muted);
+    opacity: 1;                       /* .72 on the dark theme dropped this to 4.1:1 */
+    border-left-color: var(--lt-accent);
+}
+#cv-montage-screen .cv-overlay-note strong,
+#cv-montage-screen .cv-overlay-note em { color: var(--lt-ink); }
+
+#cv-montage-screen .cv-montage-bar { background: #e9efeb; border-radius: 999px; }
+#cv-montage-screen .cv-montage-bar-fill { background: var(--lt-accent); }
+#cv-montage-screen .cv-montage-count { color: var(--lt-muted); }
+
+#cv-montage-screen .cv-montage-stage {
+    background: var(--lt-well);
+    border: 1px solid var(--lt-border-strong);
+    border-radius: var(--lt-radius);
+}
+#cv-montage-screen #cv-montage-canvas { background: var(--lt-well); }
+
+/* Controls sit ON the dark well, so they keep light-on-dark treatment. */
+#cv-montage-screen .cv-montage-controls { background: rgba(18, 33, 26, 0.72); }
+
+#cv-montage-screen .cv-montage-time { color: var(--lt-ink); }
+#cv-montage-screen .cv-montage-kinds { color: var(--lt-muted); }
+#cv-montage-screen .cv-montage-conf { color: var(--lt-accent); }
+#cv-montage-screen .cv-montage-undo { color: var(--lt-muted); }
+
+/* Status chips: same meaning, restated for a light surface. Each pairs a tinted
+   fill with text dark enough to clear 4.5:1 on that tint, not on white. */
+#cv-montage-screen .cv-montage-crowded {
+    background: #fdf4e0; border-color: #e6cd94; color: #6b4e00;
+}
+#cv-montage-screen .cv-montage-linked {
+    background: #eaf6ef; border-color: #b9dcc8; color: var(--lt-accent);
+}
+#cv-montage-screen .cv-montage-unlinked {
+    background: #eef1ef; border-color: #d3dad6; color: #55605a;
+}
+
+#cv-montage-screen .cv-btn-primary {
+    background: var(--fifa-green);    /* the neon, doing what it is good at */
+    color: var(--lt-ink);             /* 12.6:1 */
+    border-radius: var(--lt-radius);
+}
+#cv-montage-screen .cv-btn-secondary {
+    background: var(--lt-surface);
+    color: var(--lt-ink);
+    border: 1px solid var(--lt-border-strong);
+    border-radius: var(--lt-radius);
+}
+#cv-montage-screen .cv-btn-secondary:hover {
+    border-color: var(--lt-accent); color: var(--lt-accent);
+}
+#cv-montage-screen .cv-btn-link { color: var(--lt-accent); }
+#cv-montage-screen .cv-btn-link:hover { color: #0a6b3a; }
+
+/* End-of-review summary list. */
+#cv-montage-screen .cv-montage-hs {
+    background: #f4f9f6; border-left-color: var(--lt-accent); color: var(--lt-ink);
+}
+#cv-montage-screen .cv-montage-hs span:last-child { color: var(--lt-muted); }
+#cv-montage-screen .cv-montage-empty { color: var(--lt-muted); }
+
 .cv-overlay-actions {
     display: flex;
     gap: 12px;
