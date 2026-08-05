@@ -21,12 +21,51 @@ python (Join-Path $Packaging "make_icon.py")
 Write-Host "Syncing installer version..."
 & (Join-Path $Packaging "sync_version.ps1")
 
+# Clear dist first. PyInstaller cleans it itself, but it does so mid-run and
+# dies with PermissionError if anything holds a handle - OneDrive syncing the
+# 1.4GB tree is enough, and so is having just run the app from it. Retrying
+# helps because the lock is transient.
+$Dist = Join-Path $Root "dist"
+if (Test-Path $Dist) {
+    Write-Host "Clearing dist..."
+    foreach ($attempt in 1..5) {
+        try {
+            Remove-Item $Dist -Recurse -Force -ErrorAction Stop
+            break
+        } catch {
+            if ($attempt -eq 5) {
+                throw ("Could not clear $Dist after 5 attempts: " +
+                       $_.Exception.Message +
+                       " - close PolyFut.exe and pause OneDrive sync, then retry.")
+            }
+            Write-Host "  locked, retrying in 3s ($attempt/5)..."
+            Start-Sleep -Seconds 3
+        }
+    }
+}
+
+$SpecPath = Join-Path $Packaging "pyinstaller.spec"
 Write-Host "Running PyInstaller..."
-pyinstaller (Join-Path $Packaging "pyinstaller.spec") --noconfirm
+pyinstaller $SpecPath --noconfirm
+
+# A native command's exit code does NOT trip $ErrorActionPreference, so this
+# has to be explicit. Without it a failed PyInstaller was invisible and Inno
+# Setup packaged whatever happened to be in dist from a previous build.
+if ($LASTEXITCODE -ne 0) {
+    throw "PyInstaller failed with exit code $LASTEXITCODE"
+}
 
 $DistExe = Join-Path $Root "dist\PolyFut\PolyFut.exe"
 if (-not (Test-Path $DistExe)) {
     throw "Build failed: $DistExe not found"
+}
+# Existence is not enough - it was the stale-output trap. Require the exe to be
+# newer than the spec that was supposed to produce it.
+$ExeTime = (Get-Item $DistExe).LastWriteTime
+$SpecTime = (Get-Item $SpecPath).LastWriteTime
+if ($ExeTime -lt $SpecTime) {
+    throw ("Build failed: $DistExe ($ExeTime) is older than " +
+           "pyinstaller.spec ($SpecTime) - PyInstaller did not rebuild.")
 }
 Write-Host "Built: $DistExe" -ForegroundColor Green
 

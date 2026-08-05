@@ -67,6 +67,25 @@ datas += [
     (str(_MODELS / "soccer_uisikdag_openvino_model"),
      "models/soccer_uisikdag_openvino_model"),
 ]
+
+# The team-kit picker runs a general person detector, not the soccer model:
+# server.py sets WEIGHTS = ROOT/"yolov8s.pt". It was never bundled, so in a
+# frozen build that path did not exist and Ultralytics quietly downloaded 21.5MB
+# from GitHub on first use — caught by watching the packaged app's own log.
+# That is a first-run internet dependency for a "runs entirely on your computer"
+# app, and it writes into the install directory, which is not writable when
+# PolyFut is installed for all users. Bundle it, and refuse to build without it
+# for the same reason as the soccer model above.
+_YOLO = ROOT / "yolov8s.pt"
+if not _YOLO.exists():
+    raise SystemExit(
+        f"Cannot build a shippable PolyFut: {_YOLO} is missing.\n"
+        "It is the detector the team-kit picker uses. Run the app once from "
+        "source to fetch it, then rebuild — otherwise every install downloads "
+        "it on first use, which fails offline and in a read-only install "
+        "directory."
+    )
+datas.append((str(_YOLO), "."))
 logo = ROOT / "PolyFut Logo.png"
 if logo.exists():
     datas.append((str(logo), "."))
