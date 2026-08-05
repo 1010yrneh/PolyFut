@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PolyFut — light theme demo</title>
+<link href="https://fonts.googleapis.com/css2?family=Anton&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+<style>
+/* =====================================================================
+   PolyFut light theme — DEMO ONLY. Nothing here is loaded by the app.
+
+   The one decision everything else follows: the brand neon #30ff8f cannot
+   carry text on a light surface. Measured, it is 1.33:1 against white where
+   4.5:1 is the floor. So the green does two jobs instead of one:
+
+     --accent  #0b7a42   text, borders, links, small marks   5.42:1 on white
+     --neon    #30ff8f   solid fills and active states only, always with a
+                         dark label on top                  14.02:1 with --ink
+
+   That is what keeps it recognisably PolyFut without the neon-on-white glare
+   that makes light versions of dark UIs look broken.
+   ===================================================================== */
+:root {
+    --page:    #f6f8f6;   /* very slightly green-tinted, not clinical white */
+    --surface: #ffffff;
+    --ink:     #12211a;   /* 16.7:1 on white */
+    --muted:   #5d6b63;   /*  5.6:1 on white */
+    --faint:   #8a978f;   /* decorative only, never body text */
+    --accent:  #0b7a42;
+    --accent-soft: #eaf6ef;
+    --neon:    #30ff8f;
+    --border:  #e2e8e3;
+    --border-strong: #cfdad4;
+    --red:     #c2334d;
+    /* #9a6b00 measured 4.35:1 on the warning tint - under the 4.5 floor by
+       just enough to matter at the 11px the pill uses. Darkened. */
+    --gold:    #7d5600;
+    --radius: 6px;
+    --font: 'Rajdhani', system-ui, sans-serif;
+}
+* { box-sizing: border-box; }
+body {
+    margin: 0; background: var(--page); color: var(--ink);
+    font-family: var(--font); font-weight: 500; font-size: 16px;
+    line-height: 1.5; -webkit-font-smoothing: antialiased;
+}
+
+/* ---------- demo chrome (not part of the app) ---------- */
+.demo-bar {
+    position: sticky; top: 0; z-index: 50; display: flex; flex-wrap: wrap;
+    align-items: center; gap: 8px; padding: 12px 20px;
+    background: var(--surface); border-bottom: 1px solid var(--border);
+}
+.demo-bar h1 {
+    font-size: 15px; margin: 0 16px 0 0; letter-spacing: .14em;
+    text-transform: uppercase; font-weight: 700; color: var(--muted);
+}
+.demo-tab {
+    font-family: var(--font); font-weight: 700; font-size: 13px;
+    letter-spacing: .08em; text-transform: uppercase; cursor: pointer;
+    padding: 7px 13px; border-radius: var(--radius);
+    border: 1px solid var(--border-strong); background: var(--surface);
+    color: var(--muted);
+}
+.demo-tab[aria-selected="true"] {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.wrap { max-width: 1080px; margin: 0 auto; padding: 32px 20px 72px; }
+.screen[hidden] { display: none; }
+
+/* ---------- shared app primitives ---------- */
+.eyebrow {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 10px;
+}
+.eyebrow-line { width: 26px; height: 2px; background: var(--accent); }
+.eyebrow-text {
+    font-size: 12px; font-weight: 700; letter-spacing: .18em;
+    text-transform: uppercase; color: var(--accent);
+}
+h2.title {
+    font-size: 34px; font-weight: 700; letter-spacing: -0.01em;
+    margin: 0 0 6px; line-height: 1.15;
+}
+.sub { color: var(--muted); margin: 0 0 24px; max-width: 62ch; }
+.card {
+    background: var(--surface); border: 1px solid var(--border);
+    border-radius: var(--radius); padding: 24px;
+    box-shadow: 0 1px 2px rgba(18,33,26,.04);
+}
+.label {
+    display: block; font-size: 12px; font-weight: 700; letter-spacing: .14em;
+    text-transform: uppercase; color: var(--muted); margin-bottom: 7px;
+}
+.input {
+    width: 100%; padding: 11px 13px; font-family: var(--font);
+    font-weight: 600; font-size: 15px; color: var(--ink);
+    background: var(--surface); border: 1px solid var(--border-strong);
+    border-radius: var(--radius);
+}
+.input::placeholder { color: var(--faint); }
+.input:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(11,122,66,.13);
+}
+.row { display: grid; gap: 18px; grid-template-columns: 1fr 1fr; }
+.group { margin-bottom: 18px; }
+
+.btn {
+    font-family: var(--font); font-weight: 700; font-size: 15px;
+    letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+    padding: 12px 20px; border-radius: var(--radius); border: 1px solid transparent;
+}
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: #0a6b3a; }
+/* The neon survives here: a fill with a dark label, 14:1. It marks the one
+   action that is "go", so it stays special instead of coating the whole UI. */
+.btn-go { background: var(--neon); color: var(--ink); }
+.btn-go:hover { filter: brightness(.95); }
+.btn-secondary {
+    background: var(--surface); color: var(--ink);
+    border-color: var(--border-strong);
+}
+.btn-secondary:hover { border-color: var(--accent); color: var(--accent); }
+.btn-link {
+    background: none; border: none; color: var(--accent); cursor: pointer;
+    font-family: var(--font); font-weight: 700; font-size: 14px;
+    text-decoration: underline; padding: 6px;
+}
+.btn-block { width: 100%; }
+
+/* ---------- setup: position picker ---------- */
+.pos { display: flex; align-items: stretch; gap: 18px; flex-wrap: wrap; }
+.pos-boxes { display: flex; gap: 8px; }
+.zone {
+    width: 62px; height: 62px; display: grid; place-items: center;
+    border: 1px solid var(--border-strong); border-radius: var(--radius);
+    font-weight: 700; letter-spacing: .1em; cursor: pointer; color: var(--muted);
+    background: var(--surface);
+}
+.zone:hover { border-color: var(--accent); color: var(--accent); }
+.zone.on {
+    background: var(--accent); border-color: var(--accent); color: #fff;
+}
+.pos-sel { min-width: 92px; }
+.pos-val {
+    font-family: 'Anton', sans-serif; font-size: 34px; line-height: 1;
+    color: var(--accent);
+}
+.pos-desc { flex: 1; min-width: 260px; color: var(--muted); font-size: 14.5px; margin: 0; }
+.divider { width: 1px; background: var(--border); align-self: stretch; }
+
+/* --muted, not --faint. These hints carry real information ("may take several
+   hours", "no hotspots, no waiting"), so they are body text and need 4.5:1.
+   --faint measured 3.04:1 here, which is why it is reserved for placeholders
+   and dividers that carry nothing. */
+.hint { color: var(--muted); font-size: 13.5px; margin: 8px 0 0; }
+.check { display: flex; align-items: center; gap: 9px; margin: 14px 0 0; color: var(--muted); font-size: 14.5px; }
+
+/* saved matches */
+.saved-row {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border);
+}
+.saved-row:last-child { border-bottom: none; }
+.saved-name { font-weight: 700; }
+.saved-meta { color: var(--muted); font-size: 13.5px; }
+.pill {
+    font-size: 11px; font-weight: 700; letter-spacing: .1em;
+    text-transform: uppercase; padding: 4px 9px; border-radius: 999px;
+    background: var(--accent-soft); color: var(--accent);
+}
+
+/* ---------- warnings banner ---------- */
+.warn {
+    display: flex; gap: 12px; align-items: flex-start; padding: 13px 16px;
+    border-radius: var(--radius); margin-bottom: 20px;
+    background: #fdf6e3; border: 1px solid #ecd9a4; color: #6b4e00;
+}
+.warn strong { color: #4a3600; }
+.warn-x { margin-left: auto; background: none; border: none; cursor: pointer; color: #6b4e00; font-size: 18px; line-height: 1; }
+
+/* ---------- processing ---------- */
+.track { height: 8px; background: #e9efeb; border-radius: 999px; overflow: hidden; margin: 16px 0 6px; }
+.bar { height: 100%; width: 46%; background: var(--accent); border-radius: 999px; }
+.why { background: var(--accent-soft); border: 1px solid #d7ebe0; border-radius: var(--radius); padding: 18px 20px; margin: 22px 0; }
+.why h4 { margin: 0 0 10px; font-size: 13px; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); }
+.why ul { margin: 0; padding-left: 18px; color: var(--muted); font-size: 14.5px; }
+.why li { margin-bottom: 7px; }
+.status { font-weight: 700; font-size: 18px; margin: 0; }
+.detail { color: var(--muted); margin: 4px 0 0; font-size: 14.5px; }
+
+/* ---------- montage review ---------- */
+.stage {
+    position: relative; border-radius: var(--radius); overflow: hidden;
+    border: 1px solid var(--border-strong); background: #dfe8e2; aspect-ratio: 16/9;
+}
+/* stand-in for the video frame */
+.pitch { position: absolute; inset: 0; background:
+    repeating-linear-gradient(90deg, #cfe0d3 0 40px, #c8dbcd 40px 80px); }
+.pitch::after {
+    content: ""; position: absolute; left: 50%; top: 0; bottom: 0; width: 2px;
+    background: rgba(255,255,255,.75);
+}
+.player { position: absolute; width: 12px; height: 26px; border-radius: 3px; background: #2b3f5c; }
+.player.mine { background: #d4801f; }
+.detbox {
+    position: absolute; border: 2px solid var(--neon); border-radius: 3px;
+    box-shadow: 0 0 0 1px rgba(18,33,26,.55);
+}
+.detbox span {
+    position: absolute; top: -21px; left: -2px; font-size: 11px; font-weight: 700;
+    letter-spacing: .08em; text-transform: uppercase;
+    background: var(--neon); color: var(--ink); padding: 1px 6px; border-radius: 3px;
+}
+.stage-tools {
+    position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px;
+    background: rgba(255,255,255,.94); border: 1px solid var(--border-strong);
+    border-radius: var(--radius); padding: 5px;
+}
+.stage-tools button {
+    border: none; background: none; cursor: pointer; font-family: var(--font);
+    font-weight: 700; font-size: 13px; color: var(--ink); padding: 3px 8px;
+}
+.review-progress { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.review-progress .track { flex: 1; margin: 0; }
+.counter { font-weight: 700; color: var(--muted); font-size: 14px; white-space: nowrap; }
+.meta { display: flex; gap: 18px; color: var(--muted); font-size: 13.5px; margin: 14px 0 0; flex-wrap: wrap; }
+.meta b { color: var(--ink); }
+.actions { display: flex; gap: 12px; margin-top: 20px; }
+.actions .btn { flex: 1; }
+
+/* ---------- results ---------- */
+.hero { display: flex; gap: 24px; }
+.hero .card { flex: 1; text-align: center; }
+.hero-k { font-size: 12px; font-weight: 700; letter-spacing: .16em; text-transform: uppercase; color: var(--muted); margin: 0; }
+.hero-v { font-family: 'Anton', sans-serif; font-size: 52px; line-height: 1.05; margin: 6px 0 0; color: var(--accent); }
+.stats { display: grid; grid-template-columns: 1fr 1.5fr 1.5fr; gap: 16px; margin-top: 16px; }
+.stat-k { font-size: 11px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+.stat-v { font-family: 'Anton', sans-serif; font-size: 30px; margin: 0; }
+.split { display: flex; justify-content: space-around; text-align: center; }
+.split small { display: block; font-size: 10.5px; color: var(--muted); font-weight: 600; margin-bottom: 3px; }
+.split .stat-v { font-size: 21px; }
+.pos-n { color: var(--accent); }
+.neg-n { color: var(--red); }
+.tp {
+    background: var(--accent-soft); border: 1px solid #d7ebe0;
+    border-radius: var(--radius); padding: 16px 18px; margin-top: 18px;
+    color: var(--muted); font-size: 14.5px;
+}
+.tp strong { color: var(--ink); }
+.chart { margin-top: 16px; }
+.chart-row { display: grid; grid-template-columns: 116px 1fr 54px; align-items: center; gap: 12px; padding: 7px 0; }
+.chart-lab { font-size: 13.5px; color: var(--muted); font-weight: 600; }
+.chart-track { height: 20px; background: #eef3f0; border-radius: 3px; position: relative; overflow: hidden; }
+.chart-fill { position: absolute; top: 0; bottom: 0; background: var(--accent); }
+.chart-fill.neg { background: var(--red); }
+.chart-val { font-family: 'Anton', sans-serif; font-size: 16px; text-align: right; }
+
+/* ---------- overlay ---------- */
+.overlay-demo { background: rgba(18,33,26,.32); border-radius: var(--radius); padding: 40px 20px; }
+.modal { max-width: 560px; margin: 0 auto; }
+.kits { display: flex; gap: 14px; margin: 18px 0 6px; }
+.kit {
+    flex: 1; border: 1px solid var(--border-strong); border-radius: var(--radius);
+    padding: 14px; text-align: center; cursor: pointer; background: var(--surface);
+}
+.kit.on { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(11,122,66,.13); }
+.swatch { height: 54px; border-radius: 4px; border: 1px solid rgba(18,33,26,.14); }
+.kit-n { font-weight: 700; margin-top: 9px; font-size: 14px; }
+.kit-h { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+
+/* ---------- palette reference ---------- */
+.pal { display: grid; grid-template-columns: repeat(auto-fill, minmax(178px, 1fr)); gap: 14px; }
+.pal-item { border: 1px solid var(--border); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.pal-sw { height: 62px; }
+.pal-b { padding: 10px 12px; }
+.pal-n { font-weight: 700; font-size: 13.5px; }
+.pal-h { color: var(--muted); font-size: 12.5px; font-variant-numeric: tabular-nums; }
+.pal-r { font-size: 12px; margin-top: 4px; }
+.ok { color: var(--accent); font-weight: 700; }
+.no { color: var(--red); font-weight: 700; }
+.note { color: var(--muted); font-size: 14px; margin-top: 20px; }
+@media (max-width: 720px) {
+    .row, .stats, .hero { grid-template-columns: 1fr; display: grid; }
+    h2.title { font-size: 27px; }
+}
+</style>
+</head>
+<body>
+
+<div class="demo-bar">
+    <h1>Light theme — demo</h1>
+    <button class="demo-tab" aria-selected="true" data-s="setup">Setup</button>
+    <button class="demo-tab" data-s="processing">Processing</button>
+    <button class="demo-tab" data-s="review">Review</button>
+    <button class="demo-tab" data-s="results">Results</button>
+    <button class="demo-tab" data-s="overlay">Overlay</button>
+    <button class="demo-tab" data-s="palette">Palette</button>
+</div>
+
+<div class="wrap">
+
+<!-- ============================ SETUP ============================ -->
+<section class="screen" id="s-setup">
+    <div class="eyebrow"><span class="eyebrow-line"></span><span class="eyebrow-text">New analysis</span></div>
+    <h2 class="title">Set up the match</h2>
+    <p class="sub">Real copy from the app, restyled. Position sets the baseline PolyFut compares your touches against.</p>
+
+    <div class="card">
+        <div class="group">
+            <span class="label">0 · Select position</span>
+            <div class="pos">
+                <div class="pos-boxes">
+                    <div class="zone" data-z>FW</div>
+                    <div class="zone on" data-z>MF</div>
+                    <div class="zone" data-z>DF</div>
+                </div>
+                <div class="divider"></div>
+                <div class="pos-sel">
+                    <span class="label" style="margin-bottom:2px">Selected</span>
+                    <div class="pos-val" id="posval">MF</div>
+                </div>
+                <div class="divider"></div>
+                <p class="pos-desc">Forwards are judged more on chance creation and finishing, midfielders on progression and press, defenders on recoveries and duels won.</p>
+            </div>
+        </div>
+
+        <div class="row">
+            <div class="group">
+                <span class="label">1 · Match video</span>
+                <input class="input" value="ISB vs TAS — Round Robin.mp4" readonly>
+            </div>
+            <div class="group">
+                <span class="label">2 · Opponent</span>
+                <input class="input" placeholder="e.g. Arsenal U18">
+            </div>
+            <div class="group">
+                <span class="label">3 · Date</span>
+                <input class="input" type="date" value="2026-08-05">
+            </div>
+            <div class="group">
+                <span class="label">4 · Final score</span>
+                <div style="display:flex; gap:12px">
+                    <input class="input" style="text-align:center" value="2">
+                    <input class="input" style="text-align:center" value="1">
+                </div>
+            </div>
+        </div>
+
+        <button class="btn btn-go btn-block" style="margin-top:6px">Find my touches</button>
+        <label class="check"><input type="checkbox" checked> Notify me when PolyFut needs my input</label>
+        <p class="hint">Full-match analysis runs on your CPU and may take several hours. You can close this tab and reopen PolyFut later — progress is kept until you cancel the run.</p>
+
+        <button class="btn btn-secondary btn-block" style="margin-top:18px">Skip AI, tag manually</button>
+        <p class="hint">Opens your video immediately with no detection — you scrub it yourself and tap the same stat buttons.</p>
+    </div>
+
+    <div class="card" style="margin-top:20px">
+        <span class="label">Saved matches</span>
+        <div class="saved-row">
+            <div><div class="saved-name">vs ISB</div><div class="saved-meta">5 Aug 2026 · 2–1 · 24 touches</div></div>
+            <span class="pill">Reviewed</span>
+        </div>
+        <div class="saved-row">
+            <div><div class="saved-name">vs SAS</div><div class="saved-meta">28 Jul 2026 · 0–3 · 18 touches</div></div>
+            <span class="pill" style="background:#fdf6e3;color:var(--gold)">87 to review</span>
+        </div>
+    </div>
+</section>
+
+<!-- ========================== PROCESSING ========================== -->
+<section class="screen" id="s-processing" hidden>
+    <div class="warn">
+        <span>⚠</span>
+        <div><strong>Low-resolution footage (640×360).</strong> At this size a soccer ball is only a few pixels and each player ~15px, so ball-detection recall is low and most touches end up in review.</div>
+        <button class="warn-x">×</button>
+    </div>
+
+    <h2 class="title">Finding your touch hotspots…</h2>
+    <p class="status">Stage 3 · Tracking the ball</p>
+    <p class="detail">chunk 84 / 189 — about 22 minutes left</p>
+    <div class="track"><div class="bar"></div></div>
+    <p class="detail">46%</p>
+
+    <div class="why">
+        <h4>Why can this take a while?</h4>
+        <ul>
+            <li>Analysis runs <strong>entirely on your computer</strong> — every frame is decoded and scanned locally, not in the cloud.</li>
+            <li>Long matches are processed in <strong>30-second chunks</strong>; a 90-minute game can mean ~180+ chunks.</li>
+            <li>The engine looks for <strong>players and the ball</strong> on thousands of sampled frames so distant touches are not missed.</li>
+            <li>Slow progress is expected, not a freeze. Keep your laptop plugged in.</li>
+        </ul>
+    </div>
+    <button class="btn btn-secondary">Cancel &amp; discard run</button>
+</section>
+
+<!-- ============================ REVIEW ============================ -->
+<section class="screen" id="s-review" hidden>
+    <h2 class="title">Did you touch the ball here?</h2>
+    <p class="sub">Only the touches we weren't sure about — confident ones are already counted. The box is our best guess at <em>who</em> touched the ball and can sit on the wrong player, so judge the moment, not the box.</p>
+
+    <div class="card">
+        <div class="review-progress">
+            <span class="counter">12 of 87</span>
+            <div class="track" style="margin:0"><div class="bar" style="width:14%"></div></div>
+            <span class="counter">31 confirmed</span>
+        </div>
+
+        <div class="stage">
+            <div class="pitch"></div>
+            <div class="player" style="left:22%; top:54%"></div>
+            <div class="player" style="left:34%; top:38%"></div>
+            <div class="player mine" style="left:47%; top:47%"></div>
+            <div class="player" style="left:63%; top:60%"></div>
+            <div class="player" style="left:74%; top:34%"></div>
+            <div class="detbox" style="left:45.4%; top:43%; width:34px; height:42px"><span>Best guess</span></div>
+            <div class="stage-tools">
+                <button>−</button><button>1.4×</button><button>+</button><button>Reset</button>
+            </div>
+        </div>
+
+        <div class="meta">
+            <span>Time <b>18:42</b></span>
+            <span>Confidence <b>0.62</b></span>
+            <span>Nearby players <b>3</b></span>
+            <span>Kit <b class="pos-n">your team</b></span>
+        </div>
+
+        <div class="actions">
+            <button class="btn btn-secondary">Not my touch</button>
+            <button class="btn btn-go">That's my touch</button>
+        </div>
+        <div style="text-align:center; margin-top:10px">
+            <button class="btn-link">Skip the rest &amp; see hotspots</button>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ RESULTS ============================ -->
+<section class="screen" id="s-results" hidden>
+    <div class="eyebrow"><span class="eyebrow-line"></span><span class="eyebrow-text">Match analysis</span></div>
+    <h2 class="title">vs ISB · 5 Aug 2026</h2>
+    <p class="sub">Final score 2–1 · 24 touches confirmed · 68 minutes on the pitch</p>
+
+    <div class="hero">
+        <div class="card"><p class="hero-k">Goals</p><p class="hero-v">1</p></div>
+        <div class="card"><p class="hero-k">Assists</p><p class="hero-v">2</p></div>
+    </div>
+
+    <div class="stats">
+        <div class="card">
+            <p class="stat-k">Net threat points</p>
+            <p class="stat-v pos-n">+42.6</p>
+        </div>
+        <div class="card">
+            <p class="stat-k">Offense</p>
+            <div class="split">
+                <div><small>Impact</small><p class="stat-v pos-n">+31.2</p></div>
+                <div><small>Risk</small><p class="stat-v pos-n">+18.4</p></div>
+            </div>
+        </div>
+        <div class="card">
+            <p class="stat-k">Defense</p>
+            <div class="split">
+                <div><small>Impact</small><p class="stat-v pos-n">+9.1</p></div>
+                <div><small>Risk</small><p class="stat-v neg-n">−16.1</p></div>
+            </div>
+        </div>
+    </div>
+
+    <p class="tp"><strong>TP = Threat Points.</strong> 1 TP ≈ 1% of a goal (a goal is worth 100 TP).
+        <strong>Impact</strong> is the immediate chance you created or prevented.
+        <strong>Risk</strong> is the longer-term, win/loss-adjusted payoff of your choices.
+        Green = worked out this match; red = didn't.</p>
+
+    <div class="card chart" style="margin-top:18px">
+        <p class="stat-k">Contribution by action</p>
+        <div class="chart-row"><span class="chart-lab">Through balls</span><div class="chart-track"><div class="chart-fill" style="left:50%; width:31%"></div></div><span class="chart-val pos-n">+18.6</span></div>
+        <div class="chart-row"><span class="chart-lab">Crosses</span><div class="chart-track"><div class="chart-fill" style="left:50%; width:20%"></div></div><span class="chart-val pos-n">+12.1</span></div>
+        <div class="chart-row"><span class="chart-lab">Recoveries</span><div class="chart-track"><div class="chart-fill" style="left:50%; width:15%"></div></div><span class="chart-val pos-n">+9.1</span></div>
+        <div class="chart-row"><span class="chart-lab">Dribbles</span><div class="chart-track"><div class="chart-fill" style="left:50%; width:8%"></div></div><span class="chart-val pos-n">+4.9</span></div>
+        <div class="chart-row"><span class="chart-lab">Dispossessed</span><div class="chart-track"><div class="chart-fill neg" style="left:31%; width:19%"></div></div><span class="chart-val neg-n">−11.4</span></div>
+        <div class="chart-row"><span class="chart-lab">Fouls</span><div class="chart-track"><div class="chart-fill neg" style="left:42%; width:8%"></div></div><span class="chart-val neg-n">−4.7</span></div>
+    </div>
+</section>
+
+<!-- ============================ OVERLAY ============================ -->
+<section class="screen" id="s-overlay" hidden>
+    <h2 class="title">Overlays on white</h2>
+    <p class="sub">Dialogs sit on a soft ink scrim rather than pure black, so the page stays legible behind them.</p>
+
+    <div class="overlay-demo">
+        <div class="card modal">
+            <h3 style="margin:0 0 6px; font-size:22px; font-weight:700">Which kit did you play in?</h3>
+            <p class="sub" style="margin-bottom:0">PolyFut read these two kit colours from your match. Pick yours.</p>
+            <div class="kits">
+                <div class="kit on">
+                    <div class="swatch" style="background:#90541c"></div>
+                    <div class="kit-n">Team A</div><div class="kit-h">#90541c</div>
+                </div>
+                <div class="kit">
+                    <div class="swatch" style="background:#0f0723"></div>
+                    <div class="kit-n">Team B</div><div class="kit-h">#0f0723</div>
+                </div>
+            </div>
+            <p class="hint">Not right? Use the eye-dropper to pick the colour off a player yourself.</p>
+            <div class="actions">
+                <button class="btn btn-secondary">Use eye-dropper</button>
+                <button class="btn btn-go">Continue</button>
+            </div>
+        </div>
+    </div>
+
+    <div class="card" style="margin-top:22px">
+        <p class="stat-k">Update notice</p>
+        <div style="display:flex; align-items:center; gap:12px; border:1px solid var(--border-strong); border-radius:var(--radius); padding:11px 13px; background:var(--surface)">
+            <span style="flex:1">PolyFut <strong class="pos-n">1.1.0</strong> is available. You have 1.0.0.</span>
+            <a href="#" style="color:var(--accent); font-weight:700">What's new</a>
+            <button class="warn-x" style="color:var(--muted)">×</button>
+        </div>
+    </div>
+</section>
+
+<!-- ============================ PALETTE ============================ -->
+<section class="screen" id="s-palette" hidden>
+    <h2 class="title">Palette</h2>
+    <p class="sub">Chosen by measuring contrast, not by eye. WCAG AA needs 4.5:1 for body text.</p>
+
+    <div class="pal">
+        <div class="pal-item"><div class="pal-sw" style="background:#f6f8f6"></div><div class="pal-b"><div class="pal-n">Page</div><div class="pal-h">#f6f8f6</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#ffffff; border-bottom:1px solid var(--border)"></div><div class="pal-b"><div class="pal-n">Surface</div><div class="pal-h">#ffffff</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#12211a"></div><div class="pal-b"><div class="pal-n">Ink</div><div class="pal-h">#12211a</div><div class="pal-r"><span class="ok">16.7:1</span> on white</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#5d6b63"></div><div class="pal-b"><div class="pal-n">Muted</div><div class="pal-h">#5d6b63</div><div class="pal-r"><span class="ok">5.6:1</span> on white</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#0b7a42"></div><div class="pal-b"><div class="pal-n">Accent green</div><div class="pal-h">#0b7a42</div><div class="pal-r"><span class="ok">5.4:1</span> — text, borders, links</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#30ff8f"></div><div class="pal-b"><div class="pal-n">Brand neon</div><div class="pal-h">#30ff8f</div><div class="pal-r"><span class="no">1.3:1</span> as text — fills only</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#c2334d"></div><div class="pal-b"><div class="pal-n">Negative</div><div class="pal-h">#c2334d</div><div class="pal-r"><span class="ok">5.1:1</span> on white</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#e2e8e3"></div><div class="pal-b"><div class="pal-n">Border</div><div class="pal-h">#e2e8e3</div></div></div>
+    </div>
+
+    <p class="note"><strong>The one rule that shapes everything:</strong> the brand neon measures 1.33:1 against white, where 4.5:1 is the minimum for text. It cannot be a text colour on a light theme. So it keeps the job it is genuinely good at — a solid fill behind a dark label, where it measures 14:1 — and a deeper green does the reading work. That is why the primary "go" buttons are still neon while links, labels and figures are <span class="pos-n">#0b7a42</span>.</p>
+    <p class="note">Also changed from the dark theme, per the brief: gradients removed, corners softened to 6px, Anton kept only for large figures where a condensed face earns its place, and more whitespace throughout.</p>
+</section>
+
+</div>
+
+<script>
+document.querySelectorAll('.demo-tab').forEach(function (t) {
+    t.onclick = function () {
+        document.querySelectorAll('.demo-tab').forEach(function (x) { x.setAttribute('aria-selected', 'false'); });
+        t.setAttribute('aria-selected', 'true');
+        document.querySelectorAll('.screen').forEach(function (s) { s.hidden = true; });
+        document.getElementById('s-' + t.dataset.s).hidden = false;
+        window.scrollTo(0, 0);
+    };
+});
+document.querySelectorAll('[data-z]').forEach(function (z) {
+    z.onclick = function () {
+        document.querySelectorAll('[data-z]').forEach(function (x) { x.classList.remove('on'); });
+        z.classList.add('on');
+        document.getElementById('posval').textContent = z.textContent;
+    };
+});
+document.querySelectorAll('.kit').forEach(function (k) {
+    k.onclick = function () {
+        document.querySelectorAll('.kit').forEach(function (x) { x.classList.remove('on'); });
+        k.classList.add('on');
+    };
+});
+</script>
+</body>
+</html>
