@@ -11,7 +11,7 @@
      front-end change. style.css previously had no version query at all, so a
      returning user kept whatever CSS the browser had cached — the reason two
      separate style fixes appeared to do nothing until the cache was busted. -->
-<link rel="stylesheet" href="style.css?v=8">
+<link rel="stylesheet" href="style.css?v=9">
 </head>
 <body>
     <!-- ===== NEON NET BACKGROUND ===== -->
@@ -467,38 +467,38 @@
             </div>
 
             <div id="menu-shoot" class="sub-menu hidden">
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-shoot);" onclick="logStat('Shot Taken'); goBack()">SHOT TAKEN</button>
-                <button class="fidget-btn btn-sub span-full" style="background: linear-gradient(135deg, #f2c94c 0%, #ff8f00 100%); color: #000; font-weight: 800;" onclick="logStat('Goal'); goBack()">GOAL ⚽</button>
+                <button class="fidget-btn btn-sub btn-cat-shoot span-full" onclick="logStat('Shot Taken'); goBack()">SHOT TAKEN</button>
+                <button class="fidget-btn btn-sub btn-cat-goal span-full" onclick="logStat('Goal'); goBack()">GOAL ⚽</button>
                 <button class="fidget-btn btn-back span-full" onclick="goBack()">BACK</button>
             </div>
 
             <div id="menu-pass" class="sub-menu hidden">
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Key Pass'); goBack()">KEY PASS</button>
-                <button class="fidget-btn btn-sub span-full" style="background: linear-gradient(135deg, #f2c94c 0%, #ff8f00 100%); color: #000; font-weight: 800; text-shadow: none;" onclick="logStat('Assist'); goBack()">ASSIST 🎯</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Pass into Box'); goBack()">PASS INTO BOX</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Cross into Box'); goBack()">CROSS INTO BOX</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-pass); color: #fff;" onclick="logStat('Progression (Pass)'); goBack()">PROGRESSION</button>
+                <button class="fidget-btn btn-sub btn-cat-pass span-full" onclick="logStat('Key Pass'); goBack()">KEY PASS</button>
+                <button class="fidget-btn btn-sub btn-cat-goal span-full" onclick="logStat('Assist'); goBack()">ASSIST 🎯</button>
+                <button class="fidget-btn btn-sub btn-cat-pass span-full" onclick="logStat('Pass into Box'); goBack()">PASS INTO BOX</button>
+                <button class="fidget-btn btn-sub btn-cat-pass span-full" onclick="logStat('Cross into Box'); goBack()">CROSS INTO BOX</button>
+                <button class="fidget-btn btn-sub btn-cat-pass span-full" onclick="logStat('Progression (Pass)'); goBack()">PROGRESSION</button>
                 <button class="fidget-btn btn-back span-full" onclick="goBack()">BACK</button>
             </div>
 
             <div id="menu-def" class="sub-menu hidden">
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('High Press Win'); goBack()">HIGH PRESS</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Midfield Tackle'); goBack()">MID TACKLE</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Deep Tackle'); goBack()">DEEP TACKLE</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Interception'); goBack()">INTERCEPT</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Block'); goBack()">BLOCK</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Ball Recovery'); goBack()">RECOVERY</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-def); color: #000;" onclick="logStat('Aerial Duel Won'); goBack()">AERIAL WIN</button>
-                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Foul Committed'); goBack()">FOUL</button>
-                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Defensive Error'); goBack()">ERROR</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('High Press Win'); goBack()">HIGH PRESS</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Midfield Tackle'); goBack()">MID TACKLE</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Deep Tackle'); goBack()">DEEP TACKLE</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Interception'); goBack()">INTERCEPT</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Block'); goBack()">BLOCK</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Ball Recovery'); goBack()">RECOVERY</button>
+                <button class="fidget-btn btn-sub btn-cat-def span-full" onclick="logStat('Aerial Duel Won'); goBack()">AERIAL WIN</button>
+                <button class="fidget-btn btn-sub btn-cat-negative span-full" onclick="logStat('Foul Committed'); goBack()">FOUL</button>
+                <button class="fidget-btn btn-sub btn-cat-negative span-full" onclick="logStat('Defensive Error'); goBack()">ERROR</button>
                 <button class="fidget-btn btn-back span-full" onclick="goBack()">CANCEL</button>
             </div>
 
             <div id="menu-drib" class="sub-menu hidden">
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Dribble (Beat Man)'); goBack()">BEAT MAN</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Progression (Carry)'); goBack()">PROG CARRY</button>
-                <button class="fidget-btn btn-sub span-full" style="background: var(--grad-skill); color: #000; text-shadow: none;" onclick="logStat('Carry into Box'); goBack()">CARRY INTO BOX</button>
-                <button class="fidget-btn btn-sub span-full" style="background: #ff2e4d; color: white;" onclick="logStat('Dispossessed'); goBack()">DISPOSSESSED</button>
+                <button class="fidget-btn btn-sub btn-cat-skill span-full" onclick="logStat('Dribble (Beat Man)'); goBack()">BEAT MAN</button>
+                <button class="fidget-btn btn-sub btn-cat-skill span-full" onclick="logStat('Progression (Carry)'); goBack()">PROG CARRY</button>
+                <button class="fidget-btn btn-sub btn-cat-skill span-full" onclick="logStat('Carry into Box'); goBack()">CARRY INTO BOX</button>
+                <button class="fidget-btn btn-sub btn-cat-negative span-full" onclick="logStat('Dispossessed'); goBack()">DISPOSSESSED</button>
                 <button class="fidget-btn btn-back span-full" onclick="goBack()">CANCEL</button>
             </div>
         </div>
@@ -506,17 +506,17 @@
 
     <div id="results-screen" class="hidden" style="flex-direction: column; align-items: center; width: 100%; height: 100vh; overflow-y: auto; padding-bottom: 50px; position: relative; z-index: 1;">
         <h1 class="brand-title" style="margin-top: 20px;">MATCH ANALYSIS</h1>
-        <h2 id="result-header" style="text-align:center; color:#8fa093; margin-bottom: 20px; font-weight: 600;"></h2>
+        <h2 id="result-header" class="res-subhead"></h2>
 
-        <div style="display:flex; justify-content:space-around; align-items:center; width: 90%; max-width: 1180px; background:#11150f; padding:26px; border-radius:0; border:1px solid rgba(48,255,143,0.3); margin-bottom:20px;">
-            <div style="text-align:center; flex: 1;">
-                <h3 style="color:#8fa093; font-size:12px; margin:0; text-transform:uppercase; letter-spacing: 0.16em; font-weight: 700;">Goals ⚽</h3>
-                <p id="res-goals" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:54px; color:#30ff8f; margin:5px 0;">0</p>
+        <div class="res-hero">
+            <div class="res-hero-cell">
+                <h3 class="res-hero-k">Goals ⚽</h3>
+                <p id="res-goals" class="res-hero-v">0</p>
             </div>
-            <div style="width: 1px; height: 60px; background: rgba(255,255,255,0.1);"></div>
-            <div style="text-align:center; flex: 1;">
-                <h3 style="color:#8fa093; font-size:12px; margin:0; text-transform:uppercase; letter-spacing: 0.16em; font-weight: 700;">Assists 🎯</h3>
-                <p id="res-assists" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:54px; color:#30ff8f; margin:5px 0;">0</p>
+            <div class="res-hero-divider"></div>
+            <div class="res-hero-cell">
+                <h3 class="res-hero-k">Assists 🎯</h3>
+                <p id="res-assists" class="res-hero-v">0</p>
             </div>
         </div>
 
@@ -529,33 +529,33 @@
         </p>
 
         <div id="dashboard-layout" style="display:flex; justify-content:center; gap:15px; margin-bottom:20px; width: 90%; max-width: 1180px;">
-            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1;">
-                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0;">NET THREAT POINTS (TP)</h3>
-                <p id="res-overall" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:30px; color:#f2f7f1; margin:8px 0 0;">0.0</p>
+            <div class="stat-card res-stat res-stat-1">
+                <h3 class="res-stat-k">NET THREAT POINTS (TP)</h3>
+                <p id="res-overall" class="res-stat-v">0.0</p>
             </div>
-            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
-                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">OFFENSE</h3>
+            <div class="stat-card res-stat res-stat-wide">
+                <h3 class="res-stat-k res-stat-k-sp">OFFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Immediate chance created — can go negative if dispossessions outweighed it">IMPACT (net TP, immediate)</span><br>
-                        <span id="res-off-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
+                        <span class="res-stat-lab" title="Immediate chance created — can go negative if dispossessions outweighed it">IMPACT (net TP, immediate)</span><br>
+                        <span id="res-off-markov" class="res-stat-sub">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
-                        <span id="res-off-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
+                        <span class="res-stat-lab" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
+                        <span id="res-off-ridge" class="res-stat-sub">0.0</span>
                     </div>
                 </div>
             </div>
-            <div class="stat-card" style="background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:18px; border-radius:0; text-align:center; flex: 1.5;">
-                <h3 style="color:#5f6d63; font-size:11px; letter-spacing: 0.12em; margin:0 0 12px 0;">DEFENSE</h3>
+            <div class="stat-card res-stat res-stat-wide">
+                <h3 class="res-stat-k res-stat-k-sp">DEFENSE</h3>
                 <div style="display:flex; justify-content:space-around;">
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Immediate chance prevented — can go negative if fouls or defensive errors outweighed it">IMPACT (net TP, immediate)</span><br>
-                        <span id="res-def-markov" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
+                        <span class="res-stat-lab" title="Immediate chance prevented — can go negative if fouls or defensive errors outweighed it">IMPACT (net TP, immediate)</span><br>
+                        <span id="res-def-markov" class="res-stat-sub">0.0</span>
                     </div>
                     <div>
-                        <span style="font-size:10px; color:#8fa093; font-weight: 600;" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
-                        <span id="res-def-ridge" style="font-family: 'Anton', sans-serif; font-weight: 400; font-size:20px; color:#f2f7f1;">0.0</span>
+                        <span class="res-stat-lab" title="Long-term payoff of the risk taken — positive means it paid off, negative means it cost you">RISK (net TP, long-term)</span><br>
+                        <span id="res-def-ridge" class="res-stat-sub">0.0</span>
                     </div>
                 </div>
             </div>
@@ -583,11 +583,11 @@
             </div>
         </div>
 
-        <div class="chart-container-full" style="width:90%; max-width: 1180px; height:300px; margin:0 auto; background:#11150f; border: 1px solid rgba(255,255,255,0.08); padding:16px; border-radius:0;">
+        <div class="chart-container-full" class="res-chart-box">
             <canvas id="wpaChart"></canvas>
         </div>
 
-        <button class="start-btn" onclick="location.reload()" style="background:#1c241c; border: 1px solid rgba(255,255,255,0.14); color: #f2f7f1; margin-top:30px; width:90%; max-width: 1180px; clip-path: none;">CLOSE ANALYSIS</button>
+        <button class="start-btn" onclick="location.reload()" class="res-close-btn">CLOSE ANALYSIS</button>
     </div>
 
     <!-- Floating analysis progress (draggable, closable) -->
@@ -616,8 +616,8 @@
         </div>
     </div>
 
-    <script src="calculations.js?v=8"></script>
-    <script src="help.js?v=8"></script>
-    <script src="script.js?v=8"></script>
+    <script src="calculations.js?v=9"></script>
+    <script src="help.js?v=9"></script>
+    <script src="script.js?v=9"></script>
 </body>
 </html>

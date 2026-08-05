@@ -1086,13 +1086,6 @@ html, body {
     background: rgba(18, 33, 26, 0.55);
 }
 
-#cv-montage-screen .cv-overlay-card {
-    background: var(--lt-surface);
-    border: 1px solid var(--lt-border);
-    border-radius: var(--lt-radius);
-    box-shadow: 0 18px 48px rgba(18, 33, 26, 0.22);
-}
-
 /* Gold on white measures ~1.8:1 and is unreadable; the title carries the
    question the user is answering, so it takes the strongest ink. */
 #cv-montage-screen .cv-overlay-title {
@@ -1101,8 +1094,6 @@ html, body {
     letter-spacing: -0.01em;
     font-weight: 700;
 }
-#cv-montage-screen .cv-overlay-sub { color: var(--lt-muted); }
-#cv-montage-screen .cv-overlay-sub strong { color: var(--lt-ink); }
 #cv-montage-screen .cv-overlay-note {
     color: var(--lt-muted);
     opacity: 1;                       /* .72 on the dark theme dropped this to 4.1:1 */
@@ -1156,8 +1147,6 @@ html, body {
 #cv-montage-screen .cv-btn-secondary:hover {
     border-color: var(--lt-accent); color: var(--lt-accent);
 }
-#cv-montage-screen .cv-btn-link { color: var(--lt-accent); }
-#cv-montage-screen .cv-btn-link:hover { color: #0a6b3a; }
 
 /* End-of-review summary list. */
 #cv-montage-screen .cv-montage-hs {
@@ -2216,3 +2205,379 @@ body.help-open { overflow: hidden; }
 .cv-pitch-list tr:hover td { background: #22272c; }
 .cv-pitch-list tr.is-bad td { color: #ff9d9d; }
 .cv-pitch-list tr.is-bad td:first-child::after { content: "  ✗"; }
+
+/* =====================================================================
+   LIGHT THEME  —  app-wide
+   =====================================================================
+   Written as an override layer rather than by editing the 2,218 lines above,
+   because those hold 242 hex and 128 rgba literals across 118 distinct hex
+   values, with the top twelve covering only 38% of uses. A mechanical flip of
+   that long tail would mis-convert; worse, the 128 rgba values are almost all
+   light-on-dark overlays (rgba(255,255,255,.08) alone appears 21 times) which
+   become invisible on white rather than merely wrong. Each needed a decision.
+
+   Keeping the dark rules intact also means this is revertable by deleting one
+   block, which matters for a change this wide.
+
+   The palette rule everything follows: the brand neon #30ff8f measures 1.33:1
+   against white, where 4.5:1 is the floor for text. It cannot be a text colour
+   here. --accent (#0b7a42, 5.4:1) does the reading; the neon keeps solid fills
+   under a dark label, where it measures 12.6:1.
+   ===================================================================== */
+:root {
+    --lt-page:     #f6f8f6;
+    --lt-surface:  #ffffff;
+    --lt-raised:   #fbfcfb;
+    --lt-ink:      #12211a;   /* 16.7:1 */
+    --lt-muted:    #5d6b63;   /*  5.6:1 */
+    --lt-faint:    #8a978f;   /* decorative only - 3.0:1, never body text */
+    --lt-accent:   #0b7a42;   /*  5.4:1 */
+    --lt-accent-2: #0a6b3a;
+    --lt-tint:     #eaf6ef;
+    --lt-border:   #e2e8e3;
+    --lt-border-2: #cfdad4;
+    --lt-red:      #c2334d;
+    --lt-amber:    #7d5600;
+    --lt-amber-bg: #fdf4e0;
+    --lt-blue:     #1c5fa8;
+    --lt-radius:   6px;
+    --lt-well:     #12211a;   /* media surrounds stay dark - see montage */
+}
+
+body { background: var(--lt-page); color: var(--lt-ink); }
+
+/* The neon net was designed to glow on black. On paper it reads as scribble. */
+.pf-net-bg, .pf-net-inline { display: none !important; }
+
+/* ---------- header ---------- */
+.app-header { background: var(--lt-surface); border-bottom: 1px solid var(--lt-border); }
+.app-header-badge { background: var(--lt-tint); color: var(--lt-accent); border-color: transparent; }
+.app-tab { color: var(--lt-muted); }
+.app-tab-active { color: var(--lt-accent); }
+.brand-title { color: var(--lt-ink); }
+
+/* ---------- setup ---------- */
+.setup-card, .match-catalogue, .clip-library-panel {
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius); box-shadow: 0 1px 2px rgba(18,33,26,.04);
+}
+.setup-h1 { color: var(--lt-ink); }
+.setup-eyebrow-line { background: var(--lt-accent); }
+.setup-eyebrow-text, .setup-label { color: var(--lt-accent); }
+.setup-label { color: var(--lt-muted); }
+.setup-input, .scout-key-input, .scout-followup-input {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.setup-input::placeholder, .scout-key-input::placeholder,
+.scout-followup-input::placeholder { color: var(--lt-faint); }
+.setup-input:focus, .scout-key-input:focus, .scout-followup-input:focus {
+    outline: none; border-color: var(--lt-accent);
+    box-shadow: 0 0 0 3px rgba(11,122,66,.13);
+}
+.setup-file { color: var(--lt-muted); }
+.setup-analysis-hint { color: var(--lt-muted); }
+.pos-selected-label { color: var(--lt-muted); }
+.pos-selected-val, #selected-pos-display { color: var(--lt-accent); }
+.pos-desc { color: var(--lt-muted); }
+.pos-divider { background: var(--lt-border); }
+.pitch-zone {
+    background: var(--lt-surface); color: var(--lt-muted);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.pitch-zone:hover { border-color: var(--lt-accent); color: var(--lt-accent); }
+.selected-zone {
+    background: var(--lt-accent) !important; color: #fff !important;
+    border-color: var(--lt-accent) !important;
+}
+.pf-alert-toggle-row { color: var(--lt-muted); }
+
+/* The one "go" action keeps the neon: a fill under a dark label, 12.6:1. */
+.start-btn {
+    background: var(--fifa-green); color: var(--lt-ink);
+    border-radius: var(--lt-radius); clip-path: none;
+}
+/* Disabled controls are exempt from the contrast minimum, but --lt-faint on the
+   disabled fill measured 2.67:1, which is not "unavailable" so much as
+   unreadable - and this is the button users are waiting to become active. */
+.start-btn:disabled { background: #eef1ef; color: var(--lt-muted); opacity: 1 !important; }
+.start-btn-manual {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2);
+}
+.start-btn-manual:disabled { background: var(--lt-surface); color: var(--lt-muted); border-color: var(--lt-border); opacity: 1 !important; }
+.catalogue-refresh-btn, .clip-free-btn, .clip-discard-btn {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.match-catalogue-empty, .clip-library-list, .clip-library-header { color: var(--lt-muted); }
+.match-catalogue-list .match-catalogue-item, .clip-library-item {
+    background: var(--lt-raised); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius); color: var(--lt-ink);
+}
+.clip-demo-badge { background: var(--lt-tint); color: var(--lt-accent); }
+.cv-resume-banner {
+    background: var(--lt-tint); border: 1px solid #d7ebe0;
+    border-radius: var(--lt-radius); color: var(--lt-ink);
+}
+.cv-resume-banner-text { color: var(--lt-ink); }
+
+/* ---------- overlay dialogs (seed / playtime / team / pitch / processing) --- */
+.cv-overlay-screen { background: rgba(18,33,26,.55); }
+.cv-overlay-card {
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius);
+    box-shadow: 0 18px 48px rgba(18,33,26,.22);
+}
+/* --fifa-gold is ~1.8:1 on white. Titles carry the question being asked. */
+.cv-overlay-title { color: var(--lt-ink); text-transform: none; letter-spacing: -0.01em; }
+.cv-overlay-sub { color: var(--lt-muted); }
+.cv-overlay-sub strong { color: var(--lt-ink); }
+.cv-overlay-note {
+    color: var(--lt-muted); opacity: 1;   /* .72 dragged this to 4.1:1 */
+    border-left-color: var(--lt-accent);
+}
+.cv-overlay-note strong, .cv-overlay-note em { color: var(--lt-ink); }
+.cv-btn-primary {
+    background: var(--fifa-green); color: var(--lt-ink); border-radius: var(--lt-radius);
+}
+.cv-btn-secondary {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.cv-btn-secondary:hover { border-color: var(--lt-accent); color: var(--lt-accent); }
+.cv-btn-link { color: var(--lt-accent); }
+.cv-btn-link:hover { color: var(--lt-accent-2); }
+.cv-chip {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.cv-chip:hover, .cv-chip.active { border-color: var(--lt-accent); color: var(--lt-accent); background: var(--lt-tint); }
+
+/* video stages stay dark: a white surround fights the footage being judged */
+.cv-seed-stage, .cv-montage-stage, .cv-eyedrop-stage, .cv-playtime-preview,
+.cv-pitch-stage {
+    background: var(--lt-well); border: 1px solid var(--lt-border-2);
+    border-radius: var(--lt-radius);
+}
+.cv-seed-hint, .cv-seed-note { color: var(--lt-muted); }
+.cv-seed-showall { color: var(--lt-muted); }
+.cv-seed-clip-dot { background: var(--lt-border-2); }
+.cv-seed-clip-dot.active { background: var(--lt-accent); box-shadow: 0 0 0 3px rgba(11,122,66,.18); }
+.cv-seed-clip-dot.picked { background: var(--fifa-green); }
+
+/* ---------- pitch calibration ---------- */
+/* Missed on the first pass; the sweep found these at 1.3-2.6:1. The landmark
+   key names a colour drawn ON the dark canvas, so the swatch keeps the bright
+   value while the label text takes readable ink. */
+.cv-pitch-hint, .cv-pitch-label, .cv-pitch-note { color: var(--lt-muted); }
+.cv-pitch-hint strong, .cv-pitch-label strong { color: var(--lt-ink); }
+.cv-pitch-key { color: var(--lt-muted); }
+.cv-pitch-key b, .cv-pitch-key strong { color: var(--lt-ink); }
+.cv-pitch-landmarks, .cv-pitch-list { color: var(--lt-muted); }
+#cv-pitch-landmark { color: var(--lt-accent); }
+.cv-pitch-done { color: var(--lt-accent); }
+
+/* ---------- playing time ---------- */
+.cv-playtime-track { background: #e9efeb; border: 1px solid var(--lt-border-2); }
+.cv-playtime-tick span { color: var(--lt-muted); }
+.cv-playtime-footer, .cv-playtime-total { color: var(--lt-muted); }
+.cv-playtime-preview-time { background: rgba(18,33,26,.72); color: #fff; }
+
+/* ---------- processing ---------- */
+.cv-progress-track { background: #e9efeb; border-radius: 999px; }
+.cv-progress-bar { background: var(--lt-accent); }
+.cv-processing-status { color: var(--lt-ink); }
+.cv-processing-detail { color: var(--lt-muted); }
+.cv-processing-why {
+    background: var(--lt-tint); border: 1px solid #d7ebe0;
+    border-radius: var(--lt-radius);
+}
+.cv-processing-why-title { color: var(--lt-accent); }
+.cv-processing-why-list, .cv-processing-tip { color: var(--lt-muted); }
+.cv-processing-why-list strong, .cv-processing-tip strong { color: var(--lt-ink); }
+
+/* ---------- floating progress tracker ---------- */
+.cv-process-tracker, .cv-tracker-reopen {
+    background: var(--lt-surface); border: 1px solid var(--lt-border-2);
+    border-radius: var(--lt-radius); color: var(--lt-ink);
+    box-shadow: 0 6px 20px rgba(18,33,26,.14);
+}
+.cv-tracker-header { background: var(--lt-raised); border-bottom: 1px solid var(--lt-border); }
+.cv-tracker-title { color: var(--lt-ink); }
+.cv-tracker-close { color: var(--lt-muted); }
+.cv-tracker-status, .cv-tracker-counter, .cv-tracker-runtime, .cv-tracker-pct { color: var(--lt-muted); }
+.cv-tracker-heartbeat { color: var(--lt-accent); }
+
+/* ---------- results ---------- */
+.res-subhead { color: var(--lt-muted); }
+.res-hero {
+    display: flex; justify-content: space-around; align-items: center;
+    width: 90%; max-width: 1180px; margin-bottom: 20px; padding: 26px;
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius); box-shadow: 0 1px 2px rgba(18,33,26,.04);
+}
+.res-hero-cell { text-align: center; flex: 1; }
+.res-hero-k {
+    color: var(--lt-muted); font-size: 12px; margin: 0; text-transform: uppercase;
+    letter-spacing: .16em; font-weight: 700;
+}
+.res-hero-v {
+    font-family: 'Anton', sans-serif; font-weight: 400; font-size: 54px;
+    color: var(--lt-accent); margin: 5px 0;
+}
+.res-hero-divider { width: 1px; height: 60px; background: var(--lt-border); }
+.stat-card, .res-stat {
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius); padding: 18px; text-align: center;
+    box-shadow: 0 1px 2px rgba(18,33,26,.04);
+}
+.res-stat-1 { flex: 1; }
+.res-stat-wide { flex: 1.5; }
+.res-stat-k { color: var(--lt-muted); font-size: 11px; letter-spacing: .12em; margin: 0; font-weight: 700; }
+.res-stat-k-sp { margin: 0 0 12px 0; }
+.res-stat-v { font-family: 'Anton', sans-serif; font-weight: 400; font-size: 30px; color: var(--lt-ink); margin: 8px 0 0; }
+.res-stat-sub { font-family: 'Anton', sans-serif; font-weight: 400; font-size: 20px; color: var(--lt-ink); }
+.res-stat-lab { font-size: 10px; color: var(--lt-muted); font-weight: 600; }
+.res-chart-box {
+    width: 90%; max-width: 1180px; height: 300px; margin: 0 auto; padding: 16px;
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius);
+}
+.res-close-btn {
+    margin-top: 30px; width: 90%; max-width: 1180px; clip-path: none;
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.tp-explainer {
+    background: var(--lt-tint); border: 1px solid #d7ebe0;
+    border-radius: var(--lt-radius); color: var(--lt-muted);
+}
+.tp-explainer strong { color: var(--lt-ink); }
+#dash-net, #dash-risk { color: var(--lt-ink); }
+
+/* ---------- AI scout panel ---------- */
+.ai-scout-panel, .scout-card {
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius);
+}
+.scout-title { color: var(--lt-ink); }
+.scout-report, .scout-thread { color: var(--lt-ink); }
+.scout-placeholder { color: var(--lt-faint); }
+.scout-msg { background: var(--lt-raised); border: 1px solid var(--lt-border); color: var(--lt-ink); }
+.scout-verdict { color: var(--lt-accent); }
+.scout-generate-btn { background: var(--fifa-green); color: var(--lt-ink); }
+.scout-key-save, .scout-followup-btn { background: var(--lt-accent); color: #fff; border-radius: var(--lt-radius); }
+.scout-key-reset { background: var(--lt-surface); color: var(--lt-ink); border: 1px solid var(--lt-border-2); }
+.scout-key-saved { color: var(--lt-accent); }
+
+/* ---------- action logging (extracted from inline styles) ---------- */
+/* Flat category colours, not gradients. Each label clears 4.5:1 on its fill.
+   No blanket `.fidget-btn { color: #fff }` here: it sat after
+   .scout-generate-btn and won on equal specificity, painting white on the neon
+   GENERATE REPORT button at 1.33:1. Every category below sets its own label. */
+.btn-cat-shoot    { background: #b3243c; color: #fff; }
+.btn-cat-goal     { background: var(--fifa-green); color: var(--lt-ink); font-weight: 800; text-shadow: none; }
+.btn-cat-pass     { background: #1c5fa8; color: #fff; }
+.btn-cat-def      { background: #0f7048; color: #fff; }
+.btn-cat-skill    { background: #8a5a00; color: #fff; text-shadow: none; }
+.btn-cat-negative { background: #b3243c; color: #fff; }
+.btn-back {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2);
+}
+.btn-shoot { background: #b3243c; color: #fff; }
+.btn-pass  { background: #1c5fa8; color: #fff; }
+.btn-def   { background: #0f7048; color: #fff; }
+.btn-drib  { background: #8a5a00; color: #fff; text-shadow: none; }
+.sub-menu, .controls-container, .status-bar, .visual-tools, .speed-config-bar {
+    background: var(--lt-surface); border-color: var(--lt-border);
+}
+.bench-ui-wrapper { background: var(--lt-raised); border-top: 1px solid var(--lt-border); }
+.bench-track { background: #e9efeb; }
+.add-bench-btn, .tool-btn {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.speed-tag { color: var(--lt-muted); }
+.speed-inputs select { background: var(--lt-surface); color: var(--lt-ink); border: 1px solid var(--lt-border-2); }
+#time-display, .current-speed-display { color: var(--lt-ink); }
+.play-btn { background: var(--fifa-green); color: var(--lt-ink); }
+.video-section, .video-wrapper { background: var(--lt-well); }
+.timeline-bar, .seek-wrap { background: #e9efeb; }
+.seek-tick { background: var(--lt-border-2); }
+.seek-zone-active { background: var(--lt-accent); }
+
+/* ---------- help modal ---------- */
+.help-btn-top {
+    background: var(--lt-surface); color: var(--lt-accent);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+    box-shadow: 0 1px 3px rgba(18,33,26,.10);
+}
+.help-btn-top:hover { background: var(--lt-tint); border-color: var(--lt-accent); }
+#help-modal { background: rgba(18,33,26,.55); }
+.help-content {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border); border-radius: var(--lt-radius);
+}
+.help-content h2, .help-content h4 { color: var(--lt-ink); }
+.help-content li, .help-content p { color: var(--lt-muted); }
+.help-content strong { color: var(--lt-ink); }
+.help-content a { color: var(--lt-accent); }
+.help-content code {
+    background: var(--lt-tint); color: var(--lt-accent-2);
+    border: 1px solid #d7ebe0; border-radius: 3px; padding: 1px 5px;
+}
+.help-close { color: var(--lt-muted); }
+.tab-btn {
+    background: var(--lt-surface); color: var(--lt-muted);
+    border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
+}
+.tab-btn.active { background: var(--lt-accent); color: #fff; border-color: var(--lt-accent); }
+.help-img { border: 1px solid var(--lt-border); border-radius: var(--lt-radius); }
+
+/* ---------- onboarding ---------- */
+.pf-onboarding-card { background: var(--lt-surface); }
+.pf-onboarding-steps { color: var(--lt-muted); }
+.pf-onboarding-steps strong { color: var(--lt-ink); }
+.pf-onboarding-error { color: var(--lt-red); }
+.cv-overlay-note, .cv-overlay-actions { }
+
+/* ---------- banners ---------- */
+.pf-pipeline-warnings {
+    background: var(--lt-amber-bg); border-bottom: 1px solid #e6cd94;
+    color: var(--lt-amber);
+}
+.pf-pipeline-warnings-body strong { color: #5a3f00; }
+.pf-pipeline-warnings-close { color: var(--lt-amber); }
+.pf-update-notice {
+    background: var(--lt-surface); color: var(--lt-ink);
+    border: 1px solid var(--lt-border-2);
+    box-shadow: 0 6px 18px rgba(18,33,26,.14);
+}
+.pf-update-text strong { color: var(--lt-accent); }
+.pf-update-link { color: var(--lt-accent); }
+.pf-update-close { color: var(--lt-muted); }
+
+/* ---------- dark islands found by sweeping computed backgrounds ----------
+   These kept their dark fill because an ID selector outranks the class rules
+   above. Their text still passed contrast (light-on-dark is self-consistent),
+   which is exactly why a contrast sweep alone would not have caught them -
+   they were simply four dark patches in a light app. */
+#ai-output, .scout-report {
+    background: var(--lt-raised); color: var(--lt-ink);
+    border: 1px solid var(--lt-border); border-radius: var(--lt-radius);
+}
+#ai-output p, .scout-report p, .scout-report li { color: var(--lt-ink); }
+#cv-pitch-landmark {
+    background: var(--lt-tint); color: var(--lt-accent);
+    border: 1px solid #d7ebe0; border-radius: var(--lt-radius);
+}
+#cv-pitch-quality {
+    background: var(--lt-raised); color: var(--lt-muted);
+    border: 1px solid var(--lt-border); border-radius: var(--lt-radius);
+}
+#cv-pitch-quality strong { color: var(--lt-ink); }
+/* The eyedropper preview shows the SAMPLED colour, painted by JS. It only needs
+   a frame that reads on paper; the fill is not ours to choose. */
+#cv-eyedrop-preview { border: 1px solid var(--lt-border-2); border-radius: 4px; }
