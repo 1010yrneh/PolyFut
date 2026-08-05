@@ -106,13 +106,25 @@ TEAM_SLOTS = [
 ]
 
 # region agent log
-_DEBUG_LOG = Path(os.environ.get(
-    "POLYFUT_DEBUG_LOG",
-    str(ROOT / ".cursor" / "debug-9e74f8.log"),
-))
+# Debugging scaffolding from an earlier investigation, left switched OFF.
+#
+# It defaulted to ON and wrote JSONL into ROOT/.cursor/, which in an installed
+# build is the application's own directory. Found by installing 1.0.0 and
+# watching a normal kit detection drop a debug-*.log into
+# %LOCALAPPDATA%\Programs\PolyFut\_internal\.cursor\. That path happens to be
+# writable for a per-user install and is NOT for an all-users one under Program
+# Files, so this was a crash waiting for the first admin install — and it was
+# logging upload sizes and tokens on every run for nobody's benefit.
+#
+# Now opt-in: set POLYFUT_DEBUG_LOG to a path to turn it back on. When unset,
+# every _dbg_log call returns immediately and nothing is written.
+_DEBUG_LOG = Path(os.environ["POLYFUT_DEBUG_LOG"]) if os.environ.get(
+    "POLYFUT_DEBUG_LOG") else None
 
 
 def _dbg_log(hypothesis_id: str, location: str, message: str, data: dict, run_id: str = "team-color-debug") -> None:
+    if _DEBUG_LOG is None:
+        return
     try:
         rec = {
             "sessionId": "9e74f8",

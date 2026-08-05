@@ -9,6 +9,19 @@ $Root = Split-Path -Parent (Split-Path -Parent $MyInvocation.MyCommand.Path)
 $Packaging = Join-Path $Root "packaging"
 Set-Location $Root
 
+# Build OUTSIDE the repo. This tree is inside a synced OneDrive folder, and
+# dist/ is 1.4GB of disposable output: syncing it silently killed a build with a
+# PermissionError, stretched an Inno compile from ~13 minutes to 9.75 hours, and
+# set off a bulk-delete warning on the user's cloud storage. It is git-ignored,
+# so syncing it buys nothing. Override with POLYFUT_BUILD_DIR if you want it
+# somewhere else; only the finished installer is copied back into the repo.
+$BuildRoot = $env:POLYFUT_BUILD_DIR
+if (-not $BuildRoot) { $BuildRoot = Join-Path $env:LOCALAPPDATA "PolyFut-build" }
+$Dist = Join-Path $BuildRoot "dist"
+$Work = Join-Path $BuildRoot "build"
+New-Item -ItemType Directory -Force -Path $BuildRoot | Out-Null
+Write-Host "Build output: $BuildRoot"
+
 Write-Host "== PolyFut Windows build ==" -ForegroundColor Cyan
 
 Write-Host "Installing build dependencies..."
@@ -25,7 +38,6 @@ Write-Host "Syncing installer version..."
 # dies with PermissionError if anything holds a handle - OneDrive syncing the
 # 1.4GB tree is enough, and so is having just run the app from it. Retrying
 # helps because the lock is transient.
-$Dist = Join-Path $Root "dist"
 if (Test-Path $Dist) {
     Write-Host "Clearing dist..."
     foreach ($attempt in 1..5) {
@@ -46,7 +58,7 @@ if (Test-Path $Dist) {
 
 $SpecPath = Join-Path $Packaging "pyinstaller.spec"
 Write-Host "Running PyInstaller..."
-pyinstaller $SpecPath --noconfirm
+pyinstaller $SpecPath --noconfirm --distpath $Dist --workpath $Work
 
 # A native command's exit code does NOT trip $ErrorActionPreference, so this
 # has to be explicit. Without it a failed PyInstaller was invisible and Inno
@@ -55,7 +67,7 @@ if ($LASTEXITCODE -ne 0) {
     throw "PyInstaller failed with exit code $LASTEXITCODE"
 }
 
-$DistExe = Join-Path $Root "dist\PolyFut\PolyFut.exe"
+$DistExe = Join-Path $Dist "PolyFut\PolyFut.exe"
 if (-not (Test-Path $DistExe)) {
     throw "Build failed: $DistExe not found"
 }
@@ -72,10 +84,10 @@ Write-Host "Built: $DistExe" -ForegroundColor Green
 # Optional: bundle ffmpeg if present on PATH or in packaging/bin
 $Ffmpeg = Get-Command ffmpeg -ErrorAction SilentlyContinue
 if ($Ffmpeg) {
-    Copy-Item $Ffmpeg.Source (Join-Path $Root "dist\PolyFut\ffmpeg.exe") -Force
+    Copy-Item $Ffmpeg.Source (Join-Path $Dist "PolyFut\ffmpeg.exe") -Force
     Write-Host "Bundled ffmpeg.exe from PATH"
 } elseif (Test-Path (Join-Path $Packaging "bin\ffmpeg.exe")) {
-    Copy-Item (Join-Path $Packaging "bin\ffmpeg.exe") (Join-Path $Root "dist\PolyFut\ffmpeg.exe") -Force
+    Copy-Item (Join-Path $Packaging "bin\ffmpeg.exe") (Join-Path $Dist "PolyFut\ffmpeg.exe") -Force
     Write-Host "Bundled ffmpeg.exe from packaging/bin"
 }
 
@@ -97,20 +109,20 @@ if (-not $Iscc) {
 
 if ($Iscc) {
     Write-Host "Building installer with Inno Setup..."
-    & $Iscc (Join-Path $Packaging "polyfut_installer.iss")
+    & $Iscc "/DDistDir=$Dist" (Join-Path $Packaging "polyfut_installer.iss")
     $Version = (Get-Content (Join-Path $Packaging "VERSION") -Raw).Trim()
-    $Setup = Join-Path $Root "dist\PolyFut-Setup-$Version.exe"
+    $Setup = Join-Path $Dist "PolyFut-Setup-$Version.exe"
     if (Test-Path $Setup) {
         Write-Host "Installer: $Setup" -ForegroundColor Green
         Copy-Item $Setup (Join-Path $Root "website\downloads\PolyFut-Setup-$Version.exe") -Force -ErrorAction SilentlyContinue
     }
 } else {
     Write-Host "Inno Setup not found - skip installer. Install from https://jrsoftware.org/isinfo.php" -ForegroundColor Yellow
-    Write-Host "Portable app folder: dist\PolyFut\"
+    Write-Host "Portable app folder: $Dist\PolyFut\"
 }
 
 Write-Host ""
 Write-Host "Next steps:"
-Write-Host "  1. Test: dist\PolyFut\PolyFut.exe"
-Write-Host "  2. Upload dist\PolyFut-Setup-*.exe to polyfut.com/downloads/"
+Write-Host "  1. Test: $Dist\PolyFut\PolyFut.exe"
+Write-Host "  2. Upload website\downloads\PolyFut-Setup-*.exe to polyfut.com/downloads/"
 Write-Host "  3. Deploy website/ to your static host (Vercel, Netlify, GitHub Pages)"
