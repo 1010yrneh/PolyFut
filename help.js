@@ -110,10 +110,11 @@ const helpModalHTML = `
                 <p>Reports work straight away — there is nothing to set up. When you click <strong>GENERATE REPORT</strong>, PolyFut sends your match statistics (the numbers you logged, not your video) to its AI service and writes you a coach-level breakdown. You can ask follow-up questions in the box below the report.</p>
 
                 <h4>What leaves your machine, and when</h4>
-                <p>Almost everything PolyFut does runs locally. Two things do not, and both are worth knowing about:</p>
+                <p>Almost everything PolyFut does runs locally. Three things do not, and all are worth knowing about:</p>
                 <ul>
                     <li><strong>Your report request</strong> — only when you click Generate. It contains your logged match statistics. Your video is never uploaded.</li>
                     <li><strong>A few still frames, during setup</strong> — to work out the two teams' kit colours, PolyFut may send up to three small stills from your match to the same AI service. This happens once per video, automatically, because getting the kit colours right is what lets it tell your team from the opposition. If it is unavailable, PolyFut works the colours out on your own machine instead and carries on.</li>
+                    <li><strong>A version check, when you open PolyFut</strong> &mdash; a single request to polyfut.com asking what the newest version is, so the app can tell you when an update exists. It sends nothing about you or your match, downloads nothing, and installs nothing &mdash; it only shows a notice you can dismiss. Turn it off with <code>POLYFUT_UPDATE_CHECK=0</code>, or <code>"update_check": false</code> in <code>ai_config.json</code>.</li>
                 </ul>
                 <p>To keep everything local, set <code>kit_vision</code> to <code>false</code> in <code>ai_config.json</code> next to the app. Reports then remain available on demand, and no frames are ever sent.</p>
 

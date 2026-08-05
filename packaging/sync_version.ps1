@@ -24,10 +24,14 @@ $webVersion = Join-Path $Root "website\version.json"
 # silently keep offering the previous build.
 $Repo = $env:POLYFUT_RELEASE_REPO
 if (-not $Repo) { $Repo = "1010yrneh/Polyfut" }
+# release_url is where the in-app update prompt sends people. The site rather
+# than the binary: a download page can say what changed, and it does not break
+# if the installer moves hosts.
 $json = @{
     version = $Version
     windows_installer = "downloads/PolyFut-Setup-$Version.exe"
     installer_url = "https://github.com/$Repo/releases/download/v$Version/PolyFut-Setup-$Version.exe"
+    release_url = "https://polyfut.com"
 } | ConvertTo-Json
 [System.IO.File]::WriteAllText($webVersion, $json, (New-Object System.Text.UTF8Encoding $false))
 

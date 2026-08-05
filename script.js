@@ -115,6 +115,61 @@ function pfShowPipelineWarnings(warnings) {
     };
 }
 
+// --- update notice -------------------------------------------------------
+// Nothing used to tell anyone a newer PolyFut existed, so an install stayed on
+// whatever version it started life as and every later fix was invisible to the
+// people who already had the app.
+//
+// The server does the network part (/api/update_check), so this cannot block
+// the page or trip over CORS. It only ever informs: no download, no install.
+const PF_UPDATE_DISMISS_KEY = 'polyfut_update_dismissed';
+
+function pfShowUpdateNotice(info) {
+    if (!info || !info.update_available || !info.latest) return;
+    // Dismissal is remembered per VERSION, so saying "later" silences this
+    // release but a genuinely newer one still gets to speak up.
+    try {
+        if (localStorage.getItem(PF_UPDATE_DISMISS_KEY) === info.latest) return;
+    } catch (e) { /* private mode: show it, better than swallowing it */ }
+    if (document.getElementById('pf-update-notice')) return;
+
+    const wrap = document.createElement('div');
+    wrap.id = 'pf-update-notice';
+    wrap.className = 'pf-update-notice';
+    wrap.setAttribute('role', 'status');
+    const url = info.url || 'https://polyfut.com';
+    wrap.innerHTML =
+        '<span class="pf-update-text">PolyFut <strong>' + info.latest +
+        '</strong> is available. You have ' + info.current + '.</span>' +
+        '<a class="pf-update-link" target="_blank" rel="noopener" href="' +
+        url + '">What&rsquo;s new</a>' +
+        '<button type="button" class="pf-update-close" aria-label="Dismiss">' +
+        '&times;</button>';
+    document.body.appendChild(wrap);
+    wrap.querySelector('.pf-update-close').onclick = function () {
+        try { localStorage.setItem(PF_UPDATE_DISMISS_KEY, info.latest); } catch (e) { }
+        wrap.remove();
+    };
+}
+
+function pfCheckForUpdate() {
+    // Failure is silence. A user opening the app to analyse a match does not
+    // need to hear that a version check did not work.
+    fetch('/api/update_check')
+        .then(function (r) { return r.ok ? r.json() : null; })
+        .then(pfShowUpdateNotice)
+        .catch(function () { });
+}
+
+// Scripts load at the end of <body>, so DOMContentLoaded may already have
+// fired by now -- a bare listener would never run and the notice would never
+// appear. Check the state instead of assuming.
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pfCheckForUpdate);
+} else {
+    pfCheckForUpdate();
+}
+
 // One-time, remembered opt-in — a small styled prompt (never a native dialog).
 function pfMaybeAskAlerts() {
     try { if (localStorage.getItem(PF_ALERT_PREF_KEY) !== null) return; } catch (e) { return; }

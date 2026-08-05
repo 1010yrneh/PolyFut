@@ -5,6 +5,7 @@ from __future__ import annotations
 import gc
 import json
 import os
+import re
 import sys
 import tempfile
 import threading
@@ -392,8 +393,71 @@ def health():
 # the token rotated by editing one file, without rebuilding and reshipping the
 # installer to every user.
 #
-# Resolution order: env vars (POLYFUT_AI_PROXY_URL / POLYFUT_AI_APP_TOKEN) win,
-# then ai_config.json beside the app, then next to the user's data dir.
+# --- update check --------------------------------------------------------
+# Nothing in the app told a user a new version existed. Everyone who installed
+# 1.0.0 would have stayed on 1.0.0 until they happened to revisit the site,
+# which makes every fix shipped after this one invisible to the people who
+# already have the app.
+#
+# Deliberately small: one GET of version.json, cached, never blocking, and it
+# only ever tells the user — it does not download or install anything.
+
+UPDATE_URL = os.environ.get("POLYFUT_UPDATE_URL",
+                            "https://polyfut.com/version.json")
+UPDATE_TIMEOUT_SEC = 6          # a slow check is worth less than no check
+UPDATE_CACHE_SEC = 6 * 3600     # re-ask a few times a day at most
+_update_cache: dict = {"at": 0.0, "payload": None}
+
+
+def _read_app_version() -> str:
+    """This build's version, or "dev" from a source checkout.
+
+    Mirrors launcher._read_version. packaging/VERSION is bundled by the spec, so
+    a frozen build reports the real number rather than "dev".
+    """
+    candidates = [ROOT / "packaging" / "VERSION"]
+    if getattr(sys, "frozen", False):
+        base = getattr(sys, "_MEIPASS", None)
+        if base:
+            candidates.insert(0, Path(base) / "packaging" / "VERSION")
+    for path in candidates:
+        try:
+            text = path.read_text(encoding="utf-8").strip()
+            if text:
+                return text
+        except OSError:
+            continue
+    return "dev"
+
+
+APP_VERSION = _read_app_version()
+
+
+def _version_tuple(v: str) -> tuple:
+    """Comparable form of a version string.
+
+    Not a string compare: "1.10.0" sorts BELOW "1.9.0" as text, so a tenth
+    release would have looked older than the ninth and the update prompt would
+    have stopped appearing exactly when it started mattering. Trailing
+    non-numeric parts ("1.2.0-beta") sort before the plain release, and anything
+    unparseable returns () so it can never claim to be newer.
+    """
+    parts = re.split(r"[.\-+]", str(v).strip().lstrip("vV"))
+    out: list[int] = []
+    for p in parts:
+        if p.isdigit():
+            out.append(int(p))
+        else:
+            break
+    return tuple(out)
+
+
+def _is_newer(latest: str, current: str) -> bool:
+    lt, ct = _version_tuple(latest), _version_tuple(current)
+    if not lt or not ct:
+        return False            # "dev", or a malformed remote value
+    return lt > ct
+
 
 def _ai_config_paths() -> list[Path]:
     """Where ai_config.json may live, from source or from a frozen build.
@@ -430,6 +494,64 @@ def _load_ai_config() -> dict:
             if url and token:
                 break
     return {"proxy_url": url, "app_token": token}
+
+
+def _update_enabled() -> bool:
+    """Off with POLYFUT_UPDATE_CHECK=0, or "update_check": false in ai_config."""
+    env = os.environ.get("POLYFUT_UPDATE_CHECK", "").strip().lower()
+    if env in ("0", "false", "no", "off"):
+        return False
+    if env in ("1", "true", "yes", "on"):
+        return True
+    configured = _load_ai_config().get("update_check")
+    if isinstance(configured, bool):
+        return configured
+    return True
+
+
+@app.route("/api/update_check")
+def update_check():
+    """Is there a newer PolyFut than this one?
+
+    Answers from cache when it can. Every failure -- offline, DNS, a 404, junk
+    JSON, a timeout -- reports "no update" rather than an error: a broken check
+    must never look like a broken app, and this runs on the setup screen where
+    the user is trying to start work.
+    """
+    current = APP_VERSION
+    quiet = {"current": current, "latest": None, "update_available": False,
+             "url": "", "checked": False}
+    if not _update_enabled() or current == "dev":
+        return jsonify(quiet)
+
+    now = time.time()
+    cached = _update_cache.get("payload")
+    if cached and now - _update_cache["at"] < UPDATE_CACHE_SEC:
+        return jsonify(cached)
+
+    try:
+        import urllib.request
+
+        req = urllib.request.Request(
+            UPDATE_URL, headers={"User-Agent": f"PolyFut/{current}"})
+        with urllib.request.urlopen(req, timeout=UPDATE_TIMEOUT_SEC) as resp:
+            doc = json.loads(resp.read().decode("utf-8"))
+    except Exception as exc:            # noqa: BLE001 - never fail the page
+        app.logger.info("update check unavailable: %s", exc)
+        return jsonify(quiet)
+
+    latest = str(doc.get("version") or "").strip()
+    payload = {
+        "current": current,
+        "latest": latest or None,
+        "update_available": bool(latest) and _is_newer(latest, current),
+        # Send them to the site, not straight at a binary: the download page can
+        # explain what changed, and it survives the installer moving hosts.
+        "url": str(doc.get("release_url") or "https://polyfut.com"),
+        "checked": True,
+    }
+    _update_cache["at"], _update_cache["payload"] = now, payload
+    return jsonify(payload)
 
 
 @app.route("/api/ai_config")

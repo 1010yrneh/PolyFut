@@ -877,6 +877,35 @@ html, body {
 }
 .pf-pipeline-warnings-close:hover { color: #fff; }
 
+/* "A newer PolyFut exists" — bottom-left, deliberately out of the way.
+   The warnings banner owns the top of the window and the How-to-Use button the
+   top-left below it; an update is the least urgent thing on screen, so it sits
+   where nothing else does rather than competing for the same corner. */
+.pf-update-notice {
+    position: fixed; left: 14px; bottom: 14px; z-index: 11000;
+    display: flex; align-items: center; gap: 12px;
+    max-width: min(440px, calc(100vw - 28px));
+    background: #11150f; color: #cfe8d8;
+    border: 1px solid rgba(48, 255, 143, 0.45);
+    padding: 10px 12px; font-size: 0.85rem; line-height: 1.4;
+    box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.pf-update-text { flex: 1; }
+.pf-update-text strong { color: #30ff8f; }
+.pf-update-link {
+    color: #30ff8f; text-decoration: underline; white-space: nowrap;
+    flex: 0 0 auto;
+}
+.pf-update-close {
+    background: none; border: none; color: #9fb6a8; font-size: 1.2rem;
+    line-height: 1; cursor: pointer; padding: 0 2px; flex: 0 0 auto;
+}
+.pf-update-close:hover { color: #fff; }
+
+@media (max-width: 640px) {
+    .pf-update-notice { left: 8px; right: 8px; bottom: 8px; max-width: none; }
+}
+
 /* Setup-screen toggle: alerts when PolyFut needs the user's input */
 .pf-alert-toggle-row {
     display: flex; align-items: center; gap: 9px;
