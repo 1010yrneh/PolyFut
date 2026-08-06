@@ -90,6 +90,44 @@ logo = ROOT / "PolyFut Logo.png"
 if logo.exists():
     datas.append((str(logo), "."))
 
+# Images the MARKUP actually asks for. The line above bundles a file nothing
+# references by that name, so the installed app was serving 404 for every image
+# it uses: the header logo and all six help screenshots. Found by watching the
+# network log of the running installed app - the page still renders, so nothing
+# fails loudly; you just get broken images in How to Use.
+#
+# Derived from index.html and help.js rather than listed by hand, so adding an
+# image to the markup cannot silently miss the bundle again. Missing files fail
+# the build for the same reason the model guard does: shipping is the wrong
+# place to discover it.
+import re as _re
+
+_referenced = set()
+for _src in (ROOT / "index.html", ROOT / "help.js"):
+    if _src.exists():
+        _referenced |= set(_re.findall(
+            r'src="([^":]+\.(?:png|jpg|jpeg|svg|gif|webp))"',
+            _src.read_text(encoding="utf-8")))
+
+_missing_img = []
+for _rel in sorted(_referenced):
+    _path = ROOT / _rel
+    if not _path.exists():
+        _missing_img.append(_rel)
+        continue
+    # Preserve the sub-path so assets/logo.png resolves as assets/logo.png.
+    _dest = str(Path(_rel).parent) if Path(_rel).parent != Path(".") else "."
+    datas.append((str(_path), _dest))
+
+if _missing_img:
+    raise SystemExit(
+        "Cannot build a shippable PolyFut: the markup references images that "
+        "are not in the repo.\n"
+        + "\n".join(f"  {m}" for m in _missing_img)
+        + "\n\nEither add them or stop referencing them - a build without them "
+          "ships broken images."
+    )
+
 # AI proxy wiring (see ai_backend/README.md). Gitignored and per-deployment, so
 # it won't exist until someone has run through the Modal setup — bundle it when
 # present, but don't fail the build without it: a build with no ai_config.json
