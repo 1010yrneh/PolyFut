@@ -1,0 +1,5 @@
+{
+  "_comment": "Copy to the repo root as ai_config.json (gitignored) and fill both fields. server.py serves these to the client via /api/ai_config. Env vars POLYFUT_AI_PROXY_URL / POLYFUT_AI_APP_TOKEN override this file. If either value is missing the app falls back to the user's own pasted Groq key.",
+  "proxy_url": "https://YOUR-MODAL-USERNAME--polyfut-report-backend-generate-report.modal.run",
+  "app_token": "PASTE_THE_SAME_TOKEN_YOU_PUT_IN_THE_polyfut-app-token_MODAL_SECRET"
+}

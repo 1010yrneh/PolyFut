@@ -63,6 +63,41 @@ The single most important change: **full-frame player detection moves from every
 
 Tags: **[reuse]** unchanged from v1 · **[changed]** modified · **[new]** · **[drop]** removed.
 
+### Stage 0a — Playing-time window · [new] (v3)
+Before the team picker, the user declares the time ranges they were **actually on the
+pitch** (`[[start_sec, end_sec], …]` in video time; whole match is the default and a
+one-click skip). Everything after runs inside that window.
+
+Why it exists: on job `e7efd5ac4bc3` (111-min video, user subbed on at 63') the seed
+clips landed at 11/39/66/94 min and the shuffle roamed to 12 and 51 min. Tapping
+"yourself" at a moment you weren't playing seeds the appearance gallery and the identity
+anchor with **a different player** — all 12 auto-accepted touches were wrong and 7 of 11
+hotspots sat before the user came on. No amount of appearance or motion work fixes a seed
+that is the wrong person; the user is the only reliable source of this information.
+
+- Stored per upload token at `exports/seed/<token>/playing_time.json`; the stored copy
+  beats any client-supplied copy so a stale tab can't widen the window.
+- **Seed moments** map their spread fractions onto the *union* of on-pitch time
+  (`play_ranges.time_at_fraction`), so the four slots and every golden-ratio shuffle stay
+  inside the window. Seed moments are **not padded** — an out-of-window seed is the exact
+  failure being prevented.
+- **The pipeline** (Stages 1-3) is bounded to the ranges padded by
+  `playing_time_pad_sec` (45s default): the handles are dragged by eye, so recall-safety
+  says pad. Decode seeks once to the envelope and stops at its end; shots are clipped to
+  the padded ranges, so interior gaps between periods cost only cheap `grab()` calls.
+- **Stages 4-9 need no changes** — candidates and hotspots derive from a trajectory that
+  now only exists inside the window. Only the duration-scaled candidate cap switches to
+  on-pitch seconds; clip and hotspot ends still clamp to full duration, because
+  timestamps never leave video time.
+- Seed-clip cache filenames carry a short hash of the window
+  (`clip_<hash>_<reroll>_<index>.json`), and the seed prefetch starts from
+  `/api/v2/playing_time` rather than `/api/teams` — otherwise a whole-match prefetch
+  builds clips for moments the user wasn't playing and then collides with the windowed
+  ones. Runtime falls roughly in proportion to the declared window.
+
+Out of scope: auto-detecting when the player is on the pitch. User input is the reliable
+v1 of this.
+
 ### Stage 0 — Multi-sample seed · [changed]
 Instead of one tap on frame 0 (the target may not be visible at kickoff, and a single
 crop is a brittle appearance model):
