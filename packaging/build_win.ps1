@@ -38,15 +38,23 @@ Write-Host "Syncing installer version..."
 # dies with PermissionError if anything holds a handle - OneDrive syncing the
 # 1.4GB tree is enough, and so is having just run the app from it. Retrying
 # helps because the lock is transient.
-if (Test-Path $Dist) {
-    Write-Host "Clearing dist..."
+# Both dist AND the work dir. PyInstaller caches an icon-patched copy of the
+# bootloader at build/<spec>/PolyFut.exe and reuses it when it believes nothing
+# relevant changed - a changed .ico is NOT part of that cache key. Clearing only
+# dist meant a new icon could never reach the exe: the build reported success,
+# wrote a fresh dist, and the binary in it was a byte copy of the cached one
+# carrying the previous icon. Caught by extracting the RT_ICON resource from
+# the built exe and finding the old artwork still in it.
+foreach ($dir in @($Dist, $Work)) {
+  if (Test-Path $dir) {
+    Write-Host "Clearing $dir..."
     foreach ($attempt in 1..5) {
         try {
-            Remove-Item $Dist -Recurse -Force -ErrorAction Stop
+            Remove-Item $dir -Recurse -Force -ErrorAction Stop
             break
         } catch {
             if ($attempt -eq 5) {
-                throw ("Could not clear $Dist after 5 attempts: " +
+                throw ("Could not clear $dir after 5 attempts: " +
                        $_.Exception.Message +
                        " - close PolyFut.exe and pause OneDrive sync, then retry.")
             }
@@ -54,6 +62,7 @@ if (Test-Path $Dist) {
             Start-Sleep -Seconds 3
         }
     }
+  }
 }
 
 $SpecPath = Join-Path $Packaging "pyinstaller.spec"
