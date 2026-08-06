@@ -7,7 +7,11 @@
     --bg-panel: #11150f;
     --text-primary: #f2f7f1;
     --text-secondary: #8fa093;
-    --fifa-green: #30ff8f;
+    /* Retired the neon. It only ever worked as a fill under a dark
+       label; as text it is 1.33:1 on white. The deep green reads at
+       5.4:1 either way, so it can be text, border or fill - which is
+       why every green fill below now carries a WHITE label. */
+    --fifa-green: #0b7a42;
     --fifa-purple: #7000ff;
     --fifa-gold: #f2c94c;
     --fifa-red: #ff2e4d;
@@ -226,7 +230,7 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
     transition: 0.2s;
     clip-path: polygon(14px 0, 100% 0, 100% calc(100% - 14px), calc(100% - 14px) 100%, 0 100%, 0 14px);
 }
-.start-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(48, 255, 143, 0.4); }
+.start-btn:hover:not(:disabled) { transform: translateY(-2px); box-shadow: 0 5px 15px rgba(11, 122, 66, 0.4); }
 .start-btn:disabled { opacity: 0.5 !important; cursor: not-allowed; background: #1c241c; color: #5f6d63; clip-path: none; }
 
 /* Secondary path: bypass AI detection entirely (see initAppManual in script.js) */
@@ -324,7 +328,7 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
 .bench-remove { position: absolute; top: -12px; color: #fff; background: #ff2e4d; width: 14px; height: 14px; border-radius: 50%; font-size: 10px; display: flex; justify-content: center; align-items: center; cursor: pointer; pointer-events: all; z-index: 15; }
 
 .timeline-bar { display: flex; align-items: center; gap: 16px; padding: 16px 18px; background: var(--bg-dark); border-top: 1px solid rgba(255,255,255,0.08); }
-.play-btn { background: var(--fifa-green); color: #07160c; border: none; width: 46px; height: 46px; flex: 0 0 auto; font-size: 1.1rem; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
+.play-btn { background: var(--fifa-green); color: #fff; border: none; width: 46px; height: 46px; flex: 0 0 auto; font-size: 1.1rem; cursor: pointer; padding: 0; display: flex; align-items: center; justify-content: center; }
 #seek-slider { flex: 1; cursor: pointer; accent-color: var(--fifa-green); height: 6px; }
 #time-display { font-family: var(--font-display); color: #c9d3ca; font-size: 1.1rem; letter-spacing: 0.03em; min-width: 55px; text-align: right; }
 
@@ -352,8 +356,8 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
     cursor: pointer;
     transition: background 0.18s, color 0.18s, border-color 0.18s;
 }
-.pitch-zone:hover { border-color: rgba(48, 255, 143, 0.5); }
-.selected-zone { background: var(--fifa-green) !important; color: #07160c !important; border-color: var(--fifa-green) !important; }
+.pitch-zone:hover { border-color: rgba(11, 122, 66, 0.5); }
+.selected-zone { background: var(--fifa-green) !important; color: #fff !important; border-color: var(--fifa-green) !important; }
 #selected-pos-display { font-family: var(--font-display); font-weight: 400; font-size: 34px; color: var(--fifa-green); line-height: 1.1; letter-spacing: 0.02em; }
 
 /* Results */
@@ -375,7 +379,7 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
 .scout-key-saved span { color: var(--fifa-green); font-size: 0.8rem; font-weight: bold; letter-spacing: 0.04em; }
 .scout-key-reset { background: transparent; border: 1px solid var(--fifa-red); color: var(--fifa-red); cursor: pointer; font-size: 0.7rem; padding: 4px 8px; }
 
-.scout-generate-btn { width: 100%; background: linear-gradient(135deg, #30ff8f 0%, #1fae66 100%); color: #07160c; min-height: 44px; margin-bottom: 14px; font-size: 1rem; }
+.scout-generate-btn { width: 100%; background: var(--fifa-green); color: #fff; min-height: 44px; margin-bottom: 14px; font-size: 1rem; }
 
 /* AI Scout Report — document body (Layout B: score strip + modular card grid) */
 .scout-report {
@@ -405,7 +409,7 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
 .scout-card h4 { font-family: var(--font-display); font-weight: 400; font-size: 12.5px; letter-spacing: 0.06em; text-transform: uppercase; color: var(--fifa-green); margin: 0 0 8px; }
 .scout-card p { margin: 0; font-size: 14px; line-height: 1.6; color: #d3ddd4; }
 
-.scout-verdict { background: linear-gradient(180deg, var(--bg-panel), var(--bg-paper)); border: 1px solid rgba(48,255,143,0.22); padding: 16px 20px; margin-top: 2px; }
+.scout-verdict { background: linear-gradient(180deg, var(--bg-panel), var(--bg-paper)); border: 1px solid rgba(11, 122, 66,0.22); padding: 16px 20px; margin-top: 2px; }
 .scout-verdict .scout-verdict-lbl { font-size: 10px; letter-spacing: 0.12em; color: var(--fifa-green); text-transform: uppercase; font-weight: 700; margin-bottom: 6px; }
 .scout-verdict p { margin: 0; font-size: 15.5px; color: var(--text-primary); font-weight: 600; line-height: 1.5; }
 
@@ -413,12 +417,12 @@ body:has(#setup-screen.hidden) .pf-net-bg { display: none; }
 .scout-thread { margin-top: 18px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 16px; display: flex; flex-direction: column; gap: 10px; }
 .scout-msg { max-width: 85%; padding: 10px 14px; font-size: 13.5px; line-height: 1.5; }
 .scout-msg.you { align-self: flex-end; background: var(--bg-panel); border: 1px solid rgba(255,255,255,0.08); color: var(--text-primary); }
-.scout-msg.ai { align-self: flex-start; background: rgba(48,255,143,0.06); border-left: 2px solid var(--fifa-green); color: var(--text-primary); }
+.scout-msg.ai { align-self: flex-start; background: rgba(11, 122, 66,0.06); border-left: 2px solid var(--fifa-green); color: var(--text-primary); }
 .scout-msg .scout-msg-lbl { display: block; font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--text-secondary); margin-bottom: 3px; }
 
 .scout-followup { margin-top: 14px; display: flex; gap: 8px; }
 .scout-followup-input { flex-grow: 1; background: var(--bg-dark); border: 1px solid rgba(255,255,255,0.14); color: #fff; padding: 12px; font-family: 'Rajdhani', sans-serif; }
-.scout-followup-btn { background: var(--fifa-green); color: #07160c; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 22px; cursor: pointer; transition: 0.2s; }
+.scout-followup-btn { background: var(--fifa-green); color: #fff; font-weight: bold; font-family: 'Rajdhani', sans-serif; border: none; padding: 0 22px; cursor: pointer; transition: 0.2s; }
 
 @media (max-width: 760px) {
     .scout-grid { columns: 1; }
@@ -540,7 +544,7 @@ html, body {
     line-height: 1.45;
     color: var(--text-secondary);
     opacity: 0.72;
-    border-left: 2px solid rgba(48, 255, 143, 0.4);
+    border-left: 2px solid rgba(11, 122, 66, 0.4);
     padding: 4px 0 4px 12px;
     text-align: left;
 }
@@ -591,7 +595,7 @@ html, body {
     cursor: pointer;
 }
 .cv-chip:hover { border-color: var(--fifa-green); color: var(--fifa-green); }
-.cv-chip.cv-chip-active { border-color: var(--fifa-green); color: #0b0d0b; background: var(--fifa-green); }
+.cv-chip.cv-chip-active { border-color: var(--fifa-green); color: #fff; background: var(--fifa-green); }
 
 /* The timeline itself: full video duration, with one filled bar per period. */
 .cv-playtime-track {
@@ -624,7 +628,7 @@ html, body {
     position: absolute;
     top: 0;
     bottom: 0;
-    background: rgba(48, 255, 143, 0.22);
+    background: rgba(11, 122, 66, 0.22);
     border-left: 1px solid var(--fifa-green);
     border-right: 1px solid var(--fifa-green);
 }
@@ -661,7 +665,7 @@ html, body {
     left: 7px;
     width: 4px;
     background: var(--fifa-green);
-    box-shadow: 0 0 8px rgba(48, 255, 143, 0.5);
+    box-shadow: 0 0 8px rgba(11, 122, 66, 0.5);
 }
 .cv-playtime-handle:focus-visible { outline: 2px solid var(--fifa-gold); }
 
@@ -738,7 +742,7 @@ html, body {
     margin: -13px 0 0 -13px;   /* center on the (x, topY) anchor */
     border-radius: 50%;
     border: 2px solid rgba(255, 255, 255, 0.9);
-    background: rgba(48, 255, 143, 0.22);
+    background: rgba(11, 122, 66, 0.22);
     box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.4);
     cursor: pointer;
     pointer-events: auto;
@@ -755,18 +759,18 @@ html, body {
     border-right: 6px solid transparent;
     border-top: 8px solid rgba(255, 255, 255, 0.9);
 }
-.cv-seed-node:hover { background: rgba(48, 255, 143, 0.45); }
+.cv-seed-node:hover { background: rgba(11, 122, 66, 0.45); }
 
 .cv-seed-track.selected .cv-seed-node {
     border-color: var(--fifa-green);
-    background: rgba(48, 255, 143, 0.6);
-    box-shadow: 0 0 0 3px rgba(48, 255, 143, 0.5), 0 0 14px rgba(48, 255, 143, 0.7);
+    background: rgba(11, 122, 66, 0.6);
+    box-shadow: 0 0 0 3px rgba(11, 122, 66, 0.5), 0 0 14px rgba(11, 122, 66, 0.7);
 }
 .cv-seed-track.selected .cv-seed-node::after { border-top-color: var(--fifa-green); }
 .cv-seed-track.selected .cv-seed-leader {
     width: 3px;
     margin-left: -1.5px;
-    background: linear-gradient(to bottom, var(--fifa-green), rgba(48, 255, 143, 0.25));
+    background: linear-gradient(to bottom, var(--fifa-green), rgba(11, 122, 66, 0.25));
 }
 
 /* play/pause: click the clip to freeze the markers, then tap yourself */
@@ -856,7 +860,7 @@ html, body {
     background: rgba(255, 255, 255, 0.18);
     border: none; padding: 0; cursor: pointer; transition: 0.2s;
 }
-.cv-seed-clip-dot.active { background: var(--fifa-green); transform: scale(1.25); box-shadow: 0 0 0 3px rgba(48, 255, 143, 0.3); }
+.cv-seed-clip-dot.active { background: var(--fifa-green); transform: scale(1.25); box-shadow: 0 0 0 3px rgba(11, 122, 66, 0.3); }
 .cv-seed-clip-dot.picked { background: #9fe8c2; }
 .cv-btn-primary:disabled, .cv-btn-secondary:disabled { opacity: 0.4; cursor: not-allowed; }
 
@@ -886,14 +890,14 @@ html, body {
     display: flex; align-items: center; gap: 12px;
     max-width: min(440px, calc(100vw - 28px));
     background: #11150f; color: #cfe8d8;
-    border: 1px solid rgba(48, 255, 143, 0.45);
+    border: 1px solid rgba(11, 122, 66, 0.45);
     padding: 10px 12px; font-size: 0.85rem; line-height: 1.4;
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
 }
 .pf-update-text { flex: 1; }
-.pf-update-text strong { color: #30ff8f; }
+.pf-update-text strong { color: #0b7a42; }
 .pf-update-link {
-    color: #30ff8f; text-decoration: underline; white-space: nowrap;
+    color: #0b7a42; text-decoration: underline; white-space: nowrap;
     flex: 0 0 auto;
 }
 .pf-update-close {
@@ -1034,7 +1038,7 @@ html, body {
     background: rgba(255, 255, 255, 0.08); color: #eafff2;
     font-size: 0.9rem; cursor: pointer; line-height: 1;
 }
-.cv-montage-controls button:hover { background: rgba(48, 255, 143, 0.25); }
+.cv-montage-controls button:hover { background: rgba(11, 122, 66, 0.25); }
 .cv-montage-controls button:disabled { opacity: 0.4; cursor: default; }
 #cv-montage-zoomlevel { color: #9fe8c2; font-size: 0.78rem; min-width: 34px; text-align: center; }
 .cv-montage-meta { display: flex; justify-content: center; gap: 16px; margin: 10px 0 12px; font-family: 'Rajdhani', sans-serif; }
@@ -1042,13 +1046,13 @@ html, body {
 .cv-montage-kinds { color: #93a397; text-transform: capitalize; }
 .cv-montage-conf { color: var(--fifa-green); text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.85rem; align-self: center; }
 .cv-montage-crowded { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(255, 186, 48, 0.16); border: 1px solid rgba(255, 186, 48, 0.5); color: #ffca63; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
-.cv-montage-linked { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(48, 255, 143, 0.12); border: 1px solid rgba(48, 255, 143, 0.45); color: #7defad; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
+.cv-montage-linked { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(11, 122, 66, 0.12); border: 1px solid rgba(11, 122, 66, 0.45); color: #7defad; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
 .cv-montage-unlinked { align-self: center; padding: 2px 8px; border-radius: 10px; background: rgba(160, 170, 165, 0.14); border: 1px solid rgba(160, 170, 165, 0.45); color: #aeb8b2; text-transform: uppercase; letter-spacing: 0.5px; font-size: 0.72rem; font-weight: 700; cursor: help; }
 .cv-montage-footer { margin-top: 14px; text-align: center; }
 .cv-btn-link { background: none; border: none; color: #8fa39a; text-decoration: underline; cursor: pointer; font-size: 0.85rem; }
 .cv-btn-link:hover { color: var(--fifa-green); }
 .cv-montage-summary { display: flex; flex-direction: column; gap: 6px; margin: 16px 0; max-height: 260px; overflow-y: auto; }
-.cv-montage-hs { display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(48, 255, 143, 0.06); border-left: 2px solid var(--fifa-green); font-family: 'Rajdhani', sans-serif; }
+.cv-montage-hs { display: flex; justify-content: space-between; padding: 8px 12px; background: rgba(11, 122, 66, 0.06); border-left: 2px solid var(--fifa-green); font-family: 'Rajdhani', sans-serif; }
 .cv-montage-hs span:last-child { color: #93a397; }
 .cv-montage-empty { color: #93a397; font-size: 0.9rem; line-height: 1.4; }
 
@@ -1061,7 +1065,7 @@ html, body {
    pitch, processing and onboarding overlays; restyling them unscoped would
    convert all six.
 
-   The rule the palette hangs on: the brand neon #30ff8f is 1.33:1 against
+   The rule the palette hangs on: the brand neon #0b7a42 is 1.33:1 against
    white, where 4.5:1 is the floor for text. It cannot be a text colour here.
    So --lt-accent (#0b7a42, 5.4:1) does the reading and the neon keeps the one
    job it is good at — a solid fill under a dark label, 12.6:1.
@@ -1134,8 +1138,8 @@ html, body {
 }
 
 #cv-montage-screen .cv-btn-primary {
-    background: var(--fifa-green);    /* the neon, doing what it is good at */
-    color: var(--lt-ink);             /* 12.6:1 */
+    background: var(--fifa-green);
+    color: #fff;
     border-radius: var(--lt-radius);
 }
 #cv-montage-screen .cv-btn-secondary {
@@ -1456,8 +1460,8 @@ html, body {
     margin-top: 16px;
     padding: 14px 16px;
     max-width: 520px;
-    background: rgba(48, 255, 143, 0.08);
-    border: 1px solid rgba(48, 255, 143, 0.35);
+    background: rgba(11, 122, 66, 0.08);
+    border: 1px solid rgba(11, 122, 66, 0.35);
     border-radius: 0;
     text-align: left;
 }
@@ -1754,7 +1758,7 @@ html, body {
 }
 
 .cv-tracker-bar-track.cv-tracker-stalled .cv-progress-bar {
-    background: linear-gradient(90deg, #f2c94c 0%, #30ff8f 50%, #f2c94c 100%);
+    background: linear-gradient(90deg, #f2c94c 0%, #0b7a42 50%, #f2c94c 100%);
     background-size: 200% 100%;
     animation: cv-bar-shimmer 1.2s linear infinite;
 }
@@ -1914,7 +1918,7 @@ html, body {
 }
 .clip-library-item:hover { border-color: var(--fifa-green); }
 .clip-library-item.active {
-    background: linear-gradient(135deg, var(--fifa-green) 0%, #00b366 100%);
+    background: var(--fifa-green);
     color: #06120b;
     border-color: var(--fifa-green);
 }
@@ -1980,8 +1984,8 @@ html, body {
     max-width: 800px;
     margin: 0 auto 16px;
     padding: 12px 16px;
-    background: rgba(48, 255, 143, 0.06);
-    border: 1px solid rgba(48, 255, 143, 0.28);
+    background: rgba(11, 122, 66, 0.06);
+    border: 1px solid rgba(11, 122, 66, 0.28);
     border-left: 3px solid var(--fifa-green);
     color: #a8b4a9;
     font-family: 'Rajdhani', sans-serif;
@@ -2011,8 +2015,8 @@ html, body {
     left: 14px;
     z-index: 12000;
     background: #11150f;
-    color: #30ff8f;
-    border: 1px solid rgba(48, 255, 143, 0.45);
+    color: #0b7a42;
+    border: 1px solid rgba(11, 122, 66, 0.45);
     font-family: 'Rajdhani', sans-serif;
     font-weight: 800;
     font-size: 12px;
@@ -2023,8 +2027,8 @@ html, body {
     box-shadow: 0 6px 18px rgba(0, 0, 0, 0.35);
 }
 .help-btn-top:hover {
-    background: rgba(48, 255, 143, 0.12);
-    border-color: #30ff8f;
+    background: rgba(11, 122, 66, 0.12);
+    border-color: #0b7a42;
 }
 body.help-open { overflow: hidden; }
 
@@ -2064,7 +2068,7 @@ body.help-open { overflow: hidden; }
     text-transform: uppercase;
 }
 .help-content h4 {
-    color: #30ff8f;
+    color: #0b7a42;
     margin: 18px 0 8px;
     font-size: 1rem;
     letter-spacing: 0.04em;
@@ -2113,11 +2117,11 @@ body.help-open { overflow: hidden; }
     padding: 8px 12px;
     cursor: pointer;
 }
-.help-tabs .tab-btn:hover { color: #e8f5ec; border-color: rgba(48, 255, 143, 0.35); }
+.help-tabs .tab-btn:hover { color: #e8f5ec; border-color: rgba(11, 122, 66, 0.35); }
 .help-tabs .tab-btn.active {
     color: #07160c;
-    background: #30ff8f;
-    border-color: #30ff8f;
+    background: #0b7a42;
+    border-color: #0b7a42;
 }
 
 .help-content .tab-content { display: none; }
@@ -2224,7 +2228,7 @@ body.help-open { overflow: hidden; }
    Keeping the dark rules intact also means this is revertable by deleting one
    block, which matters for a change this wide.
 
-   The palette rule everything follows: the brand neon #30ff8f measures 1.33:1
+   The palette rule everything follows: the brand neon #0b7a42 measures 1.33:1
    against white, where 4.5:1 is the floor for text. It cannot be a text colour
    here. --accent (#0b7a42, 5.4:1) does the reading; the neon keeps solid fills
    under a dark label, where it measures 12.6:1.
@@ -2299,7 +2303,7 @@ body { background: var(--lt-page); color: var(--lt-ink); }
 
 /* The one "go" action keeps the neon: a fill under a dark label, 12.6:1. */
 .start-btn {
-    background: var(--fifa-green); color: var(--lt-ink);
+    background: var(--fifa-green); color: #fff;
     border-radius: var(--lt-radius); clip-path: none;
 }
 /* Disabled controls are exempt from the contrast minimum, but --lt-faint on the
@@ -2344,7 +2348,7 @@ body { background: var(--lt-page); color: var(--lt-ink); }
 }
 .cv-overlay-note strong, .cv-overlay-note em { color: var(--lt-ink); }
 .cv-btn-primary {
-    background: var(--fifa-green); color: var(--lt-ink); border-radius: var(--lt-radius);
+    background: var(--fifa-green); color: #fff; border-radius: var(--lt-radius);
 }
 .cv-btn-secondary {
     background: var(--lt-surface); color: var(--lt-ink);
@@ -2471,7 +2475,7 @@ body { background: var(--lt-page); color: var(--lt-ink); }
 .scout-placeholder { color: var(--lt-faint); }
 .scout-msg { background: var(--lt-raised); border: 1px solid var(--lt-border); color: var(--lt-ink); }
 .scout-verdict { color: var(--lt-accent); }
-.scout-generate-btn { background: var(--fifa-green); color: var(--lt-ink); }
+.scout-generate-btn { background: var(--fifa-green); color: #fff; }
 .scout-key-save, .scout-followup-btn { background: var(--lt-accent); color: #fff; border-radius: var(--lt-radius); }
 .scout-key-reset { background: var(--lt-surface); color: var(--lt-ink); border: 1px solid var(--lt-border-2); }
 .scout-key-saved { color: var(--lt-accent); }
@@ -2482,7 +2486,7 @@ body { background: var(--lt-page); color: var(--lt-ink); }
    .scout-generate-btn and won on equal specificity, painting white on the neon
    GENERATE REPORT button at 1.33:1. Every category below sets its own label. */
 .btn-cat-shoot    { background: #b3243c; color: #fff; }
-.btn-cat-goal     { background: var(--fifa-green); color: var(--lt-ink); font-weight: 800; text-shadow: none; }
+.btn-cat-goal     { background: var(--fifa-green); color: #fff; font-weight: 800; text-shadow: none; }
 .btn-cat-pass     { background: #1c5fa8; color: #fff; }
 .btn-cat-def      { background: #0f7048; color: #fff; }
 .btn-cat-skill    { background: #8a5a00; color: #fff; text-shadow: none; }
@@ -2507,7 +2511,7 @@ body { background: var(--lt-page); color: var(--lt-ink); }
 .speed-tag { color: var(--lt-muted); }
 .speed-inputs select { background: var(--lt-surface); color: var(--lt-ink); border: 1px solid var(--lt-border-2); }
 #time-display, .current-speed-display { color: var(--lt-ink); }
-.play-btn { background: var(--fifa-green); color: var(--lt-ink); }
+.play-btn { background: var(--fifa-green); color: #fff; }
 .video-section, .video-wrapper { background: var(--lt-well); }
 .timeline-bar, .seek-wrap { background: #e9efeb; }
 .seek-tick { background: var(--lt-border-2); }
@@ -2538,6 +2542,10 @@ body { background: var(--lt-page); color: var(--lt-ink); }
     background: var(--lt-surface); color: var(--lt-muted);
     border: 1px solid var(--lt-border-2); border-radius: var(--lt-radius);
 }
+/* .help-tabs .tab-btn.active in the dark theme is three classes deep and beat a
+   bare .tab-btn.active, leaving a dark label on the green fill at 3.4:1. */
+.help-tabs .tab-btn.active { background: var(--lt-accent); color: #fff; border-color: var(--lt-accent); }
+.help-tabs .tab-btn { background: var(--lt-surface); color: var(--lt-muted); }
 .tab-btn.active { background: var(--lt-accent); color: #fff; border-color: var(--lt-accent); }
 .help-img { border: 1px solid var(--lt-border); border-radius: var(--lt-radius); }
 

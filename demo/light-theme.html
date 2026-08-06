@@ -9,16 +9,15 @@
 /* =====================================================================
    PolyFut light theme — DEMO ONLY. Nothing here is loaded by the app.
 
-   The one decision everything else follows: the brand neon #30ff8f cannot
-   carry text on a light surface. Measured, it is 1.33:1 against white where
-   4.5:1 is the floor. So the green does two jobs instead of one:
+   One green does everything:
 
-     --accent  #0b7a42   text, borders, links, small marks   5.42:1 on white
-     --neon    #30ff8f   solid fills and active states only, always with a
-                         dark label on top                  14.02:1 with --ink
+     --accent  #0b7a42   text, borders, links AND solid fills
 
-   That is what keeps it recognisably PolyFut without the neon-on-white glare
-   that makes light versions of dark UIs look broken.
+   The old neon was retired. It measured 1.33:1 as text on white - unusable -
+   and only ever worked as a fill under a dark label, which meant carrying two
+   greens and a rule about which one each context allowed. #0b7a42 reads at
+   5.42:1 both ways: dark green text on white, white text on a green fill. The
+   rule disappears with the second colour.
    ===================================================================== */
 :root {
     --page:    #f6f8f6;   /* very slightly green-tinted, not clinical white */
@@ -28,7 +27,6 @@
     --faint:   #8a978f;   /* decorative only, never body text */
     --accent:  #0b7a42;
     --accent-soft: #eaf6ef;
-    --neon:    #30ff8f;
     --border:  #e2e8e3;
     --border-strong: #cfdad4;
     --red:     #c2334d;
@@ -112,9 +110,9 @@ h2.title {
 }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover { background: #0a6b3a; }
-/* The neon survives here: a fill with a dark label, 14:1. It marks the one
-   action that is "go", so it stays special instead of coating the whole UI. */
-.btn-go { background: var(--neon); color: var(--ink); }
+/* The one "go" action per screen. Same green as everything else, white
+   label, 5.42:1 - it stays special through placement, not a second colour. */
+.btn-go { background: var(--accent); color: #fff; }
 .btn-go:hover { filter: brightness(.95); }
 .btn-secondary {
     background: var(--surface); color: var(--ink);
@@ -210,7 +208,7 @@ h2.title {
 .detbox span {
     position: absolute; top: -21px; left: -2px; font-size: 11px; font-weight: 700;
     letter-spacing: .08em; text-transform: uppercase;
-    background: var(--neon); color: var(--ink); padding: 1px 6px; border-radius: 3px;
+    background: #fff; color: var(--ink); padding: 1px 6px; border-radius: 3px;
 }
 .stage-tools {
     position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px;
@@ -532,12 +530,12 @@ h2.title {
         <div class="pal-item"><div class="pal-sw" style="background:#12211a"></div><div class="pal-b"><div class="pal-n">Ink</div><div class="pal-h">#12211a</div><div class="pal-r"><span class="ok">16.7:1</span> on white</div></div></div>
         <div class="pal-item"><div class="pal-sw" style="background:#5d6b63"></div><div class="pal-b"><div class="pal-n">Muted</div><div class="pal-h">#5d6b63</div><div class="pal-r"><span class="ok">5.6:1</span> on white</div></div></div>
         <div class="pal-item"><div class="pal-sw" style="background:#0b7a42"></div><div class="pal-b"><div class="pal-n">Accent green</div><div class="pal-h">#0b7a42</div><div class="pal-r"><span class="ok">5.4:1</span> — text, borders, links</div></div></div>
-        <div class="pal-item"><div class="pal-sw" style="background:#30ff8f"></div><div class="pal-b"><div class="pal-n">Brand neon</div><div class="pal-h">#30ff8f</div><div class="pal-r"><span class="no">1.3:1</span> as text — fills only</div></div></div>
+        <div class="pal-item"><div class="pal-sw" style="background:#0b7a42"></div><div class="pal-b"><div class="pal-n">Accent, as a fill</div><div class="pal-h">#0b7a42 + white</div><div class="pal-r"><span class="ok">5.4:1</span> — buttons</div></div></div>
         <div class="pal-item"><div class="pal-sw" style="background:#c2334d"></div><div class="pal-b"><div class="pal-n">Negative</div><div class="pal-h">#c2334d</div><div class="pal-r"><span class="ok">5.1:1</span> on white</div></div></div>
         <div class="pal-item"><div class="pal-sw" style="background:#e2e8e3"></div><div class="pal-b"><div class="pal-n">Border</div><div class="pal-h">#e2e8e3</div></div></div>
     </div>
 
-    <p class="note"><strong>The one rule that shapes everything:</strong> the brand neon measures 1.33:1 against white, where 4.5:1 is the minimum for text. It cannot be a text colour on a light theme. So it keeps the job it is genuinely good at — a solid fill behind a dark label, where it measures 14:1 — and a deeper green does the reading work. That is why the primary "go" buttons are still neon while links, labels and figures are <span class="pos-n">#0b7a42</span>.</p>
+    <p class="note"><strong>One green, not two.</strong> The old neon measured 1.33:1 against white — unusable as text — so it could only ever be a fill under a dark label. That meant two greens and a rule about which one each context allowed. <span class="pos-n">#0b7a42</span> reads at 5.42:1 both ways: dark green text on white, white text on a green fill. Buttons stand out through placement and weight rather than a second colour.</p>
     <p class="note">Also changed from the dark theme, per the brief: gradients removed, corners softened to 6px, Anton kept only for large figures where a condensed face earns its place, and more whitespace throughout.</p>
 </section>
 

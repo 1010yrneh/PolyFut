@@ -11,12 +11,12 @@
      front-end change. style.css previously had no version query at all, so a
      returning user kept whatever CSS the browser had cached — the reason two
      separate style fixes appeared to do nothing until the cache was busted. -->
-<link rel="stylesheet" href="style.css?v=10">
+<link rel="stylesheet" href="style.css?v=11">
 </head>
 <body>
     <!-- ===== NEON NET BACKGROUND ===== -->
     <svg class="pf-net-bg" viewBox="0 0 1400 1200" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
-        <g class="pf-net-a" stroke="#30ff8f" stroke-width="1" fill="none" opacity=".5">
+        <g class="pf-net-a" stroke="#0b7a42" stroke-width="1" fill="none" opacity=".5">
             <line x1="0" y1="120" x2="420" y2="340"></line>
             <line x1="420" y1="340" x2="180" y2="620"></line>
             <line x1="420" y1="340" x2="760" y2="260"></line>
@@ -31,7 +31,7 @@
             <line x1="0" y1="120" x2="180" y2="620"></line>
             <line x1="760" y1="260" x2="1400" y2="220"></line>
         </g>
-        <g class="pf-net-b" stroke="#30ff8f" stroke-width="1" fill="none" opacity=".3">
+        <g class="pf-net-b" stroke="#0b7a42" stroke-width="1" fill="none" opacity=".3">
             <line x1="1400" y1="60" x2="1020" y2="300"></line>
             <line x1="1020" y1="300" x2="1240" y2="560"></line>
             <line x1="1020" y1="300" x2="660" y2="180"></line>
@@ -44,7 +44,7 @@
             <line x1="620" y1="640" x2="340" y2="900"></line>
             <line x1="340" y1="900" x2="0" y2="740"></line>
         </g>
-        <g class="pf-net-node" fill="#30ff8f">
+        <g class="pf-net-node" fill="#0b7a42">
             <circle cx="420" cy="340" r="4"></circle>
             <circle cx="1080" cy="480" r="3.5"></circle>
             <circle cx="480" cy="820" r="4"></circle>
@@ -583,11 +583,11 @@
             </div>
         </div>
 
-        <div class="chart-container-full" class="res-chart-box">
+        <div class="chart-container-full res-chart-box">
             <canvas id="wpaChart"></canvas>
         </div>
 
-        <button class="start-btn" onclick="location.reload()" class="res-close-btn">CLOSE ANALYSIS</button>
+        <button class="start-btn res-close-btn" onclick="location.reload()">CLOSE ANALYSIS</button>
     </div>
 
     <!-- Floating analysis progress (draggable, closable) -->
@@ -616,8 +616,8 @@
         </div>
     </div>
 
-    <script src="calculations.js?v=10"></script>
-    <script src="help.js?v=10"></script>
-    <script src="script.js?v=10"></script>
+    <script src="calculations.js?v=11"></script>
+    <script src="help.js?v=11"></script>
+    <script src="script.js?v=11"></script>
 </body>
 </html>

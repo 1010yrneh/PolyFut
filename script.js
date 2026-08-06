@@ -3779,7 +3779,7 @@ function __v2MontageStartDraw() {
                 var rw = bboxW / sw * canvas.width;
                 var rh = bboxH / sh * canvas.height;
                 ctx.lineWidth = Math.max(2, canvas.width * 0.004);
-                ctx.strokeStyle = 'rgba(48,255,143,0.95)';
+                ctx.strokeStyle = 'rgba(255,255,255,0.95)';
                 ctx.shadowColor = 'rgba(0,0,0,0.65)';
                 ctx.shadowBlur = 4;
                 ctx.strokeRect(rx, ry, rw, rh);
@@ -4358,7 +4358,7 @@ function logStat(actionName) {
     }
 
     const app = document.getElementById('app-layout');
-    app.style.boxShadow = "inset 0 0 20px #30ff8f";
+    app.style.boxShadow = "inset 0 0 20px #0b7a42";
     setTimeout(() => { app.style.boxShadow = "none"; }, 150);
     if (navigator.vibrate) navigator.vibrate(50);
     scheduleSaveMatchSession();
@@ -4605,7 +4605,7 @@ function renderWPAChart(data, maxDuration, excludedRanges) {
         data: {
             datasets: [{
                 label: 'Threat Points (TP)', data: data,
-                borderColor: '#30ff8f', backgroundColor: 'rgba(48, 255, 143, 0.1)',
+                borderColor: '#0b7a42', backgroundColor: 'rgba(11, 122, 66, 0.10)',
                 borderWidth: 2, fill: true, tension: 0.1, pointRadius: 0
             }]
         },
