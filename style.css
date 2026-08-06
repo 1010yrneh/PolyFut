@@ -2002,7 +2002,12 @@ html, body {
    its own; the button has to drop below it. */
 .help-btn-top {
     position: fixed;
-    top: calc(var(--pf-warn-h, 0px) + 14px);
+    /* Below BOTH bars that can occupy the top: the pipeline-warnings banner and
+       the sticky app header. --pf-header-h is 0 on screens where the header is
+       hidden, so the button rises back up rather than floating in empty space.
+       Both are measured and published (pfSetWarningHeight / pfSetHeaderHeight)
+       because both change height with text wrap at narrow widths. */
+    top: calc(var(--pf-warn-h, 0px) + var(--pf-header-h, 0px) + 14px);
     left: 14px;
     z-index: 12000;
     background: #11150f;
@@ -2130,7 +2135,7 @@ body.help-open { overflow: hidden; }
 
 @media (max-width: 640px) {
     .help-btn-top {
-        top: calc(var(--pf-warn-h, 0px) + 8px);
+        top: calc(var(--pf-warn-h, 0px) + var(--pf-header-h, 0px) + 8px);
         left: 8px; padding: 8px 10px; font-size: 11px;
     }
     .help-content { padding: 22px 16px 24px; }

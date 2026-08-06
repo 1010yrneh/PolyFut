@@ -87,6 +87,44 @@ function pfSetWarningHeight(px) {
     document.body.style.setProperty('--pf-warn-h', (px || 0) + 'px');
 }
 
+// The app header is a sticky bar at the top of the setup screen, and the
+// "How to use" button is fixed at the top-left, so the button sat on top of the
+// logo. It only became visible in the light theme: the header is hidden once
+// setup-screen is, and on the dark theme that covered most of a session.
+//
+// Published rather than hardcoded because the header wraps at narrow widths, and
+// because it disappears entirely on the later screens - at which point the
+// offset has to go back to zero or the button floats in empty space.
+function pfSetHeaderHeight() {
+    var h = document.querySelector('.app-header');
+    var px = 0;
+    if (h && getComputedStyle(h).display !== 'none') {
+        px = Math.round(h.getBoundingClientRect().height);
+    }
+    document.body.style.setProperty('--pf-header-h', px + 'px');
+}
+
+function pfWatchHeaderHeight() {
+    pfSetHeaderHeight();
+    var h = document.querySelector('.app-header');
+    if (h && window.ResizeObserver) new ResizeObserver(pfSetHeaderHeight).observe(h);
+    // The header is hidden by `body:has(#setup-screen.hidden)`, a CSS state
+    // change no ResizeObserver reliably reports, so watch the class that
+    // drives it as well.
+    var setup = document.getElementById('setup-screen');
+    if (setup && window.MutationObserver) {
+        new MutationObserver(pfSetHeaderHeight)
+            .observe(setup, { attributes: true, attributeFilter: ['class'] });
+    }
+    window.addEventListener('resize', pfSetHeaderHeight);
+}
+
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', pfWatchHeaderHeight);
+} else {
+    pfWatchHeaderHeight();
+}
+
 function pfShowPipelineWarnings(warnings) {
     const list = (warnings || []).filter(Boolean);
     const existing = document.getElementById('pf-pipeline-warnings');
