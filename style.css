@@ -2255,8 +2255,71 @@ body.help-open { overflow: hidden; }
 
 body { background: var(--lt-page); color: var(--lt-ink); }
 
-/* The neon net was designed to glow on black. On paper it reads as scribble. */
-.pf-net-bg, .pf-net-inline { display: none !important; }
+/* ---------- the net background ----------
+   Kept, in the deep green, on the two screens that have room for it: the setup
+   screen and the analysis workspace. Hidden everywhere else, because the
+   overlay screens (seed, playing time, montage, processing) sit on a scrim and
+   the net behind it is just noise the user cannot see anyway.
+
+   Toned right down for paper. At the dark theme's .5/.3 the lines were legible
+   scribble on white rather than texture; on a light surface the same drawing
+   needs roughly a third of the weight to read as a backdrop. */
+.pf-net-bg { display: none; opacity: .55; }
+body:has(#setup-screen:not(.hidden)) .pf-net-bg,
+body:has(#app-layout:not(.hidden)) .pf-net-bg { display: block; }
+/* ...but never behind an overlay. app-layout stays un-hidden underneath the
+   review and processing screens, so without this the net would keep animating
+   behind an opaque scrim - three infinite repaints nobody can see, which is
+   the exact cost that was removed from the processing screen earlier.
+
+   !important because the show rules above match on IDs (#setup-screen,
+   #app-layout) and an ID outranks any number of classes, so a class-based hide
+   can never win on specificity alone. Listing all eight overlay IDs here would
+   also work and would rot the first time one is added. */
+body:has(.cv-overlay-screen:not(.hidden)) .pf-net-bg,
+body:has(#help-modal:not(.hidden)) .pf-net-bg { display: none !important; }
+.pf-net-a { opacity: .30; }
+.pf-net-b { opacity: .20; }
+.pf-net-inline { display: none !important; }
+
+/* The dots now live inside the line groups, so they need that group's drift AND
+   their own pulse. Two animations on one element: drift moves `transform`,
+   pulse moves `opacity`, so they compose instead of overwriting each other.
+   Previously the dots had only the pulse and stayed put while the lines drifted
+   out from under them. */
+.pf-net-node-a {
+    animation: pf-net-drift-a 18s ease-in-out infinite,
+               pf-net-pulse 5s ease-in-out infinite;
+    transform-origin: 50% 50%;
+}
+.pf-net-node-b {
+    animation: pf-net-drift-b 22s ease-in-out infinite,
+               pf-net-pulse 5s ease-in-out infinite;
+    transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+    .pf-net-node-a, .pf-net-node-b { animation: none; opacity: .5; }
+}
+
+/* ---------- analysis workspace ----------
+   It was pinned to 900px wide and auto height, which on a 1900x1120 screen left
+   it using 900x433 with 667px of empty space below. This is the screen where
+   640x360 footage is being squinted at to judge touches, so the space is worth
+   more as video than as margin. Still capped, so it does not sprawl on an
+   ultrawide, and still scrolls if the controls need more room than the window. */
+#app-layout {
+    max-width: 1500px !important;
+    height: calc(100vh - 40px) !important;
+    max-height: calc(100vh - 40px) !important;
+    overflow-y: auto !important;
+    /* The original rule carries `padding-bottom: 50px !important`. Under
+       content-box that padding is added to the height, so the layout ran 30px
+       past the bottom of the window and the page scrolled by that much. */
+    box-sizing: border-box !important;
+    padding-bottom: 0 !important;
+}
+.video-wrapper, #video-wrapper { max-height: none; flex: 1; min-height: 0; }
+#main-player { width: 100%; height: 100%; object-fit: contain; }
 
 /* ---------- header ---------- */
 .app-header { background: var(--lt-surface); border-bottom: 1px solid var(--lt-border); }
@@ -2463,7 +2526,27 @@ body { background: var(--lt-page); color: var(--lt-ink); }
     border-radius: var(--lt-radius); color: var(--lt-muted);
 }
 .tp-explainer strong { color: var(--lt-ink); }
-#dash-net, #dash-risk { color: var(--lt-ink); }
+/* The live stat cards were still the dark theme's black boxes - visible in the
+   app as four black tiles under the score. They were missed because every
+   earlier contrast sweep ran with #app-layout hidden, so the analysis page was
+   never in the sample. Found only once the workspace was unhidden to measure
+   its empty space. */
+.live-stat {
+    background: var(--lt-surface); border: 1px solid var(--lt-border);
+    border-radius: var(--lt-radius);
+}
+.live-stat-label { color: var(--lt-muted); }
+.live-stat-val { color: var(--lt-ink); }
+#dash-net { color: var(--lt-accent); }
+#dash-risk { color: var(--lt-amber); }
+.live-stats-bar { background: transparent; }
+.bench-header, .bench-label { color: var(--lt-muted); }
+#display-match-name { color: var(--lt-muted); }
+.score { color: var(--lt-ink); }
+/* FINISH is destructive-ish and stays red, but the dark theme's red is 3.65:1
+   under white text. Darkened to clear 4.5. */
+.end-btn { background: #b3243c; color: #fff; border-radius: var(--lt-radius); }
+.help-content a, .scout-report a { color: var(--lt-accent); }
 
 /* ---------- AI scout panel ---------- */
 .ai-scout-panel, .scout-card {
@@ -2554,6 +2637,15 @@ body { background: var(--lt-page); color: var(--lt-ink); }
 .pf-onboarding-steps { color: var(--lt-muted); }
 .pf-onboarding-steps strong { color: var(--lt-ink); }
 .pf-onboarding-error { color: var(--lt-red); }
+/* The onboarding steps still carried the dark theme's gold link (1.59:1 on
+   white) and a near-black <code> chip. */
+.pf-onboarding-steps a { color: var(--lt-accent); }
+.pf-onboarding-steps code, .cv-overlay-card code {
+    background: var(--lt-tint); color: var(--lt-accent-2);
+    border: 1px solid #d7ebe0; border-radius: 3px; padding: 1px 5px;
+}
+/* SLOW / FAST sit in unclassed spans in the speed bar. */
+.speed-config-bar, .speed-inputs, .speed-config-bar span { color: var(--lt-muted); }
 .cv-overlay-note, .cv-overlay-actions { }
 
 /* ---------- banners ---------- */

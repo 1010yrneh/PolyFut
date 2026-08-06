@@ -11,7 +11,7 @@
      front-end change. style.css previously had no version query at all, so a
      returning user kept whatever CSS the browser had cached — the reason two
      separate style fixes appeared to do nothing until the cache was busted. -->
-<link rel="stylesheet" href="style.css?v=11">
+<link rel="stylesheet" href="style.css?v=12">
 </head>
 <body>
     <!-- ===== NEON NET BACKGROUND ===== -->
@@ -44,13 +44,24 @@
             <line x1="620" y1="640" x2="340" y2="900"></line>
             <line x1="340" y1="900" x2="0" y2="740"></line>
         </g>
-        <g class="pf-net-node" fill="#0b7a42">
+        <!-- Dots live in the same group as the lines they sit on, so they
+             drift with their vertices instead of detaching from them. -->
+        <g class="pf-net-node pf-net-node-a" fill="#0b7a42">
             <circle cx="420" cy="340" r="4"></circle>
             <circle cx="1080" cy="480" r="3.5"></circle>
             <circle cx="480" cy="820" r="4"></circle>
+            <circle cx="180" cy="620" r="3"></circle>
+            <circle cx="760" cy="260" r="3"></circle>
+            <circle cx="820" cy="700" r="3.5"></circle>
+            <circle cx="1120" cy="980" r="3"></circle>
+        </g>
+        <g class="pf-net-node pf-net-node-b" fill="#0b7a42">
             <circle cx="1020" cy="300" r="3.5"></circle>
             <circle cx="620" cy="640" r="4"></circle>
-            <circle cx="180" cy="620" r="3"></circle>
+            <circle cx="300" cy="380" r="3"></circle>
+            <circle cx="960" cy="760" r="3.5"></circle>
+            <circle cx="1240" cy="560" r="3"></circle>
+            <circle cx="340" cy="900" r="3"></circle>
         </g>
     </svg>
 
@@ -616,8 +627,8 @@
         </div>
     </div>
 
-    <script src="calculations.js?v=11"></script>
-    <script src="help.js?v=11"></script>
-    <script src="script.js?v=11"></script>
+    <script src="calculations.js?v=12"></script>
+    <script src="help.js?v=12"></script>
+    <script src="script.js?v=12"></script>
 </body>
 </html>
