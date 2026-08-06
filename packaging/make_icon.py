@@ -3,15 +3,23 @@
 Run from repo root:
     python packaging/make_icon.py
 
-The mark is a faceted football, built from real truncated-icosahedron geometry
-rather than drawn by hand: 12 pentagons and 20 hexagons, orthographically
-projected, back faces culled. That is the same shape a real ball is stitched
-from, and it gives the panel seams the slightly irregular foreshortening a
-hand-drawn version never gets right.
+The mark is a football drawn as an open net: the app's own background - thin
+green strands with dots where they meet - wrapped onto a sphere.
 
-It matches the app: the ball is --lt-accent #0b7a42, and the seams and vertex
-dots echo the net background, which is the same green drawn as lines with dots
-at its vertices.
+The geometry is real, not drawn by hand. An icosahedron truncated one third
+along every edge turns its 12 vertices into pentagons and its 20 faces into
+hexagons, which is exactly how a ball is stitched. Rendering only the edges,
+with the far side of the net showing faintly through the near side, gives the
+strands the uneven foreshortening a hand-drawn mesh never gets right.
+
+A filled version came first and was wrong for two reasons. Its dark panels
+(#07522d) sat at hue 150, and a green that dark reads as teal once it is small -
+it looked like blue patches in the taskbar. And a solid ball had nothing to do
+with the rest of the app. A wireframe has no dark fills to misread and is the
+same drawing as the background.
+
+Colour is --lt-accent #0b7a42, taken from the stylesheet so the icon cannot
+drift from the UI.
 """
 
 from __future__ import annotations
@@ -25,15 +33,12 @@ WEB_ASSETS = ROOT / "website" / "assets"
 
 # Straight from the stylesheet, so the icon cannot drift from the UI.
 GREEN = (11, 122, 66)          # --lt-accent, exactly
-# The depth shading runs symmetrically about GREEN rather than upward from it,
-# so the ball AVERAGES to the app's green instead of reading a shade lighter
-# than every green in the UI.
-GREEN_SHADE = (8, 96, 52)      # facets turning away
-GREEN_LIT = (14, 148, 80)      # facets facing the viewer
-GREEN_DARK = (7, 82, 45)       # pentagons
+# Nothing darker than this. The filled version used #07522d for the pentagons,
+# and at hue 150 a green that dark reads as teal once it is small - which is
+# what looked like blue patches in the taskbar. A wireframe has no dark fills
+# at all, so the problem goes away rather than being tuned around.
+GREEN_BACK = (150, 196, 172)   # far side of the net, seen through the front
 TILE = (246, 248, 246)         # --lt-page
-SEAM = (246, 248, 246)
-EDGE = (6, 74, 40)
 
 PHI = (1.0 + math.sqrt(5.0)) / 2.0
 
@@ -147,49 +152,78 @@ def _draw_icon(size: int):
         x, z = x * math.cos(ay) + z * math.sin(ay), -x * math.sin(ay) + z * math.cos(ay)
         return x, y, z
 
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r), fill=GREEN)
+    # An open net rather than a filled ball - the app's own background is thin
+    # green lines with dots where they meet, and this is the same drawing
+    # wrapped onto a sphere. No panel fills, so nothing is dark enough to read
+    # as teal once it shrinks, which is what the old pentagons did.
+    faces = [([rot(q) for q in pts], kind)
+             for pts, kind in _truncated_icosahedron()]
 
-    # Below ~64px a 32-facet ball cannot resolve: thin seams blur to grey haze,
-    # thick ones eat the green until the icon is mostly white speckle. Neither
-    # is a seam-width problem, so small sizes drop the light seams entirely and
-    # keep only the dark pentagons on a solid green ball. That still reads as a
-    # football instantly - it is how a ball looks at a distance - and it keeps a
-    # solid green silhouette, which is what a taskbar actually needs.
-    detailed = size >= 64
-    seam_w = max(1, round(ss * max(1.0, 2.75 * size / 256.0)))
-    front = []
-    for pts, kind in _truncated_icosahedron():
-        rp = [rot(p) for p in pts]
-        # Back-face cull: the face normal must point at the viewer (+z).
-        c = tuple(sum(p[i] for p in rp) / len(rp) for i in range(3))
-        if c[2] <= 0.06:
-            continue
-        front.append((c[2], rp, kind))
+    # Each edge once, tagged near/far by midpoint depth and by whether it rings
+    # a pentagon. Every pentagon edge is shared with a hexagon, so the pentagon
+    # rings alone are 60 of the 90 strands - a third fewer lines that still
+    # reads as a football, which is what the small sizes need.
+    edges = {}
+    for rp, kind in faces:
+        for i in range(len(rp)):
+            a, b = rp[i], rp[(i + 1) % len(rp)]
+            key = tuple(sorted((tuple(round(c, 5) for c in a),
+                                tuple(round(c, 5) for c in b))))
+            depth, was_pent = edges.get(key, (None, False))
+            edges[key] = ((a[2] + b[2]) / 2, was_pent or kind == "pent")
 
-    for depth, rp, kind in sorted(front):          # far to near
-        flat = [(cx + p[0] * r, cy - p[1] * r) for p in rp]
-        if not detailed:
-            # Simplified mark: dark pentagons only, no seams.
-            if kind == "pent":
-                draw.polygon(flat, fill=GREEN_DARK)
-            continue
-        if kind == "pent":
-            fill = GREEN_DARK
-        else:
-            # Light the hexagons by depth so the sphere reads as round, running
-            # shade -> lit through GREEN at the midpoint.
-            t = max(0.0, min(1.0, (depth - 0.1) / 0.9))
-            fill = tuple(int(GREEN_SHADE[i] + (GREEN_LIT[i] - GREEN_SHADE[i]) * t)
-                         for i in range(3))
-        draw.polygon(flat, fill=fill, outline=SEAM, width=seam_w)
+    # At 32px and below, 90 strands collapse into a green blob with white
+    # speckle. Drop to the pentagon rings only: fewer lines, same silhouette,
+    # still obviously a ball.
+    if size <= 32:
+        edges = {k: v for k, v in edges.items() if v[1]}
+    if size <= 16:
+        # 16px is ~11px of ball. Even the pentagon rings are too many strands
+        # there, so keep only the ones squarely facing the viewer and let the
+        # rim carry the rest. It reads as a ball with a couple of panels, which
+        # is all that fits.
+        edges = {k: v for k, v in edges.items() if v[0] > 0.55}
 
-    # (No vertex dots. The net's dots sit on thin lines against open space; here
-    # the seams are already the light element and dots in the same colour drew
-    # invisibly on top of them. The faceting carries the motif on its own.)
+    def flat(q):
+        return (cx + q[0] * r, cy - q[1] * r)
 
-    # Crisp rim last, so the silhouette survives down to 16px.
-    draw.ellipse((cx - r, cy - r, cx + r, cy + r),
-                 outline=EDGE, width=max(1, int(S * 0.012)))
+    # Weights in FINAL pixels so they survive the downscale at every size.
+    lw_front = max(1, round(ss * max(1.15, 3.2 * size / 256.0)))
+    lw_back = max(1, round(lw_front * 0.62))
+
+    # The far side of the net, seen through the near side. Dropped below 48px,
+    # where it is only mud behind the front strands.
+    if size >= 48:
+        for (a, b), (depth, _p) in edges.items():
+            if depth < 0:
+                draw.line([flat(a), flat(b)], fill=GREEN_BACK, width=lw_back)
+
+    for (a, b), (depth, _p) in edges.items():
+        if depth >= 0:
+            draw.line([flat(a), flat(b)], fill=GREEN, width=lw_front)
+
+    # Dots where strands meet - the motif from the net background, and what
+    # keeps the mesh reading as deliberate rather than as scribble.
+    if size >= 32:
+        dot = max(1, round(ss * max(1.5, 4.0 * size / 256.0)))
+        seen = set()
+        for (a, b), (depth, _p) in edges.items():
+            if depth < 0:
+                continue
+            for q in (a, b):
+                if q[2] < 0.15:
+                    continue
+                k = tuple(round(c, 4) for c in q)
+                if k in seen:
+                    continue
+                seen.add(k)
+                x, y = flat(q)
+                draw.ellipse((x - dot, y - dot, x + dot, y + dot), fill=GREEN)
+
+    # The rim closes the net into a ball. Without it the mesh has no silhouette
+    # and dissolves at small sizes.
+    draw.ellipse((cx - r, cy - r, cx + r, cy + r), outline=GREEN,
+                 width=max(1, round(ss * max(1.3, 3.4 * size / 256.0))))
 
     return img.resize((size, size), Image.LANCZOS)
 
