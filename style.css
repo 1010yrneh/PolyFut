@@ -2266,7 +2266,8 @@ body { background: var(--lt-page); color: var(--lt-ink); }
    needs roughly a third of the weight to read as a backdrop. */
 .pf-net-bg { display: none; opacity: .55; }
 body:has(#setup-screen:not(.hidden)) .pf-net-bg,
-body:has(#app-layout:not(.hidden)) .pf-net-bg { display: block; }
+body:has(#app-layout:not(.hidden)) .pf-net-bg,
+body:has(#results-screen:not(.hidden)) .pf-net-bg { display: block; }
 /* ...but never behind an overlay. app-layout stays un-hidden underneath the
    review and processing screens, so without this the net would keep animating
    behind an opaque scrim - three infinite repaints nobody can see, which is
