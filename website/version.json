@@ -1,6 +1,6 @@
 {
-    "installer_url":  "https://github.com/1010yrneh/PolyFut/releases/download/v1.0.0/PolyFut-Setup-1.0.0.exe",
-    "windows_installer":  "downloads/PolyFut-Setup-1.0.0.exe",
-    "version":  "1.0.0",
+    "installer_url":  "https://github.com/1010yrneh/PolyFut/releases/download/v1.0.1/PolyFut-Setup-1.0.1.exe",
+    "windows_installer":  "downloads/PolyFut-Setup-1.0.1.exe",
+    "version":  "1.0.1",
     "release_url":  "https://polyfut.com"
 }

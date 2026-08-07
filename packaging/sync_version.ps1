@@ -23,7 +23,11 @@ $webVersion = Join-Path $Root "website\version.json"
 # served from website/. Kept in step with $Version here so a release cannot
 # silently keep offering the previous build.
 $Repo = $env:POLYFUT_RELEASE_REPO
-if (-not $Repo) { $Repo = "1010yrneh/Polyfut" }
+# Casing matters: the repo was renamed Polyfut -> PolyFut. GitHub redirects,
+# so the old spelling worked and hid this - but this script REWRITES
+# version.json on every build, so a stale default here silently reverts a
+# corrected URL the next time anyone builds.
+if (-not $Repo) { $Repo = "1010yrneh/PolyFut" }
 # release_url is where the in-app update prompt sends people. The site rather
 # than the binary: a download page can say what changed, and it does not break
 # if the installer moves hosts.

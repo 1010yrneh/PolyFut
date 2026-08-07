@@ -193,12 +193,66 @@ a = Analysis(
     excludes=[
         "matplotlib", "tkinter", "IPython", "jupyter", "notebook",
         "pytest", "_pytest", "pandas", "seaborn",
+        # polars is a HARD dependency of ultralytics, so it rides along even
+        # though nothing here imports it - 174MB of dataframe engine, the single
+        # largest thing in the build after torch. Every ultralytics import of it
+        # is function-scoped and in a path we never enter: to_df()/to_csv()
+        # result exporters, the trainer's results.csv reader, benchmarks, the
+        # Weights & Biases callback, and plotting (which also imports the
+        # matplotlib already excluded above). Checked by walking the AST of
+        # every import site, not by grepping for the name.
+        "polars", "_polars_runtime_32",
+        # Same shape: only ultralytics/nn/backends/onnx.py and benchmarks touch
+        # it. This app ships .pt and OpenVINO models and never loads an .onnx,
+        # so the ONNX backend is never constructed.
+        "onnxruntime",
     ],
     win_no_prefer_redirects=False,
     win_private_assemblies=False,
     cipher=block_cipher,
     noarchive=False,
 )
+
+# --------------------------------------------------------------------------
+# Ship an msvcp140.dll new enough for torch.
+#
+# THIS IS WHAT MADE 1.0.0 UNABLE TO ANALYSE ANYTHING. The build picked up an
+# msvcp140.dll v14.36.32532.0 from somewhere in its search and bundled that.
+# torch's c10.dll cannot initialise against it, so `import torch` died with
+#
+#     OSError: [WinError 1114] A dynamic link library (DLL) initialization
+#     routine failed. Error loading ...\torch\lib\c10.dll
+#
+# every single time, in every installed copy. It never showed up in testing
+# because the app LAUNCHES fine - the UI, the server and every endpoint that
+# does not touch the detector work perfectly. Only starting real analysis
+# reaches torch. Running from source was always fine, because there the
+# process resolves msvcp140.dll from System32.
+#
+# Verified by swapping the file in an installed build: with v14.36 the seed
+# clip endpoint 500s on c10.dll, with System32's v14.44 it returns ok=True.
+# Isolated to this one DLL - the vcruntime140 pair can stay at v14.36.
+#
+# So do not leave it to whatever the search happens to find. Take the system
+# copy, which is the canonical redistributable and is what a source run uses.
+if sys.platform == "win32":
+    import os
+
+    _sys32 = Path(os.environ.get("WINDIR", r"C:\Windows")) / "System32"
+    _msvcp = _sys32 / "msvcp140.dll"
+    if not _msvcp.exists():
+        raise SystemExit(
+            f"Cannot build a shippable PolyFut: {_msvcp} is missing.\n"
+            "It is the C++ runtime torch needs; without a current one the "
+            "installed app cannot start an analysis at all. Install the "
+            "Microsoft Visual C++ Redistributable and rebuild."
+        )
+    _before = len(a.binaries)
+    a.binaries = [b for b in a.binaries
+                  if Path(b[0]).name.lower() != "msvcp140.dll"]
+    a.binaries.append(("msvcp140.dll", str(_msvcp), "BINARY"))
+    print(f"spec: msvcp140.dll -> {_msvcp} "
+          f"(replaced {_before - len(a.binaries)} bundled copy/copies)")
 
 pyz = PYZ(a.pure, a.zipped_data, cipher=block_cipher)
 
