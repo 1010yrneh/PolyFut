@@ -575,6 +575,47 @@ def ai_config():
     })
 
 
+@app.route("/api/settings", methods=["GET", "POST"])
+def settings():
+    """Read or change the user's own settings. Currently just the kit read.
+
+    This exists because "you can turn it off" was, until now, only true for
+    someone willing to edit JSON inside the install directory - which on an
+    all-users install is not writable at all. A setting that sends stills off
+    the machine by default has to be refusable from inside the app.
+
+    `available` false means no AI route is configured on this install, so the
+    kit read never runs whatever the toggle says; the UI uses it to explain that
+    rather than showing a control that does nothing. `locked` means
+    POLYFUT_KIT_VISION pins the value and the toggle cannot move it.
+    """
+    forced = _kit_vision_env_override()
+    if request.method == "POST":
+        payload = request.get_json(silent=True) or {}
+        want = payload.get("kit_vision")
+        if not isinstance(want, bool):
+            return jsonify({"error": "kit_vision must be true or false"}), 400
+        if forced is not None:
+            # Saving would be a lie: the env var would keep overriding it, and
+            # the UI would show a state the app is not in.
+            return jsonify({
+                "error": "kit_vision is pinned by POLYFUT_KIT_VISION",
+                "kit_vision": forced,
+                "locked": True,
+            }), 409
+        try:
+            _save_prefs({"kit_vision": want})
+        except OSError as exc:
+            return jsonify({"error": f"could not save settings: {exc}"}), 500
+
+    cfg = _load_ai_config()
+    return jsonify({
+        "kit_vision": _kit_vision_enabled(),
+        "available": bool(cfg["proxy_url"] and cfg["app_token"]),
+        "locked": forced is not None,
+    })
+
+
 def _fake_segments(duration_sec: float) -> list[dict]:
     import random
     random.seed(7)
@@ -657,18 +698,76 @@ def _kit_vision_enabled() -> bool:
     read, and kit_vlm_client stops asking after a refusal rather than stalling
     the team-picker screen on every subsequent run.
 
-    Turn it off with POLYFUT_KIT_VISION=0, or "kit_vision": false in
-    ai_config.json.
+    Precedence, strongest first: POLYFUT_KIT_VISION, then the user's own choice
+    in settings.json, then "kit_vision" in ai_config.json, then on.
+
+    The user's choice sits ABOVE the shipped ai_config because ai_config.json
+    lives in the install directory, which is read-only on an all-users install -
+    so if the packaged default were the last word, the people least able to edit
+    a file would be the ones unable to opt out. settings.json is in DATA_ROOT,
+    which is per-user and always writable.
+
+    The env var still wins, so scripted runs and the test suite can pin it
+    without touching a user's saved preference.
     """
     env = os.environ.get("POLYFUT_KIT_VISION", "").strip().lower()
     if env in ("1", "true", "yes", "on"):
         return True
     if env in ("0", "false", "no", "off"):
         return False
+    chosen = _load_prefs().get("kit_vision")
+    if isinstance(chosen, bool):
+        return chosen
     configured = _load_ai_config().get("kit_vision")
     if isinstance(configured, bool):
         return configured
     return True
+
+
+def _prefs_path() -> Path:
+    """Where the user's own settings live: per-user, writable, outside the install."""
+    return DATA_ROOT / "settings.json"
+
+
+def _load_prefs() -> dict:
+    """The user's settings, or {} if absent or unreadable.
+
+    Deliberately total: a corrupt settings file must not take the app down on
+    boot. Falling back to {} means the shipped defaults apply, which is the same
+    state a fresh install is in.
+    """
+    try:
+        doc = json.loads(_prefs_path().read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return doc if isinstance(doc, dict) else {}
+
+
+def _save_prefs(updates: dict) -> dict:
+    """Merge `updates` into the saved settings and write them back.
+
+    Written via a temp file and replaced, so an interrupted write cannot leave a
+    half-file that _load_prefs would then discard - silently reverting a setting
+    the user believes they changed.
+    """
+    doc = _load_prefs()
+    doc.update(updates)
+    path = _prefs_path()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(".json.tmp")
+    tmp.write_text(json.dumps(doc, indent=2), encoding="utf-8")
+    os.replace(tmp, path)
+    return doc
+
+
+def _kit_vision_env_override() -> bool | None:
+    """True/False if POLYFUT_KIT_VISION pins the setting, else None."""
+    env = os.environ.get("POLYFUT_KIT_VISION", "").strip().lower()
+    if env in ("1", "true", "yes", "on"):
+        return True
+    if env in ("0", "false", "no", "off"):
+        return False
+    return None
 
 
 def _kit_vision_hook(make_reader):

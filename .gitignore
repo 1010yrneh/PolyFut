@@ -44,3 +44,8 @@ notebooks/
 # key (that lives only in Modal's secret store), but still not for git — it is
 # per-deployment and rotating it shouldn't mean a commit.
 ai_config.json
+
+# Per-user runtime settings (the kit-vision opt-out lives here). Written to
+# DATA_ROOT, which is %APPDATA%\PolyFut in a packaged build but the repo root
+# when running from source - so without this, running the app dirties the tree.
+settings.json

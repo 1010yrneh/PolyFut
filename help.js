@@ -116,7 +116,14 @@ const helpModalHTML = `
                     <li><strong>A few still frames, during setup</strong> — to work out the two teams' kit colours, PolyFut may send up to three small stills from your match to the same AI service. This happens once per video, automatically, because getting the kit colours right is what lets it tell your team from the opposition. If it is unavailable, PolyFut works the colours out on your own machine instead and carries on.</li>
                     <li><strong>A version check, when you open PolyFut</strong> &mdash; a single request to polyfut.com asking what the newest version is, so the app can tell you when an update exists. It sends nothing about you or your match, downloads nothing, and installs nothing &mdash; it only shows a notice you can dismiss. Turn it off with <code>POLYFUT_UPDATE_CHECK=0</code>, or <code>"update_check": false</code> in <code>ai_config.json</code>.</li>
                 </ul>
-                <p>To keep everything local, set <code>kit_vision</code> to <code>false</code> in <code>ai_config.json</code> next to the app. Reports then remain available on demand, and no frames are ever sent.</p>
+                <div class="help-setting">
+                    <label class="help-toggle">
+                        <input type="checkbox" id="help-kit-vision" onchange="setKitVision(this.checked)">
+                        <span><strong>Send stills to read kit colours</strong></span>
+                    </label>
+                    <p class="help-setting-note" id="help-kit-vision-note">Loading&hellip;</p>
+                </div>
+                <p>Turn this off to keep every frame on your machine. Reports stay available on demand &mdash; they send your logged statistics, never the video. With it off, PolyFut works the kit colours out locally, which is less reliable on small or distant players but never leaves the machine.</p>
 
                 <h4>If the AI is busy</h4>
                 <p>The AI allowance is shared between everyone using PolyFut, so it can run out. Reports will say so; kit colours quietly fall back to the local method and analysis continues as normal.</p>
@@ -153,11 +160,70 @@ const helpModalHTML = `
     </div>
 `;
 
+// The kit-colour read sends stills off the machine and is on by default, so the
+// app has to be able to refuse it from inside the app. It used to require
+// editing ai_config.json in the install directory, which an all-users install
+// makes read-only - the users least able to edit it were the ones who could not
+// opt out at all.
+function pfRenderKitVision(state) {
+    const box = document.getElementById('help-kit-vision');
+    const note = document.getElementById('help-kit-vision-note');
+    if (!box || !note) return;
+    if (!state) {
+        box.disabled = true;
+        note.textContent = 'Could not reach PolyFut to read this setting.';
+        return;
+    }
+    box.checked = !!state.kit_vision;
+    // Disabled for a stated reason, never silently: a dead control with no
+    // explanation reads as a bug.
+    box.disabled = !state.available || !!state.locked;
+    if (!state.available) {
+        note.textContent = 'No AI service is set up on this install, so no frames '
+            + 'are sent either way. Kit colours are always worked out locally.';
+    } else if (state.locked) {
+        note.textContent = 'Pinned by the POLYFUT_KIT_VISION environment variable, '
+            + 'so it cannot be changed here.';
+    } else if (state.kit_vision) {
+        note.textContent = 'On. Up to three small stills per video are sent once, '
+            + 'during setup, to read the two kit colours.';
+    } else {
+        note.textContent = 'Off. Every frame stays on your machine; kit colours are '
+            + 'worked out locally.';
+    }
+}
+
+function pfLoadKitVision() {
+    const note = document.getElementById('help-kit-vision-note');
+    if (note) note.textContent = 'Checking…';
+    fetch(cvApiUrl('/api/settings'))
+        .then(function (r) { return r.json(); })
+        .then(pfRenderKitVision)
+        .catch(function () { pfRenderKitVision(null); });
+}
+
+function setKitVision(on) {
+    const note = document.getElementById('help-kit-vision-note');
+    if (note) note.textContent = 'Saving…';
+    fetch(cvApiUrl('/api/settings'), {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ kit_vision: !!on })
+    })
+        .then(function (r) { return r.json(); })
+        // Render from what the SERVER reports, not from what was clicked, so a
+        // refused or failed save cannot leave the checkbox showing a state the
+        // app is not actually in.
+        .then(pfRenderKitVision)
+        .catch(function () { pfRenderKitVision(null); });
+}
+
 function openHelp() {
     const modal = document.getElementById('help-modal');
     if (!modal) return;
     modal.classList.remove('hidden');
     document.body.classList.add('help-open');
+    pfLoadKitVision();
 }
 
 function closeHelp() {

@@ -2687,3 +2687,28 @@ body:has(#help-modal:not(.hidden)) .pf-net-bg { display: none !important; }
 /* The eyedropper preview shows the SAMPLED colour, painted by JS. It only needs
    a frame that reads on paper; the fill is not ours to choose. */
 #cv-eyedrop-preview { border: 1px solid var(--lt-border-2); border-radius: 4px; }
+
+/* The kit-vision opt-out, inside Help > AI Report. Styled as a bordered well so
+   it reads as a CONTROL among prose - the surrounding tab is all explanatory
+   text, and an unadorned checkbox in that context looks like a list bullet. */
+.help-setting {
+    margin: 14px 0 10px;
+    padding: 14px 16px;
+    background: var(--lt-page);
+    border: 1px solid var(--lt-border);
+    border-left: 3px solid var(--lt-accent);
+    border-radius: var(--lt-radius);
+}
+.help-toggle {
+    display: flex; align-items: center; gap: 10px;
+    cursor: pointer; color: var(--lt-ink);
+}
+.help-toggle input { width: 16px; height: 16px; accent-color: var(--lt-accent); cursor: pointer; }
+/* A disabled box here always carries a reason in the note below it, so dim it
+   enough to read as inert without hiding the state it is reporting. */
+.help-toggle input:disabled { cursor: not-allowed; opacity: .55; }
+.help-toggle input:disabled + span { opacity: .7; }
+.help-setting-note {
+    margin: 8px 0 0; padding-left: 26px;
+    font-size: 13.5px; line-height: 1.5; color: var(--lt-muted);
+}
