@@ -4,25 +4,25 @@ html { scroll-behavior: smooth; }
 
 body {
   margin: 0;
-  background: rgb(11, 13, 11);
+  background: #f6f8f6;
   font-family: Rajdhani, system-ui, sans-serif;
 }
 
 img { max-width: 100%; }
 
-::selection { background: rgb(48, 255, 143); color: rgb(7, 22, 12); }
+::selection { background: #0b7a42; color: #ffffff; }
 
-.pf-link { color: rgb(143, 160, 147); text-decoration: none; transition: color 0.18s; }
-.pf-link:hover { color: rgb(48, 255, 143); }
+.pf-link { color: #5d6b63; text-decoration: none; transition: color 0.18s; }
+.pf-link:hover { color: #0b7a42; }
 
 .pf-cardimg { transition: transform 0.5s cubic-bezier(0.2, 0.7, 0.2, 1); }
 .pf-card:hover .pf-cardimg { transform: scale(1.06); }
 
 .pf-cta { transition: transform 0.16s, box-shadow 0.16s; }
-.pf-cta:hover { transform: translateY(-3px); box-shadow: rgba(48, 255, 143, 0.32) 0px 14px 34px; }
+.pf-cta:hover { transform: translateY(-3px); box-shadow: rgba(11, 122, 66, 0.28) 0px 14px 34px; }
 
 .pf-ghost { transition: border-color 0.18s, color 0.18s; }
-.pf-ghost:hover { border-color: rgb(48, 255, 143); color: rgb(48, 255, 143); }
+.pf-ghost:hover { border-color: #0b7a42; color: #0b7a42; }
 
 @keyframes pf-marquee {
   0% { transform: translateX(0); }
