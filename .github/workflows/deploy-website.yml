@@ -3,6 +3,19 @@ name: Deploy polyfut.com
 on:
   push:
     branches: [main]
+    # The job uploads `website/` and nothing else, so a push that leaves that
+    # directory untouched republishes byte-identical content. Most commits here
+    # are app or pipeline changes, which were each triggering a pointless deploy.
+    #
+    # The workflow's own file is included deliberately: without it, a change to
+    # how the site deploys would never be exercised until some unrelated commit
+    # happened to touch website/, and a mistake here would surface late and
+    # detached from its cause.
+    paths:
+      - 'website/**'
+      - '.github/workflows/deploy-website.yml'
+  # Kept so the site can still be republished on demand - after a Pages settings
+  # change, say - without inventing a commit to trigger it.
   workflow_dispatch:
 
 permissions:
