@@ -70,6 +70,13 @@ class PipelineV2Config:
     # Inference size for the small ROI crop vs. the full-frame re-acquire.
     ball_imgsz: int = 416
     ball_full_imgsz: int = 640
+    # A separate, smaller model for the ROI pass. Empty means "reuse the main
+    # ball model", which is the old behaviour and the fallback whenever the
+    # smaller export cannot be produced. The ROI crop is 240px square, so
+    # sending it to a 640 export upscales it and costs MORE than a full-frame
+    # scan (192ms vs 134ms measured); at 320 the same crop costs 64ms.
+    ball_roi_weights: str = ""
+    ball_roi_imgsz: int = 0          # 0 = fall back to ball_imgsz
 
     # Call the compiled OpenVINO model directly instead of going through
     # Ultralytics' predictor. Measured on this project's soccer model: a full

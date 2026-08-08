@@ -52,6 +52,14 @@ _MODELS = ROOT / "models"
 _model_files = [
     _MODELS / "soccer_uisikdag.pt",
     _MODELS / "soccer_uisikdag_openvino_model",
+    # The 320 export the ROI pass runs on. Required, not optional, even though
+    # the code degrades without it: a frozen app cannot produce it: the export
+    # writes next to the models, and the install directory is read-only on an
+    # all-users install. Missing it means every installed copy silently falls
+    # back to sending 240px crops through the 640 graph, which is 1.38x slower
+    # AND finds ~9% fewer balls. A speedup that quietly does not ship is the
+    # exact failure mode this build has hit before.
+    _MODELS / "soccer_uisikdag_roi320_openvino_model",
 ]
 _missing = [p for p in _model_files if not p.exists()]
 if _missing:
@@ -66,6 +74,8 @@ datas += [
     (str(_MODELS / "soccer_uisikdag.pt"), "models"),
     (str(_MODELS / "soccer_uisikdag_openvino_model"),
      "models/soccer_uisikdag_openvino_model"),
+    (str(_MODELS / "soccer_uisikdag_roi320_openvino_model"),
+     "models/soccer_uisikdag_roi320_openvino_model"),
 ]
 
 # The team-kit picker runs a general person detector, not the soccer model:

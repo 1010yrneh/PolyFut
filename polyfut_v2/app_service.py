@@ -130,6 +130,17 @@ def _apply_soccer_model(cfg: PipelineV2Config) -> str | None:
         # OpenVINO export is fixed at this size; keep all passes consistent.
         cfg.ball_imgsz = cfg.ball_full_imgsz = bm.SOCCER_MODEL_IMGSZ
         cfg.player_imgsz = bm.SOCCER_MODEL_IMGSZ
+        # ...except the ROI pass, which gets its own smaller export. Forcing the
+        # 240px ROI crop through the 640 model made the warm path cost MORE than
+        # the full scan it exists to avoid (192ms vs 134ms); at 320 it is 64ms.
+        # Only when the main model is the OpenVINO one: mixing a 320 OpenVINO
+        # ROI with a PyTorch full scan would compare detections from two
+        # different graphs, and the .pt path takes imgsz per call anyway.
+        if ov is not None:
+            roi = bm.ensure_soccer_model_openvino_roi()
+            if roi is not None:
+                cfg.ball_roi_weights = str(roi)
+                cfg.ball_roi_imgsz = bm.SOCCER_MODEL_IMGSZ_ROI
         return warning
     return ("soccer ball model unavailable (offline?) — using the general COCO "
             "model, which barely detects a soccer ball. Real touches will be sparse.")

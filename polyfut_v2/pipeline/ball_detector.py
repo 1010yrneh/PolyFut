@@ -138,6 +138,7 @@ class YoloBallDetector:
     def __init__(self, cfg, model: Any | None = None):
         self.cfg = cfg
         self._model = model
+        self._roi_model = None
         self._consec_misses = 0
         # Players taken off the most recent full-frame scan, as
         # (xyxy, conf, cls) — the same shape the player detector returns — or
@@ -159,6 +160,25 @@ class YoloBallDetector:
         if self._model is None:
             self._model = _get_model(self.cfg.ball_weights, self.cfg.device)
         return self._model
+
+    @property
+    def roi_model(self):
+        """The model used for ROI crops - a smaller export when one exists.
+
+        Falls back to the main model, so a config without ``ball_roi_weights``
+        behaves exactly as before. ``_get_model`` caches per weights path, so
+        the two live side by side rather than reloading.
+        """
+        w = getattr(self.cfg, "ball_roi_weights", "") or ""
+        if not w:
+            return self.model
+        if self._roi_model is None:
+            self._roi_model = _get_model(w, self.cfg.device)
+        return self._roi_model
+
+    @property
+    def roi_imgsz(self) -> int:
+        return int(getattr(self.cfg, "ball_roi_imgsz", 0) or self.cfg.ball_imgsz)
 
     def _should_full_scan(self) -> bool:
         after = int(getattr(self.cfg, "ball_miss_backoff_after", 0) or 0)
@@ -234,14 +254,16 @@ class YoloBallDetector:
                    if bool(body.any()) else None)
         return ball, players
 
-    def _infer(self, image: np.ndarray, imgsz: int) -> BallDetection | None:
+    def _infer(self, image: np.ndarray, imgsz: int,
+               model=None) -> BallDetection | None:
         # Ball tracking is ~91% of a run and 43% of every predict() call is
         # Ultralytics plumbing, so go straight to the compiled model when we
         # can. Verified to return identical detections; falls back silently on
         # the first call (the predictor is built lazily) and on any backend
         # without a compiled OpenVINO model.
+        model = self.model if model is None else model
         fast = fast_infer.try_detect(
-            self.model, image,
+            model, image,
             imgsz=imgsz,
             conf=self.cfg.ball_conf_min,
             # Ultralytics' default when predict() is called without `iou`,
@@ -260,7 +282,7 @@ class YoloBallDetector:
                 conf_min=self.cfg.ball_conf_min,
             )
 
-        results = self.model.predict(
+        results = model.predict(
             image,
             imgsz=imgsz,
             conf=self.cfg.ball_conf_min,
@@ -294,7 +316,7 @@ class YoloBallDetector:
             roi_ran = True
             crop, offset = roi_crop(frame, last_center, self.cfg.roi_half_px)
             if crop.size > 0:
-                det = self._infer(crop, self.cfg.ball_imgsz)
+                det = self._infer(crop, self.roi_imgsz, self.roi_model)
                 if det is not None:
                     det = BallDetection(
                         bbox=map_bbox_to_full(det.bbox, offset),
