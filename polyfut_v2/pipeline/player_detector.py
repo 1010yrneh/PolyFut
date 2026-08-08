@@ -117,17 +117,18 @@ class YoloPlayerDetector:
         if fast is not None:
             return None if fast[0].shape[0] == 0 else fast
 
-        results = self.model.predict(
-            image,
-            imgsz=self.cfg.player_imgsz,
-            conf=self.cfg.player_conf_min,
-            classes=player_request_classes(self.cfg),
-            # Tighter than Ultralytics' 0.7 default: at 0.7 a single player
-            # routinely survives NMS as several overlapping boxes, which become
-            # duplicate tracks / duplicate markers downstream.
-            iou=getattr(self.cfg, "player_nms_iou", 0.45),
-            verbose=False,
-        )
+        with fast_infer.model_lock(self.model):
+            results = self.model.predict(
+                image,
+                imgsz=self.cfg.player_imgsz,
+                conf=self.cfg.player_conf_min,
+                classes=player_request_classes(self.cfg),
+                # Tighter than Ultralytics' 0.7 default: at 0.7 a single player
+                # routinely survives NMS as several overlapping boxes, which become
+                # duplicate tracks / duplicate markers downstream.
+                iou=getattr(self.cfg, "player_nms_iou", 0.45),
+                verbose=False,
+            )
         if not results:
             return None
         res = results[0]
@@ -196,14 +197,15 @@ class YoloPlayerDetector:
             offsets.append(offset)
 
         try:
-            results = self.model.predict(
-                images,
-                imgsz=self.cfg.player_imgsz,
-                conf=self.cfg.player_conf_min,
-                classes=player_request_classes(self.cfg),
-                iou=getattr(self.cfg, "player_nms_iou", 0.45),
-                verbose=False,
-            )
+            with fast_infer.model_lock(self.model):
+                results = self.model.predict(
+                    images,
+                    imgsz=self.cfg.player_imgsz,
+                    conf=self.cfg.player_conf_min,
+                    classes=player_request_classes(self.cfg),
+                    iou=getattr(self.cfg, "player_nms_iou", 0.45),
+                    verbose=False,
+                )
         except Exception:
             # Injected fakes / older backends may not accept a list — degrade.
             return [self.detect(frame, near) for frame, near in items]

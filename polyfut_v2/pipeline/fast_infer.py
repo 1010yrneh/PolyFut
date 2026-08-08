@@ -32,6 +32,7 @@ counts and coordinates within a pixel across real frames.
 
 from __future__ import annotations
 
+import threading
 from typing import Any
 
 import cv2
@@ -195,6 +196,45 @@ def _empty():
 # Resolving the compiled model walks a few attributes; cache it per YOLO object.
 _OV_CACHE: dict[int, Any] = {}
 
+# --------------------------------------------------------------------------- #
+# One inference at a time, per model
+# --------------------------------------------------------------------------- #
+# Calling a CompiledModel (``ov_model(x)`` below) uses its ONE default infer
+# request, and Ultralytics' predict() reuses that same request. Models are
+# cached globally and handed to every caller, while the server runs inference on
+# several threads at once - the analysis job, the seed prefetch, the kit preview
+# and the model warm-up. Two of them landing on one model raises
+#
+#     RuntimeError: Infer Request is busy
+#
+# which killed a real 20-minute run at the 9-minute mark. It is a race, so it
+# hides: it needs two threads inside the same model at the same moment, which is
+# why runs that reached the same code minutes apart were fine.
+#
+# A lock rather than a request pool because the contending threads all want the
+# same CPU anyway - serialising costs nothing real, and a pool would have to be
+# sized and drained. RLock so a caller already holding it can take the fast path
+# without deadlocking itself.
+_LOCKS: dict[int, threading.RLock] = {}
+_LOCKS_GUARD = threading.Lock()
+
+
+def model_lock(model: Any) -> threading.RLock:
+    """The inference lock for ``model``. Every call site must hold it.
+
+    Keyed on id() to match _OV_CACHE, so a model and its lock live and die
+    together.
+    """
+    key = id(model)
+    lk = _LOCKS.get(key)
+    if lk is None:
+        with _LOCKS_GUARD:
+            lk = _LOCKS.get(key)
+            if lk is None:
+                lk = threading.RLock()
+                _LOCKS[key] = lk
+    return lk
+
 
 def try_detect(
     model: Any,
@@ -224,5 +264,6 @@ def try_detect(
         if ov is None:
             return None
         _OV_CACHE[key] = ov
-    return detect(ov, image, imgsz=imgsz, conf=conf, iou=iou,
-                  classes=classes, max_det=max_det)
+    with model_lock(model):
+        return detect(ov, image, imgsz=imgsz, conf=conf, iou=iou,
+                      classes=classes, max_det=max_det)

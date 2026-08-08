@@ -214,9 +214,10 @@ class YoloBallDetector:
         )
         if fast is not None:
             return fast
-        results = self.model.predict(
-            image, imgsz=imgsz, conf=conf, classes=classes, verbose=False,
-        )
+        with fast_infer.model_lock(self.model):
+            results = self.model.predict(
+                image, imgsz=imgsz, conf=conf, classes=classes, verbose=False,
+            )
         if not results:
             return None
         res = results[0]
@@ -282,13 +283,14 @@ class YoloBallDetector:
                 conf_min=self.cfg.ball_conf_min,
             )
 
-        results = model.predict(
-            image,
-            imgsz=imgsz,
-            conf=self.cfg.ball_conf_min,
-            classes=[self.cfg.ball_class_id],
-            verbose=False,
-        )
+        with fast_infer.model_lock(model):
+            results = model.predict(
+                image,
+                imgsz=imgsz,
+                conf=self.cfg.ball_conf_min,
+                classes=[self.cfg.ball_class_id],
+                verbose=False,
+            )
         if not results:
             return None
         res = results[0]
