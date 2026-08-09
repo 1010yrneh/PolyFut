@@ -39,4 +39,20 @@ $json = @{
 } | ConvertTo-Json
 [System.IO.File]::WriteAllText($webVersion, $json, (New-Object System.Text.UTF8Encoding $false))
 
+# The download button's href and the version beside it are HARD-CODED in
+# website/index.html. A script rewrites them from version.json at page load, so
+# they look maintained - but they are the FALLBACK, and the fallback is what a
+# visitor gets if that fetch fails or if they click before it lands. After
+# 1.0.1 shipped, the live button still pointed at the v1.0.0 asset: the build
+# that cannot analyse anything. A stale fallback here hands someone a broken
+# installer, so sync it like everything else rather than trusting the script.
+$Index = Join-Path $Root "website\index.html"
+if (Test-Path $Index) {
+    $html = Get-Content $Index -Raw
+    $html = $html -replace 'releases/download/v[0-9.]+/PolyFut-Setup-[0-9.]+\.exe',                            "releases/download/v$Version/PolyFut-Setup-$Version.exe"
+    $html = $html -replace '(<span id="pf-version">)[0-9.]+(</span>)', "`${1}$Version`${2}"
+    [System.IO.File]::WriteAllText($Index, $html, (New-Object System.Text.UTF8Encoding $false))
+    Write-Host "Download button + version label synced in website/index.html"
+}
+
 Write-Host "Version $Version synced to installer + website/version.json"
