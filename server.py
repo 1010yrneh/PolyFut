@@ -73,12 +73,73 @@ EXPORTS.mkdir(parents=True, exist_ok=True)
 app = Flask(__name__, static_folder=str(ROOT), static_url_path="")
 
 
+def _origin_allowed(origin: str) -> bool:
+    """Only this machine's own pages may talk to the API.
+
+    This used to be ``Access-Control-Allow-Origin: *``, which told every website
+    on the internet that it could read our replies. Binding to 127.0.0.1 does
+    not prevent that: a browser tab is a LOCAL program running a remote site's
+    code, so any page the user had open could reach the API. The wildcard was
+    the only thing making its replies readable, and it also granted the DELETE
+    preflight that browsers would otherwise refuse outright.
+
+    What that exposed, concretely:
+      * GET /api/ai_config      -> the AI proxy URL and app token
+      * GET /api/catalogue      -> every analysis, INCLUDING its upload token
+      * GET /api/video/<token>  -> the match video for a token from the line above
+      * DELETE /api/catalogue/<id>, /api/process/<id> -> destroy the user's work
+
+    The app itself never needed it: over http the client uses a RELATIVE base
+    (script.js::resolveCvServerBase), so its requests are same-origin. Only a
+    page opened from file:// aims at a fixed port, which is a development
+    setup, so it is opt-in via POLYFUT_ALLOW_FILE_ORIGIN rather than always on.
+    """
+    if not origin:
+        return False                       # same-origin requests send none
+    if origin == "null":
+        # file:// pages. Off unless asked for: "null" is also what a sandboxed
+        # iframe on a hostile site sends, so allowing it re-opens the hole.
+        return os.environ.get("POLYFUT_ALLOW_FILE_ORIGIN", "") in ("1", "true", "yes")
+    try:
+        from urllib.parse import urlparse
+        u = urlparse(origin)
+    except Exception:
+        return False
+    return u.scheme in ("http", "https") and u.hostname in ("127.0.0.1", "localhost", "::1")
+
+
 @app.after_request
 def _cors_headers(resp):
-    resp.headers["Access-Control-Allow-Origin"] = "*"
-    resp.headers["Access-Control-Allow-Methods"] = "GET, POST, DELETE, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    origin = request.headers.get("Origin", "")
+    if _origin_allowed(origin):
+        resp.headers["Access-Control-Allow-Origin"] = origin
+        resp.headers["Access-Control-Allow-Methods"] = "GET, POST, PATCH, DELETE, OPTIONS"
+        resp.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    # Whether we echoed depends on the request's Origin, so caches must not
+    # serve one origin's response to another.
+    resp.headers["Vary"] = "Origin"
     return resp
+
+
+@app.before_request
+def _block_cross_site_writes():
+    """Refuse state-changing requests that carry a foreign Origin.
+
+    CORS alone is not enough. A form-encoded or multipart POST is a "simple
+    request": the browser sends it cross-origin without a preflight and only
+    hides the response. So a hostile page could still fire POSTs that start
+    jobs or rewrite catalogue metadata even after the wildcard is gone - it
+    just would not see the result. Checking Origin server-side closes that.
+
+    GET/HEAD/OPTIONS are untouched: they are gated by the CORS header above,
+    and blocking them here would break same-origin navigation.
+    """
+    if request.method in ("GET", "HEAD", "OPTIONS"):
+        return None
+    origin = request.headers.get("Origin", "")
+    if origin and not _origin_allowed(origin):
+        return jsonify({"error": "cross-site request refused"}), 403
+    return None
 
 
 @app.route("/api/<path:_any>", methods=["OPTIONS"])
@@ -383,6 +444,84 @@ def health():
         "fake_cv": FAKE_CV,
         "data_dir": str(DATA_ROOT),
     })
+
+
+@app.route("/api/selftest", methods=["GET", "POST"])
+def selftest():
+    """Actually run the detector, so a build can prove it works before shipping.
+
+    /api/health only says the imports succeeded. Four separate bugs have now
+    reached a finished installer while /api/health returned "ok":
+
+      * a stale msvcp140.dll that made `import torch` fail with WinError 1114,
+        so 1.0.0 shipped unable to analyse anything at all;
+      * a stale icon and a stale index.html, both baked in by caches;
+      * a shared OpenVINO infer request that raised "Infer Request is busy"
+        nine minutes into a real run.
+
+    Every one of them needed the built artifact to be RUN, not inspected. So
+    this endpoint loads the real soccer model and runs real inferences - and
+    runs them on several threads at once, because the last bug only appears
+    when two threads are inside one model.
+
+    Returns 200 {"ok": true, ...} or 500 with the error. Synchronous and
+    deliberately slow (a few seconds): it is a gate, not a page load.
+    """
+    import numpy as _np
+
+    t0 = time.time()
+    try:
+        if not PIPELINE_V2_OK:
+            raise RuntimeError(f"v2 pipeline unavailable: {PIPELINE_V2_ERR}")
+        from polyfut_v2.app_service import _apply_soccer_model
+        from polyfut_v2.pipeline.ball_detector import YoloBallDetector
+
+        cfg = PipelineV2Config(ball_weights=WEIGHTS, player_weights=WEIGHTS,
+                               device=DEVICE)
+        warning = _apply_soccer_model(cfg)
+        det = YoloBallDetector(cfg)
+        frame = _np.zeros((360, 640, 3), dtype=_np.uint8)
+        frame[:, :] = (35, 140, 35)          # a pitch-ish frame; content is moot
+
+        _ = det.model                        # force the load inside the try
+        errors: list[str] = []
+
+        def _hit(with_roi: bool) -> None:
+            try:
+                for _ in range(3):
+                    det.detect(frame, (320.0, 180.0) if with_roi else None)
+            except Exception as exc:         # noqa: BLE001
+                errors.append(f"{type(exc).__name__}: {exc}")
+
+        # Concurrently, and through BOTH paths: the ROI model and the
+        # full-frame model are different objects with different locks.
+        threads = [threading.Thread(target=_hit, args=(i % 2 == 0,))
+                   for i in range(4)]
+        for t in threads:
+            t.start()
+        for t in threads:
+            t.join(timeout=180)
+        if errors:
+            raise RuntimeError("; ".join(errors[:3]))
+
+        return jsonify({
+            "ok": True,
+            "elapsed_sec": round(time.time() - t0, 2),
+            "ball_weights": str(cfg.ball_weights),
+            "roi_weights": str(getattr(cfg, "ball_roi_weights", "") or ""),
+            "roi_imgsz": int(getattr(cfg, "ball_roi_imgsz", 0) or 0),
+            # A PyTorch fallback is 5.4x slower than OpenVINO and otherwise only
+            # ever surfaced as a passing string, so say it out loud here.
+            "degraded": warning,
+            "stats": det.stats,
+        })
+    except Exception as exc:                 # noqa: BLE001
+        traceback.print_exc()
+        return jsonify({
+            "ok": False,
+            "elapsed_sec": round(time.time() - t0, 2),
+            "error": f"{type(exc).__name__}: {exc}",
+        }), 500
 
 
 # --- AI scout report: where the client should send report requests ---------- #

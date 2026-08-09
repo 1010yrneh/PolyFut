@@ -100,6 +100,60 @@ if ($Ffmpeg) {
     Write-Host "Bundled ffmpeg.exe from packaging/bin"
 }
 
+# ---------------------------------------------------------------------------
+# Smoke test: RUN the thing we just built.
+#
+# Four bugs have reached a finished installer while every build step reported
+# success: a stale icon, a stale index.html, an msvcp140.dll too old for torch
+# (so 1.0.0 shipped unable to analyse anything), and a shared OpenVINO infer
+# request that crashed a real run after nine minutes. Inspecting the output
+# caught none of them. Running it catches three.
+#
+# So: launch the frozen exe and make it do real inference on several threads,
+# before Inno Setup is allowed to wrap it. Set POLYFUT_SKIP_SMOKE=1 to bypass
+# while iterating - but never for a build anyone else will install.
+if ($env:POLYFUT_SKIP_SMOKE -eq "1") {
+    Write-Host "Smoke test SKIPPED (POLYFUT_SKIP_SMOKE=1)" -ForegroundColor Yellow
+} else {
+    Write-Host "Smoke test: launching the built app..."
+    $smokeProc = Start-Process $DistExe -PassThru
+    $smokePort = $null
+    try {
+        foreach ($i in 1..60) {
+            Start-Sleep -Seconds 2
+            if ($smokeProc.HasExited) {
+                throw "Smoke test failed: the app exited immediately (code $($smokeProc.ExitCode))"
+            }
+            $conn = Get-NetTCPConnection -OwningProcess $smokeProc.Id -State Listen -ErrorAction SilentlyContinue |
+                    Select-Object -First 1
+            if ($conn) { $smokePort = $conn.LocalPort; break }
+        }
+        if (-not $smokePort) { throw "Smoke test failed: the app never opened a port" }
+        Write-Host "  app is up on port $smokePort, running self-test..."
+
+        # Loads the real model and runs concurrent inferences. Slow on purpose:
+        # first call compiles the OpenVINO graph.
+        $res = Invoke-RestMethod "http://127.0.0.1:$smokePort/api/selftest" -Method Post -TimeoutSec 600
+        if (-not $res.ok) { throw "Smoke test FAILED: $($res.error)" }
+        Write-Host "  self-test passed in $($res.elapsed_sec)s" -ForegroundColor Green
+        Write-Host "  ball model: $(Split-Path $res.ball_weights -Leaf)"
+        if ($res.roi_weights) {
+            Write-Host "  roi model : $(Split-Path $res.roi_weights -Leaf) @ $($res.roi_imgsz)"
+        } else {
+            throw ("Smoke test FAILED: no ROI model in the build. The 320 export " +
+                   "is what keeps the warm path from costing more than a full scan.")
+        }
+        # A PyTorch fallback still "works" but is 5.4x slower - not shippable.
+        if ($res.degraded) { throw "Smoke test FAILED (degraded): $($res.degraded)" }
+    }
+    finally {
+        if ($smokeProc -and -not $smokeProc.HasExited) {
+            Stop-Process -Id $smokeProc.Id -Force -ErrorAction SilentlyContinue
+        }
+        Get-Process -Name "PolyFut" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    }
+}
+
 # Inno Setup lands in different places depending on how it was installed.
 # `winget install JRSoftware.InnoSetup` without an admin prompt installs
 # per-user into LOCALAPPDATA, which the two Program Files paths miss entirely -
