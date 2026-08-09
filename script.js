@@ -175,14 +175,41 @@ function pfShowUpdateNotice(info) {
     wrap.id = 'pf-update-notice';
     wrap.className = 'pf-update-notice';
     wrap.setAttribute('role', 'status');
-    const url = info.url || 'https://polyfut.com';
-    wrap.innerHTML =
-        '<span class="pf-update-text">PolyFut <strong>' + info.latest +
-        '</strong> is available. You have ' + info.current + '.</span>' +
-        '<a class="pf-update-link" target="_blank" rel="noopener" href="' +
-        url + '">What&rsquo;s new</a>' +
-        '<button type="button" class="pf-update-close" aria-label="Dismiss">' +
-        '&times;</button>';
+    // info.latest and info.url came off the network (polyfut.com/version.json),
+    // so they are untrusted. This used to build the notice with innerHTML,
+    // which meant a version string like "999.0<img src=x onerror=...>" ran
+    // script INSIDE this page - same origin as the local API, so it could read
+    // the AI proxy token or the upload tokens that unlock the videos. The
+    // server now refuses malformed versions and non-http(s) urls; this builds
+    // the node instead of concatenating markup so it cannot happen again even
+    // if that check is ever loosened.
+    let url = 'https://polyfut.com';
+    try {
+        const u = new URL(info.url || url, location.href);
+        if (u.protocol === 'http:' || u.protocol === 'https:') url = u.href;
+    } catch (e) { /* keep the default */ }
+
+    const text = document.createElement('span');
+    text.className = 'pf-update-text';
+    text.append('PolyFut ');
+    const strong = document.createElement('strong');
+    strong.textContent = info.latest;          // textContent, never innerHTML
+    text.append(strong, ' is available. You have ' + info.current + '.');
+
+    const link = document.createElement('a');
+    link.className = 'pf-update-link';
+    link.target = '_blank';
+    link.rel = 'noopener';
+    link.href = url;
+    link.textContent = 'What’s new';
+
+    const close = document.createElement('button');
+    close.type = 'button';
+    close.className = 'pf-update-close';
+    close.setAttribute('aria-label', 'Dismiss');
+    close.textContent = '×';
+
+    wrap.append(text, link, close);
     document.body.appendChild(wrap);
     wrap.querySelector('.pf-update-close').onclick = function () {
         try { localStorage.setItem(PF_UPDATE_DISMISS_KEY, info.latest); } catch (e) { }

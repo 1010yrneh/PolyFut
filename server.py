@@ -679,14 +679,44 @@ def update_check():
         app.logger.info("update check unavailable: %s", exc)
         return jsonify(quiet)
 
+    # Everything below this line came off the network. The client renders it,
+    # so it is untrusted input, not configuration.
+    #
+    # A version string only ever needs digits and dots (with an optional
+    # pre-release tail), so anything else is refused outright rather than
+    # escaped. Without this, "999.0<img src=x onerror=...>" parsed as (999,) -
+    # newer than 1.0.1, so update_available was true - and the whole string,
+    # tag and all, went to the client, which built the notice with innerHTML.
+    # That is script execution inside the app page, which is same-origin with
+    # this API: it could read /api/ai_config for the proxy token, or
+    # /api/catalogue for the upload tokens that unlock the videos.
     latest = str(doc.get("version") or "").strip()
+    if latest and not re.fullmatch(r"v?\d+(?:\.\d+){0,3}(?:[-+][0-9A-Za-z.]{1,20})?",
+                                   latest):
+        app.logger.info("update check: refusing malformed version %r", latest[:40])
+        return jsonify(quiet)
+
+    # The URL becomes an href. A scheme check is the difference between a link
+    # and "javascript:" running in our own page.
+    raw_url = str(doc.get("release_url") or "").strip()
+    url = "https://polyfut.com"
+    if raw_url:
+        try:
+            from urllib.parse import urlparse
+            if urlparse(raw_url).scheme in ("http", "https"):
+                url = raw_url
+            else:
+                app.logger.info("update check: refusing url scheme %r", raw_url[:40])
+        except Exception:                       # noqa: BLE001
+            pass
+
     payload = {
         "current": current,
         "latest": latest or None,
         "update_available": bool(latest) and _is_newer(latest, current),
         # Send them to the site, not straight at a binary: the download page can
         # explain what changed, and it survives the installer moving hosts.
-        "url": str(doc.get("release_url") or "https://polyfut.com"),
+        "url": url,
         "checked": True,
     }
     _update_cache["at"], _update_cache["payload"] = now, payload
