@@ -99,12 +99,19 @@ def _footage_warnings(info: dict, cfg: PipelineV2Config) -> list[str]:
     if dur >= 30 * 60:
         mins = dur / 60.0
         touches = int(mins * 18)  # ball is touched ~18x/min across all 22 players
+        # 0.6x realtime, not the 1.7x this used to quote. 1.7 was measured on the
+        # July pipeline and kept being shown long after it stopped being true -
+        # it overstated a 90-minute match as 2.6 hours. Completed runs since:
+        #   94.0 min -> 37.5 min (0.40x)
+        #   20.8 min ->  9.5 min (0.46x)
+        #    5.0 min ->  2.4 min (0.48x)
+        # 0.6 leaves headroom for slower hardware without overstating by 3x.
         out.append(
             f"Long footage (~{mins:.0f} min). The ball is touched ~{touches} times "
             f"across all players here; v2 analyses the whole thing but keeps only "
             f"the {cfg.max_candidates} strongest candidates and shows at most "
             f"{cfg.max_review} clips for review. Processing time scales with "
-            f"length (roughly {mins * 1.7 / 60:.1f}h for this clip on a CPU).")
+            f"length (roughly {mins * 0.6 / 60:.1f}h for this clip on a CPU).")
     return out
 
 
