@@ -3,13 +3,19 @@
 $ErrorActionPreference = "Stop"
 $Packaging = Split-Path -Parent $MyInvocation.MyCommand.Path
 $Root = Split-Path -Parent $Packaging
+# NOTE: -Encoding UTF8 on every read is not optional. PowerShell 5.1's
+# Get-Content defaults to the system ANSI codepage, so a UTF-8 file comes back
+# as mojibake - and writing it out again as UTF-8 makes that permanent. Doing
+# exactly this to index.html turned every en-dash into "a-euro-quote" across
+# the live comparison table. The write side was already careful about the BOM;
+# the read side was not, which is the half that actually corrupts.
 $Version = (Get-Content (Join-Path $Packaging "VERSION") -Raw).Trim()
 
 # Only the #define is rewritten. OutputBaseFilename already reads
 # {#MyAppVersion}, so substituting a literal version there just destroyed the
 # indirection and made the file churn on every build.
 $Iss = Join-Path $Packaging "polyfut_installer.iss"
-$content = Get-Content $Iss -Raw
+$content = Get-Content $Iss -Raw -Encoding UTF8
 $content = $content -replace '(?m)^#define MyAppVersion ".*"', "#define MyAppVersion `"$Version`""
 [System.IO.File]::WriteAllText($Iss, $content, (New-Object System.Text.UTF8Encoding $false))
 
@@ -48,7 +54,7 @@ $json = @{
 # installer, so sync it like everything else rather than trusting the script.
 $Index = Join-Path $Root "website\index.html"
 if (Test-Path $Index) {
-    $html = Get-Content $Index -Raw
+    $html = Get-Content $Index -Raw -Encoding UTF8
     $html = $html -replace 'releases/download/v[0-9.]+/PolyFut-Setup-[0-9.]+\.exe',                            "releases/download/v$Version/PolyFut-Setup-$Version.exe"
     $html = $html -replace '(<span id="pf-version">)[0-9.]+(</span>)', "`${1}$Version`${2}"
     [System.IO.File]::WriteAllText($Index, $html, (New-Object System.Text.UTF8Encoding $false))
