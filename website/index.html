@@ -186,29 +186,113 @@
         <span style="font-weight: 700; font-size: 14px; letter-spacing: 0.28em; text-transform: uppercase; color: #0b7a42;">The workflow</span>
       </div>
       <h2 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: clamp(40px, 5vw, 80px); line-height: 0.92; margin: 0px 0px 36px;">How it works</h2>
-      <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 0px;">
-        <div style="padding: 8px 30px 8px 0px; border-right: 1px solid rgba(18, 33, 26, 0.12);">
-          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(11, 122, 66, 0.92); line-height: 1;">01</div>
-          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Install</h3>
-          <p style="margin: 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500;">Download the Windows app and open PolyFut from the Start menu — no browser tab required.</p>
-        </div>
-        <div style="padding: 8px 30px; border-right: 1px solid rgba(18, 33, 26, 0.12);">
-          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(11, 122, 66, 0.92); line-height: 1;">02</div>
-          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Upload</h3>
-          <p style="margin: 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500;">Import your match MP4. Analysis runs on your CPU or GPU, chunk by chunk — close the tab and resume anytime.</p>
-        </div>
-        <div style="padding: 8px 30px; border-right: 1px solid rgba(18, 33, 26, 0.12);">
-          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(11, 122, 66, 0.92); line-height: 1;">03</div>
-          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Pick your kit</h3>
-          <p style="margin: 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500;">Tap a player wearing your colour on the first frame. The analyser learns your team from that single touch.</p>
-        </div>
-        <div style="padding: 8px 0px 8px 30px;">
-          <div style="font-family: Anton, sans-serif; font-size: 64px; color: rgba(11, 122, 66, 0.92); line-height: 1;">04</div>
-          <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 24px; margin: 18px 0px 10px;">Review</h3>
-          <p style="margin: 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500;">Click hotspots, log actions, and finish with a WPA chart, hybrid breakdown, and optional scout report.</p>
-        </div>
-      </div>
-      <p style="margin: 32px 0px 0px; color: #5d6b63; font-size: 14.5px; max-width: 80ch; font-weight: 500;">Full-match analysis can take several hours on CPU. You can close the window and resume later — the server keeps running in the background until you discard the run.</p>
+      <ol style="margin: 0px; padding: 0px; list-style: none;">
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">01</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Import video</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">seconds</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">Drop in your match MP4. It is read straight off your disk &mdash; there is no upload and no queue.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">02</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Choose team colour</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">~30 sec</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">PolyFut reads both kits off the footage and shows you two swatches. Pick yours; the other becomes the opposition.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">03</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Calibrate pitch</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">1&ndash;2 min</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">Click a few painted-line corners so distances can be judged in metres rather than pixels. Skippable, but it is what stops a player 40&nbsp;m away being credited with a touch.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">04</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Choose who you are</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">1&ndash;2 min</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">Tap yourself in a handful of short clips from across the match. This is the identity anchor everything downstream hangs on.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">05</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Wait for analysis</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">~half the match</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">The long step, and the only one you leave running. Roughly half the length of the footage on a normal laptop CPU. Close the window if you like &mdash; it keeps going.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">06</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Cleaning up clips</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">5&ndash;10 min</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">PolyFut over-includes on purpose, then asks. Flick through the candidate touches and drop the ones that are not you.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">07</span>
+              <span style="flex: 1 1 auto; width: 2px; min-height: 26px; background: rgba(18, 33, 26, 0.12);"></span>
+            </div>
+            <div style="padding-bottom: 30px; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">Label actions</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">as long as you like</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">Tag what actually happened &mdash; shots, passes, defending, skill. Net, offense, defense and risk update live as you go.</p>
+            </div>
+          </li>
+          <li style="display: flex; gap: 22px; align-items: flex-start; list-style: none;">
+            <div style="display: flex; flex-direction: column; align-items: center; align-self: stretch; flex: 0 0 auto;">
+              <span style="width: 44px; height: 44px; flex: 0 0 44px; border-radius: 50%; background: #0b7a42; color: #ffffff; font-family: Anton, sans-serif; font-size: 20px; display: flex; align-items: center; justify-content: center;">08</span>
+              
+            </div>
+            <div style="padding-bottom: 0; flex: 1 1 auto;">
+              <div style="display: flex; align-items: baseline; gap: 12px; flex-wrap: wrap;">
+                <h3 style="font-family: Anton, sans-serif; font-weight: 400; text-transform: uppercase; font-size: 23px; margin: 8px 0px 0px; color: #12211a;">AI scout report</h3>
+                <span style="font-weight: 700; font-size: 11.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #0b7a42; background: rgba(11, 122, 66, 0.09); padding: 4px 10px; border-radius: 999px; white-space: nowrap;">seconds</span>
+              </div>
+              <p style="margin: 8px 0px 0px; color: #5d6b63; font-size: 16px; line-height: 1.55; font-weight: 500; max-width: 62ch;">Finish for a WPA chart, the hybrid breakdown, and a written summary of the match.</p>
+            </div>
+          </li>
+        </ol>
+      <p style="margin: 32px 0px 0px; color: #5d6b63; font-size: 14.5px; max-width: 80ch; font-weight: 500;">Analysis runs at roughly half the footage length on a typical laptop CPU &mdash; a 20-minute clip in about 10 minutes. You can close the window and resume later — the server keeps running in the background until you discard the run.</p>
     </div>
   </section>
   <section id="compare" style="background: #ffffff; border-top: 1px solid rgba(18, 33, 26, 0.12); border-bottom: 1px solid rgba(18, 33, 26, 0.12);">
