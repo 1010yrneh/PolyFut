@@ -8,12 +8,15 @@ Everything runs on your machine — no video is uploaded anywhere.
 
 ## User journey
 
-1. **Import** — upload match video (+ optional position, opponent, score).
-2. **Team pick** — choose Team A or Team B (the side you played for).
-3. **CV analysis** — 9-stage local pipeline (shot filter → detect → track → DBSCAN teams → possession).
-4. **Review** — click a key moment; playback clamps to that window.
-5. **Score** — log actions during possession windows; live hybrid stats update.
-6. **Report** — FINISH → WPA chart, hybrid breakdown, optional Groq AI scout report.
+1. **Import** — pick the match video (+ optional position, opponent, score). Read off disk; nothing is uploaded.
+2. **Playing time** — mark the stretches you were on the pitch. Bounds the analysis, and stops the seed step asking you to identify yourself in a passage you were not in.
+3. **Team colour** — both kits are read off the footage; pick yours, the other becomes the opposition.
+4. **Pitch calibration** — click a few painted-line corners so "who touched it" is judged in metres, not pixels. Skippable.
+5. **Choose who you are** — tap yourself in a few short clips. This is the identity anchor everything downstream hangs on.
+6. **CV analysis** — the local pipeline runs (shot filter → ball trajectory → contacts → attribution → hotspots). Roughly half the footage length on a laptop CPU.
+7. **Review** — flick through candidate touches and drop the ones that are not you. The pipeline over-includes on purpose and asks.
+8. **Score** — log actions during possession windows; live hybrid stats update.
+9. **Report** — FINISH → WPA chart, hybrid breakdown, optional AI scout report.
 
 ## Quick start (developer)
 
@@ -45,14 +48,34 @@ Opens a native window (taskbar app) — no browser tab or PowerShell needed.
 powershell -File packaging/build_win.ps1
 ```
 
-Outputs:
+Output goes to `%LOCALAPPDATA%\PolyFut-build\` — **not** into the repo. Building inside the
+OneDrive-synced working tree fails: OneDrive holds file handles mid-sync and PyInstaller dies
+clearing its own output directory. Override with `POLYFUT_BUILD_DIR`.
 
-- `dist/PolyFut/PolyFut.exe` — portable folder
-- `dist/PolyFut-Setup-1.0.0.exe` — Windows installer (if Inno Setup is installed)
-- `website/downloads/` — copy installer here for the download page
+- `%LOCALAPPDATA%\PolyFut-build\dist\PolyFut\PolyFut.exe` — portable folder
+- `%LOCALAPPDATA%\PolyFut-build\dist\PolyFut-Setup-<VERSION>.exe` — the installer
 
-Deploy the `website/` folder to Vercel, Netlify, or GitHub Pages and point **polyfut.com** at it.
-Bump `packaging/VERSION` before each release; `sync_version.ps1` updates the installer and site metadata.
+The build **runs what it just built** before Inno Setup packages it: it launches the exe and
+hits `/api/selftest`, which loads the real model and runs inference on several threads. A build
+that cannot analyse does not become an installer. Four bugs shipped past a green build before
+this existed — a stale icon, a stale `index.html`, an `msvcp140.dll` too old for torch, and a
+shared OpenVINO infer request that crashed nine minutes into a run. Set `POLYFUT_SKIP_SMOKE=1`
+to bypass while iterating, never for a build anyone else installs.
+
+**Releasing.** Bump `packaging/VERSION`; `sync_version.ps1` propagates it to the Inno script,
+`website/version.json`, and the download button in `website/index.html`. Then attach the
+installer to a GitHub Release tagged `v<VERSION>`:
+
+```powershell
+gh release create v1.0.1 "$env:LOCALAPPDATA\PolyFut-build\dist\PolyFut-Setup-1.0.1.exe" --title "PolyFut 1.0.1"
+```
+
+The installer is a **Release asset, not a file on the site**: Pages caps a site at 1 GB and git
+rejects anything over 100 MB, so a ~400 MB installer can never live in `website/`.
+`website/downloads/*.exe` is gitignored and is only a local staging spot.
+
+The site deploys itself — pushing to `main` runs `.github/workflows/deploy-website.yml`, which
+publishes `website/` to GitHub Pages. It only fires when `website/` actually changes.
 
 User data (videos, exports, saved jobs) lives in `%APPDATA%\PolyFut\` after install.
 
